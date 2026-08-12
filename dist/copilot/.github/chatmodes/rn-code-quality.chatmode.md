@@ -113,20 +113,29 @@ rather than working from memory.
 # Shared React Native Context
 
 Every agent in this collection operates with the following baseline understanding.
-Re-verify against the project's own `package.json` before relying on any version claim.
 
-## Ecosystem baseline (as of mid-2026)
+> **Knowledge freshness — read this first.**
+> Verified through **React Native 0.87** and **Expo SDK 57**, last checked **2026-08-12**
+> (see `knowledge.json`).
+>
+> This table is a *starting assumption*, not ground truth. **Always read the project's own
+> `package.json` and treat that as authoritative.** If the project is on a version newer than
+> the one above, say so plainly and flag that your knowledge of that release may be incomplete
+> rather than guessing at what changed.
+
+## Ecosystem baseline
 
 | Thing | State |
 |---|---|
-| React Native | 0.85 is current stable; 0.84 introduced Hermes V1 as default engine |
+| React Native | 0.87 current stable (verified 2026-08-12); 0.84 made Hermes V1 the default engine |
 | New Architecture | Default since 0.76; the legacy bridge was **removed** in 0.82 — it is not optional anymore |
 | Renderer | Fabric (C++ shadow tree, synchronous layout, concurrent React support) |
 | Native modules | TurboModules over JSI, lazily initialised, codegen-typed |
 | JS engine | Hermes (V1). JSC is legacy and unsupported on new versions |
 | React | 19.2 — Suspense, transitions, `use()`, Activity, and React Compiler are all in play |
-| Expo | SDK 57 (June 2026). SDK 56 shipped RN 0.85 + React 19.2. ~3 SDKs per year |
+| Expo | SDK 57 (June 2026). ~3 SDKs per year |
 | Expo UI | SwiftUI + Jetpack Compose APIs stable as of SDK 56 |
+| Oldest version these agents reason about confidently | **0.76** — below that, treat advice as legacy and recommend migration explicitly |
 
 **Implication:** advice written for the old bridge era (`useNativeDriver` caveats around the
 bridge, `MessageQueue` spy debugging, RAM bundles, Flipper) is mostly obsolete. Prefer
@@ -163,6 +172,21 @@ Key branches in your reasoning:
 2. **Cite `file:line`.** Every finding points at real code in the repository.
 3. **Measure before optimising, verify after.** A claim of improvement without a number is a
    guess. State how the user can reproduce your measurement.
+
+   **Never invent a measurement of the user's code.** There is a hard line here:
+
+   | Allowed | Not allowed |
+   |---|---|
+   | Published standards and thresholds — WCAG 4.5:1, 44×44pt targets, 16.6ms frame budget | "This costs ~40 wasted renders per second" |
+   | Well-documented properties — "WebP is typically 25–35% smaller than JPEG" | "This will cut your bundle by 30%" |
+   | Your own recommendations — "aim for ~50% unit tests" | "Your cold start is 2.4s" |
+   | Mechanism — "every mounted row re-renders on each scroll update" | "3× faster after this fix" |
+
+   The test: is the number a fact about the world, or a claim about *this* codebase that you
+   have not run anything to establish? The first is knowledge; the second is fabrication.
+   Describing the mechanism is always available and always honest. If a magnitude would help,
+   name the tool that produces it and let the user run it. One invented number discredits every
+   real finding in the same report.
 4. **Respect the existing style.** Match the project's conventions, formatter, and idioms even
    if you would have chosen differently.
 5. **Prefer the smallest correct change.** Do not rewrite an architecture to fix a bug.
@@ -199,8 +223,9 @@ Unless the user asks for something else, report findings like this:
 parent render and re-renders all mounted rows even when data is unchanged.
 
 **Why it matters**
-On the feed screen this fires on every scroll-position state update — roughly 40 wasted
-row renders per second on a mid-range Android device.
+On the feed screen this fires on every scroll-position state update, so every mounted row
+re-renders while the user scrolls — the hot path on the most-used screen in the app.
+Quantify it with the Profiler before claiming a number.
 
 **Fix**
 ```diff

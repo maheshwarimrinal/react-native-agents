@@ -6,6 +6,8 @@
  */
 import path from 'node:path';
 import {
+  KNOWLEDGE,
+  VERSION,
   composeFullPrompt,
   composePrompt,
   copyReferences,
@@ -35,7 +37,7 @@ export function emitClaudeCode({ agents, shared, distDir }) {
           owner: { name: 'React Native Agents contributors' },
           metadata: {
             description: 'Expert React Native agents for performance, security, quality, a11y, testing, and release.',
-            version: '1.0.0',
+            version: VERSION,
           },
           plugins: [
             {
@@ -43,7 +45,7 @@ export function emitClaudeCode({ agents, shared, distDir }) {
               source: './plugins/react-native-agents',
               description:
                 'Six specialist React Native agents: performance, security, code quality, UI/accessibility, testing, and release.',
-              version: '1.0.0',
+              version: VERSION,
               category: 'development',
               keywords: ['react-native', 'expo', 'mobile', 'performance', 'security', 'accessibility'],
             },
@@ -63,7 +65,7 @@ export function emitClaudeCode({ agents, shared, distDir }) {
           name: 'react-native-agents',
           description:
             'Six specialist React Native agents: performance, security, code quality, UI/accessibility, testing, and release.',
-          version: '1.0.0',
+          version: VERSION,
           license: 'MIT',
           keywords: ['react-native', 'expo', 'mobile'],
         },
@@ -390,7 +392,8 @@ export function emitAgentsMd({ agents, shared, distDir }) {
 export function emitIndex({ agents, shared, distDir }) {
   const index = {
     generatedAt: null, // intentionally omitted so --check diffs are stable
-    version: '1.0.0',
+    version: VERSION, // from package.json — single source of truth
+    knowledge: KNOWLEDGE,
     agents: agents.map((a) => ({
       id: a.id,
       name: a.name,

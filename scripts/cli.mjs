@@ -13,6 +13,7 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DIST_DIR, ROOT, loadAgents } from './lib/source.mjs';
+import { apply, isUserOwned, plan, previewDiff, summarise } from './lib/install.mjs';
 
 const c = {
   dim: (s) => `\x1b[2m${s}\x1b[0m`,
@@ -49,19 +50,10 @@ function detectTools(cwd) {
     .map(([k]) => k);
 }
 
-function copyTree(src, dest, { filter, onFile } = {}) {
-  if (!fs.existsSync(src)) throw new Error(`Not found: ${src}. Run \`npm run build\` first.`);
-  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, entry.name);
-    const d = path.join(dest, entry.name);
-    if (entry.isDirectory()) copyTree(s, d, { filter, onFile });
-    else {
-      if (filter && !filter(s)) continue;
-      fs.mkdirSync(path.dirname(d), { recursive: true });
-      fs.copyFileSync(s, d);
-      onFile?.(d);
-    }
-  }
+function resolveConflictMode(args) {
+  if (args.force) return 'overwrite';
+  if (args.backup) return 'backup';
+  return 'skip'; // safe default: never destroy anything the user wrote
 }
 
 async function main() {
@@ -97,6 +89,14 @@ async function main() {
     npx @maheshwarimrinal/react-native-agents install --agents rn-security,rn-performance
     npx @maheshwarimrinal/react-native-agents list
     npx @maheshwarimrinal/react-native-agents mcp                     run the MCP server (stdio)
+
+  ${c.bold('Existing files')}
+    Conflicts are ${c.bold('skipped by default')} — nothing you wrote is ever replaced silently.
+
+    --dry-run      show exactly what would be created, skipped, or conflict
+    --verbose      with --dry-run, also show a diff of each conflict
+    --backup       replace conflicts, keeping the original as <file>.bak
+    --force        replace conflicts (files you authored are still backed up)
 `);
     return;
   }
@@ -138,23 +138,90 @@ async function main() {
     ? (file) => selected.some((id) => file.includes(id)) || /context|marketplace|plugin\.json|AGENTS\.md|copilot-instructions/.test(file)
     : undefined;
 
-  console.log(c.bold('\n  Installing React Native agents\n'));
+  // ---- Plan everything before touching the filesystem -------------------
+  const dryRun = Boolean(args['dry-run']);
+  const onConflict = resolveConflictMode(args);
 
-  let count = 0;
+  const plans = [];
   for (const tool of tools) {
     const src = path.join(DIST_DIR, TOOLS[tool].from);
     if (!fs.existsSync(src)) {
-      console.error(c.red(`  ✗ ${TOOLS[tool].label}: dist/ not built. Run \`npm run build\`.`));
-      process.exitCode = 1;
-      continue;
+      console.error(c.red(`\n  ✗ ${TOOLS[tool].label}: dist/ not built. Run \`npm run build\`.\n`));
+      process.exit(1);
     }
-    let n = 0;
-    copyTree(src, cwd, { filter, onFile: () => n++ });
-    count += n;
-    console.log(`  ${c.green('✓')} ${TOOLS[tool].label.padEnd(32)} ${c.dim(`${n} files`)}`);
+    plans.push({ tool, entries: plan(src, cwd, { filter }) });
   }
 
-  console.log(c.dim(`\n  ${count} files written to ${cwd}\n`));
+  const allEntries = plans.flatMap((p) => p.entries);
+  const stats = summarise(allEntries);
+
+  console.log(
+    c.bold(dryRun ? '\n  Installation preview (no files will be changed)\n' : '\n  Installing React Native agents\n'),
+  );
+
+  // ---- Show conflicts before doing anything ------------------------------
+  if (stats.conflict.length) {
+    console.log(c.yellow(`  ${stats.conflict.length} file(s) already exist and differ:\n`));
+    for (const e of stats.conflict.slice(0, 12)) {
+      const tag = isUserOwned(e.rel) ? c.red(' (your file)') : '';
+      console.log(`    ${c.yellow('!')} ${e.rel}${tag}`);
+      if (args.verbose) {
+        console.log(c.dim(previewDiff(e).split('\n').map((l) => `        ${l}`).join('\n')));
+      }
+    }
+    if (stats.conflict.length > 12) console.log(c.dim(`    …and ${stats.conflict.length - 12} more`));
+
+    const verb = onConflict === 'skip' ? 'left untouched' : onConflict === 'backup' ? 'backed up then replaced' : 'REPLACED';
+    console.log(
+      c.dim(`\n  These will be ${verb}.`) +
+        (onConflict === 'skip'
+          ? c.dim('  Use --force to replace, or --backup to keep a .bak copy.\n')
+          : '\n'),
+    );
+  }
+
+  if (dryRun) {
+    for (const { tool, entries } of plans) {
+      const s = summarise(entries);
+      console.log(
+        `  ${TOOLS[tool].label.padEnd(32)} ${c.green(`+${s.create} new`)}` +
+          (s.conflict.length ? c.yellow(`  !${s.conflict.length} conflict`) : '') +
+          (s.identical ? c.dim(`  =${s.identical} unchanged`) : ''),
+      );
+    }
+    console.log(c.dim(`\n  ${stats.total} file(s) evaluated. Nothing was written.\n`));
+    return;
+  }
+
+  // ---- Apply ---------------------------------------------------------------
+  let created = 0;
+  let skipped = 0;
+  let overwritten = 0;
+  const backedUp = [];
+
+  for (const { tool, entries } of plans) {
+    const r = apply(entries, { onConflict });
+    created += r.created;
+    skipped += r.skipped;
+    overwritten += r.overwritten;
+    backedUp.push(...r.backedUp);
+    console.log(
+      `  ${c.green('✓')} ${TOOLS[tool].label.padEnd(32)} ${c.dim(`${r.created} written`)}` +
+        (r.skipped ? c.yellow(` · ${r.skipped} skipped`) : '') +
+        (r.overwritten ? c.yellow(` · ${r.overwritten} replaced`) : ''),
+    );
+  }
+
+  console.log(c.dim(`\n  ${created} file(s) written to ${cwd}`));
+  if (skipped) {
+    console.log(
+      c.yellow(`  ${skipped} existing file(s) left untouched.`) +
+        c.dim(' Re-run with --force or --backup to replace them.'),
+    );
+  }
+  if (backedUp.length) console.log(c.dim(`  Backups: ${backedUp.slice(0, 5).join(', ')}${backedUp.length > 5 ? ', …' : ''}`));
+  console.log();
+
   console.log(`  ${c.bold('Next:')}`);
   if (tools.includes('claude-code')) console.log(`    Claude Code  ${c.dim('restart, then run /rn-audit')}`);
   if (tools.includes('cursor')) console.log(`    Cursor       ${c.dim('rules load automatically; @-mention a rule to force it')}`);

@@ -1,0 +1,52 @@
+{
+  "agent": "rn-code-quality",
+  "title": "Stale closure in setInterval, derived state via effect, missing cleanup, state mutation",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Four distinct React bugs. The derived-state one is the most commonly missed by reviewers who only look for missing dependency arrays.",
+
+  "expect": [
+    {
+      "name": "identifies the stale closure in setInterval",
+      "any": ["stale closure", "stale", "seconds + 1", "functional update", "captures"]
+    },
+    {
+      "name": "proposes the functional updater form",
+      "any": ["c => c + 1", "s => s + 1", "prev", "functional update", "updater"]
+    },
+    {
+      "name": "identifies the missing interval cleanup",
+      "any": ["clearinterval", "cleanup", "return ()", "leak", "unmount"]
+    },
+    {
+      "name": "identifies label as derived state that should not be an effect",
+      "any": ["derive", "during render", "not need", "unnecessary", "compute"]
+    },
+    {
+      "name": "identifies the missing subscription cleanup",
+      "any": ["unsubscribe", "subscribe", "cleanup", "teardown"]
+    },
+    {
+      "name": "identifies direct state mutation",
+      "any": ["mutat", "events.push", "same reference", "identity", "spread"]
+    }
+  ],
+
+  "expectSeverity": ["P1", "P2"],
+
+  "forbid": [
+    {
+      "name": "recommends disabling the exhaustive-deps lint rule",
+      "pattern": "(disable|ignore|suppress)\\s+\\w*\\s*(exhaustive-deps|react-hooks)"
+    },
+    {
+      "name": "recommends useRef as the fix for derived state",
+      "all": ["useref"],
+      "unless": ["latest", "timer", "interval", "id"]
+    },
+    {
+      "name": "proposes a full rewrite rather than minimal corrections",
+      "any": ["rewrite the entire", "complete rewrite", "start over"]
+    }
+  ]
+}

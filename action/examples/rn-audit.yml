@@ -1,0 +1,55 @@
+# Drop this in .github/workflows/rn-audit.yml in your React Native repo.
+#
+# Add ANTHROPIC_API_KEY as a repository secret:
+#   Settings → Secrets and variables → Actions → New repository secret
+name: React Native audit
+
+on:
+  pull_request:
+    # Only run when code that matters actually changed — the action routes
+    # further internally, but this avoids spinning up a runner for a README edit.
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+      - '**/*.gradle'
+      - '**/Info.plist'
+      - '**/AndroidManifest.xml'
+      - 'package.json'
+      - 'app.json'
+      - 'app.config.*'
+      - 'eas.json'
+
+permissions:
+  contents: read
+  pull-requests: write # required to post review comments
+
+# A new push supersedes the previous audit — don't pay for stale reviews.
+concurrency:
+  group: rn-audit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    # Fork PRs can't read secrets, and running without a key just fails noisily.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - uses: maheshwarimrinal/react-native-agents@v1
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Stop the run cleanly rather than overspending on a huge PR.
+          budget-usd: '1.50'
+
+          # Start with `never` while you calibrate, then tighten to P0 once the
+          # team trusts the signal. Gating too early trains people to ignore it.
+          fail-on: never
+
+          # Optional: force a specific agent set instead of auto-routing.
+          # agents: rn-security,rn-performance

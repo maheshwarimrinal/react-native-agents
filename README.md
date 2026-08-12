@@ -20,9 +20,11 @@ Written once. Runs in Claude Code, Cursor, Windsurf, GitHub Copilot, Codex, and 
 ## Table of contents
 
 - [The problem](#the-problem)
+- [What it actually does](#what-it-actually-does)
 - [What you get](#what-you-get)
 - [Quick start](#quick-start)
 - [Installation by tool](#installation-by-tool)
+- [Automate it on every PR](#automate-it-on-every-pr)
 - [The agents in detail](#the-agents-in-detail)
 - [How to use them](#how-to-use-them)
 - [How it works](#how-it-works)
@@ -67,6 +69,68 @@ These agents are the specialist knowledge that's missing. They are not linters a
 checklists — they're detailed operating instructions that make an AI assistant behave like a
 senior React Native engineer who has shipped to millions of users and has the scar tissue to
 prove it.
+
+---
+
+## What it actually does
+
+Install, then ask a normal question:
+
+```bash
+$ npx @maheshwarimrinal/react-native-agents install
+
+  Detected: Cursor, Claude Code
+
+  ✓ Claude Code                      104 files
+  ✓ Cursor                            45 files
+```
+
+```
+> Review this catalogue screen for performance problems.
+```
+
+The performance agent replies with findings, not a lecture:
+
+```
+[P1] Unstable renderItem recreates every row on each parent render
+src/screens/Catalogue.tsx:15
+
+renderItem is an inline arrow, so FlatList sees a new function identity on every
+parent render and re-renders all mounted rows even when data is unchanged. The
+inline onPress closure defeats React.memo on the row as well.
+
+Fix
+- renderItem={({ item }) => <Row item={item} onPress={() => open(item.id)} />}
++ renderItem={renderRow}
+
+const renderRow = useCallback(({ item }) => <Row item={item} onPress={open} />, [open]);
+
+Verify
+React DevTools Profiler → record a scroll → Row commit count should drop to only
+newly-windowed rows.
+
+[P1] Scroll position stored in React state re-renders the screen every frame
+src/screens/Catalogue.tsx:13
+onScroll calls setScrollY on every scroll event — a React state update per frame.
+Move it to a Reanimated shared value with useAnimatedScrollHandler.
+
+[P2] Index-based keyExtractor breaks on insert, delete, and reorder
+src/screens/Catalogue.tsx:12
+
+[P2] Intl.NumberFormat constructed inside every row render
+src/screens/Catalogue.tsx:23
+Hoist the formatter to module scope; construction is the expensive part.
+
+Summary  P0 0 · P1 2 · P2 2
+Top action: fix renderItem identity and memoise Row — one change, removes the
+dominant cost on the most-used screen.
+```
+
+Note what it does **not** do: it doesn't open with "switch to FlashList", and it doesn't claim a
+percentage it never measured. Both of those are [enforced by eval cases](evals/).
+
+The same six agents run automatically on every PR via the
+[GitHub Action](#automate-it-on-every-pr).
 
 ---
 
@@ -297,6 +361,61 @@ npx @maheshwarimrinal/react-native-agents install --agents rn-security,rn-perfor
 ```
 
 </details>
+
+---
+
+## Automate it on every PR
+
+The same six agents run in CI as a GitHub Action. It runs in **your** CI with **your** API key —
+nothing is sent to any infrastructure we operate.
+
+```yaml
+# .github/workflows/rn-audit.yml
+name: React Native audit
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maheshwarimrinal/react-native-agents@v1
+        with:
+          api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          budget-usd: '1.50'
+          fail-on: never # tighten to P0 once the team trusts the signal
+```
+
+Findings post as inline review comments, plus one summary comment that **updates in place**
+rather than spamming the PR on every push.
+
+**It only runs the agents the diff warrants.** A PR touching `eas.json` runs the release agent,
+not all six — typically 60–70% cheaper than a blanket audit:
+
+```
+4 changed file(s)
+Routing to 5/6 agent(s):
+  🚀 rn-release            — 1 matching file: eas.json
+  🔒 rn-security           — 1 matching file: src/lib/authClient.ts
+  🧹 rn-code-quality       — 2 matching files: src/screens/Feed.tsx, src/lib/authClient.ts
+  ⚡ rn-performance        — 1 matching file: src/screens/Feed.tsx
+  🎨 rn-ui-accessibility   — 1 matching file: src/screens/Feed.tsx
+  skipped: rn-testing
+```
+
+A **hard budget cap** is checked before every model call, so a large PR stops cleanly and reports
+what it reviewed instead of silently overspending. Every summary shows what the run cost.
+
+Preview the routing with no spend at all:
+
+```bash
+npx @maheshwarimrinal/react-native-agents audit --diff-file pr.diff --provider mock --dry-run
+```
+
+See [`action/examples/rn-audit.yml`](action/examples/rn-audit.yml) for the full workflow, and
+[MONETIZATION.md](MONETIZATION.md) for where this is going.
 
 ---
 

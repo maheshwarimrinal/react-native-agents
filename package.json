@@ -1,7 +1,7 @@
 {
   "name": "@maheshwarimrinal/react-native-agents",
   "version": "1.0.0",
-  "description": "Expert React Native agents for performance, security, code quality, accessibility, testing, and release — portable across Claude Code, Cursor, Windsurf, Copilot, Codex, and any MCP client.",
+  "description": "Expert React Native agents for performance, security, code quality, accessibility, testing, and release \u2014 portable across Claude Code, Cursor, Windsurf, Copilot, Codex, and any MCP client.",
   "type": "module",
   "bin": {
     "react-native-agents": "./scripts/cli.mjs",
@@ -11,19 +11,30 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node scripts/build.mjs --check",
-    "test": "node scripts/test.mjs",
+    "test": "node scripts/test.mjs && node action/test.mjs && node evals/run.mjs --validate",
+    "test:agents": "node scripts/test.mjs",
+    "test:action": "node action/test.mjs",
     "install-agents": "node scripts/cli.mjs install",
     "mcp": "node mcp-server/index.mjs",
-    "prepublishOnly": "node scripts/build.mjs --check && node scripts/test.mjs"
+    "audit": "node action/index.mjs",
+    "prepublishOnly": "node scripts/build.mjs --check && node scripts/test.mjs && node action/test.mjs",
+    "evals": "node evals/run.mjs",
+    "evals:validate": "node evals/run.mjs --validate",
+    "freshness": "node scripts/freshness.mjs"
   },
   "files": [
     "agents",
     "shared",
     "scripts",
     "mcp-server",
+    "action",
+    "action.yml",
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "evals",
+    "knowledge.json",
+    "SECURITY.md"
   ],
   "keywords": [
     "react-native",
