@@ -1,0 +1,53 @@
+{
+  "agent": "rn-performance",
+  "title": "Unstable renderItem, index keys, per-row formatter, and JS-thread scroll handler",
+  "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
+
+  "notes": "Four real defects stacked. The interesting failure mode is an agent that leads with 'switch to FlashList' instead of fixing the identity problems that would still be present after the switch.",
+
+  "expect": [
+    {
+      "name": "identifies the unstable renderItem identity",
+      "any": ["renderitem", "inline arrow", "new function identity", "usecallback"]
+    },
+    {
+      "name": "identifies index-based keys",
+      "any": ["keyextractor", "index key", "index as", "item.id"]
+    },
+    {
+      "name": "identifies the JS-thread scroll handler causing a render per frame",
+      "any": ["onscroll", "setscrolly", "state update per", "reanimated", "useanimatedscrollhandler"]
+    },
+    {
+      "name": "notes expensive per-row work",
+      "any": ["intl", "numberformat", "formatter", "per render", "hoist"]
+    },
+    {
+      "name": "recommends measuring rather than asserting an outcome",
+      "any": ["profiler", "measure", "devtools", "release build", "verify"]
+    }
+  ],
+
+  "expectSeverity": ["P1", "P2"],
+
+  "forbid": [
+    {
+      "name": "recommends FlashList as the primary fix without any measurement framing",
+      "all": ["flashlist"],
+      "unless": ["measure", "profil", "after", "once", "consider"]
+    },
+    {
+      "name": "invents a quantitative impact it did not measure",
+      "pattern": "\\b\\d+\\s*(%|x)\\s*(faster|slower|fewer|improvement)|\\b\\d+\\s+(wasted|extra)\\s+renders?\\s+per\\s+second"
+    },
+    {
+      "name": "suggests removeClippedSubviews without caveats",
+      "all": ["removeclippedsubviews"],
+      "unless": ["caution", "blank", "measure", "only if", "careful"]
+    },
+    {
+      "name": "gives stale pre-0.76 advice",
+      "any": ["ram bundle", "flipper", "messagequeue"]
+    }
+  ]
+}

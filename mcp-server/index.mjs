@@ -14,14 +14,18 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  KNOWLEDGE,
+  VERSION,
   composeFullPrompt,
   composePrompt,
   loadAgents,
   loadSharedContext,
 } from '../scripts/lib/source.mjs';
+import { explainRouting } from './routing.mjs';
 
 const PROTOCOL_VERSION = '2024-11-05';
-const SERVER = { name: 'react-native-agents', version: '1.0.0' };
+// Version comes from package.json so it can't drift from the published package.
+const SERVER = { name: 'react-native-agents', version: VERSION };
 
 const log = (...a) => process.stderr.write(`[rn-agents-mcp] ${a.join(' ')}\n`);
 
@@ -176,44 +180,10 @@ function callTool(name, args = {}) {
       return text(ref.content);
     }
 
-    case 'suggest_agent': {
-      const task = String(args.task ?? '').toLowerCase();
-      const scored = AGENTS.map((a) => {
-        const hits = [
-          ...(a.triggers ?? []),
-          ...a.references.map((r) => r.slug.replace(/-/g, ' ')),
-        ].filter((t) => task.includes(String(t).toLowerCase()));
-        return { agent: a, score: hits.length, hits };
-      })
-        .filter((s) => s.score > 0)
-        .sort((a, b) => b.score - a.score);
-
-      if (scored.length === 0) {
-        return text(
-          [
-            'No single specialist stands out for that description.',
-            '',
-            'Either call `list_react_native_agents` to choose manually, or run the full audit plan',
-            'via `get_audit_plan` if the goal is a broad review.',
-          ].join('\n'),
-        );
-      }
-
-      return text(
-        [
-          '# Suggested specialists',
-          '',
-          ...scored
-            .slice(0, 3)
-            .map(
-              (s, i) =>
-                `${i + 1}. **${s.agent.title ?? s.agent.name}** (\`${s.agent.id}\`) — matched on: ${s.hits.join(', ')}\n   ${s.agent.description}`,
-            ),
-          '',
-          `Load with: \`get_react_native_agent({ agent_id: "${scored[0].agent.id}" })\``,
-        ].join('\n'),
-      );
-    }
+    case 'suggest_agent':
+      // Weighted vocabulary scoring — see routing.mjs. Handles descriptions that
+      // never name a React Native concept ("my catalogue is stuttering").
+      return text(explainRouting(args.task, AGENTS).text);
 
     case 'get_audit_plan': {
       const scope = args.scope ? `\n\n**Scope:** ${args.scope}` : '';

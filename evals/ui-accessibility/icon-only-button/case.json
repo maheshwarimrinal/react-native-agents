@@ -1,0 +1,55 @@
+{
+  "agent": "rn-ui-accessibility",
+  "title": "Unlabelled icon buttons, sub-minimum targets, disabled font scaling, low contrast, module-scope Dimensions",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "#AAAAAA on #FFFFFF is about 2.3:1 — well under the 4.5:1 AA requirement for body text. A good agent computes or at least asserts the failure rather than saying 'consider checking contrast'.",
+
+  "expect": [
+    {
+      "name": "flags missing accessibilityLabel on icon-only buttons",
+      "any": ["accessibilitylabel", "accessibility label", "screen reader", "unlabelled", "unlabeled"]
+    },
+    {
+      "name": "flags missing accessibilityRole",
+      "any": ["accessibilityrole", "role=\"button\"", "role"]
+    },
+    {
+      "name": "flags touch targets below the 44/48 minimum",
+      "any": ["44", "48", "touch target", "hitslop", "too small"]
+    },
+    {
+      "name": "flags allowFontScaling={false}",
+      "any": ["allowfontscaling", "font scaling", "dynamic type", "maxfontsizemultiplier"]
+    },
+    {
+      "name": "flags the insufficient contrast",
+      "any": ["contrast", "4.5", "wcag", "#aaa", "aaaaaa"]
+    },
+    {
+      "name": "flags Dimensions captured at module scope",
+      "any": ["dimensions", "usewindowdimensions", "rotation", "module scope", "foldable"]
+    },
+    {
+      "name": "flags the destructive delete action lacking confirmation or a distinct label",
+      "any": ["delete", "destructive", "confirm"]
+    }
+  ],
+
+  "expectSeverity": ["P1", "P2"],
+
+  "forbid": [
+    {
+      "name": "suggests keeping allowFontScaling={false} to protect the layout",
+      "pattern": "(keep|retain|leave)\\s+allowfontscaling\\s*=?\\s*\\{?false"
+    },
+    {
+      "name": "treats the icon component name as sufficient labelling",
+      "pattern": "(icon name|component name)\\s+\\w*\\s*(is|provides|acts as)\\s+\\w*\\s*label"
+    },
+    {
+      "name": "asserts a contrast ratio without it being computable from the given colours",
+      "pattern": "contrast (ratio )?(of )?[5-9](\\.\\d+)?:1"
+    }
+  ]
+}

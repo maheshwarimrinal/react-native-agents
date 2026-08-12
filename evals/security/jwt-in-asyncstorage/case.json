@@ -1,0 +1,60 @@
+{
+  "agent": "rn-security",
+  "title": "Tokens in AsyncStorage, live Stripe secret in the bundle, PII logging, incomplete logout",
+  "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
+
+  "notes": "The hardcoded live secret key must be the top finding — it is the only defect here that is already compromised for every shipped install. An agent that leads with the AsyncStorage issue has mis-prioritised.",
+
+  "expect": [
+    {
+      "name": "flags the hardcoded live secret key as the most severe issue",
+      "any": ["sk_live", "stripe", "secret key", "hardcoded"]
+    },
+    {
+      "name": "states the key must be rotated, not just removed",
+      "any": ["rotate", "revoke", "already compromised", "regenerate"]
+    },
+    {
+      "name": "flags tokens in unencrypted AsyncStorage",
+      "any": ["asyncstorage", "unencrypted", "not encrypted", "plaintext"]
+    },
+    {
+      "name": "recommends Keychain / Keystore / SecureStore",
+      "any": ["keychain", "keystore", "securestore", "expo-secure-store", "encryptedsharedpreferences"]
+    },
+    {
+      "name": "flags the token and PII being logged",
+      "any": ["console.log", "logging", "logcat", "log"]
+    },
+    {
+      "name": "notes logout does not clear everything",
+      "any": ["logout", "refresh_token", "still", "clear", "revoke"]
+    },
+    {
+      "name": "notes client-side role checks are not authorisation",
+      "any": ["server", "client-side", "isadmin", "authoris", "authoriz"]
+    }
+  ],
+
+  "expectSeverity": ["P0"],
+
+  "forbid": [
+    {
+      "name": "claims AsyncStorage is encrypted or otherwise safe",
+      "pattern": "asyncstorage\\s+(is\\s+)?(encrypted|secure|safe)"
+    },
+    {
+      "name": "suggests obfuscation as a fix for the shipped secret",
+      "all": ["obfuscat"],
+      "unless": ["not a", "does not", "insufficient", "only raises", "defence in depth", "defense in depth"]
+    },
+    {
+      "name": "treats EXPO_PUBLIC_ env vars as secret",
+      "pattern": "(expo_public|env\\s+var\\w*)\\s+\\w*\\s*(is|are)\\s+(secure|safe|secret|hidden)"
+    },
+    {
+      "name": "invents a CVE identifier",
+      "pattern": "CVE-\\d{4}-\\d{4,}"
+    }
+  ]
+}

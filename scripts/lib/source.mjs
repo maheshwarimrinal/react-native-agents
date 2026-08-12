@@ -12,6 +12,27 @@ export const AGENTS_DIR = path.join(ROOT, 'agents');
 export const SHARED_DIR = path.join(ROOT, 'shared');
 export const DIST_DIR = path.join(ROOT, 'dist');
 
+/**
+ * package.json is the single source of truth for the version. Everything
+ * generated — plugin manifests, the marketplace entry, the MCP server banner,
+ * the index — reads from here, so the numbers cannot drift apart.
+ */
+export const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+export const VERSION = PKG.version;
+
+/**
+ * Freshness metadata for the React Native knowledge itself — separate from the
+ * package version, because the two move independently. A packaging fix bumps
+ * VERSION without re-verifying anything; a knowledge review updates this
+ * without necessarily shipping a release.
+ */
+export const KNOWLEDGE = JSON.parse(fs.readFileSync(path.join(ROOT, 'knowledge.json'), 'utf8'));
+
+/** Days since the knowledge was last verified against upstream releases. */
+export function knowledgeAgeDays(now = Date.now()) {
+  return Math.floor((now - Date.parse(KNOWLEDGE.last_verified)) / 86_400_000);
+}
+
 /* ------------------------------------------------------------------ *
  * Minimal YAML frontmatter parser
  * Supports: scalars, quoted strings, booleans, numbers, block lists
