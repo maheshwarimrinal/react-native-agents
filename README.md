@@ -105,3 +105,9 @@ The source contains 6 playbooks and 38 reference documents. Knowledge is verifie
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Support the project
+
+If React Native Agents saves you time, you can support its ongoing maintenance:
+
+[![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/maheshwarimrinal)
