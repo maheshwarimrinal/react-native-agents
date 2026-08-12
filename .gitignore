@@ -12,3 +12,5 @@ coverage/
 
 # Packed tarballs from `npm pack`
 *.tgz
+
+MONETIZATION.md
