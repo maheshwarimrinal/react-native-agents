@@ -81,6 +81,7 @@ The source contains 6 playbooks and 38 reference documents. Knowledge is verifie
 
 ## Documentation
 
+- [Real-world demo](examples/react-native-audit-demo/README.md) — intentionally flawed React Native project with a PR audit workflow
 - [Installation by tool](docs/installation.md) — Claude Code, Cursor, Windsurf, Copilot, Codex, and MCP
 - [GitHub Action guide](docs/github-action.md) — providers, secrets, inputs, outputs, routing, and severity gates
 - [Agents guide](docs/agents.md) — what each specialist catches and when to use it

@@ -1,0 +1,11 @@
+{
+  "expo": {
+    "name": "Catalogue Demo",
+    "slug": "react-native-audit-demo",
+    "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
+    "updates": { "url": "https://u.expo.dev/example-project-id" },
+    "ios": { "bundleIdentifier": "com.example.cataloguedemo" },
+    "android": { "package": "com.example.cataloguedemo" }
+  }
+}
