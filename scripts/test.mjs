@@ -11,9 +11,12 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const { loadAgents, loadSharedContext, parseFrontmatter, serializeFrontmatter } = await import(
-  path.join(ROOT, 'scripts/lib/source.mjs')
-);
+const { loadAgents, loadSharedContext, parseFrontmatter, serializeFrontmatter, KNOWLEDGE, VERSION, knowledgeAgeDays } =
+  await import(path.join(ROOT, 'scripts/lib/source.mjs'));
+const { plan, apply, isUserOwned, summarise } = await import(path.join(ROOT, 'scripts/lib/install.mjs'));
+const { scoreAgents, explainRouting } = await import(path.join(ROOT, 'mcp-server/routing.mjs'));
+const { loadCases, scoreOutput } = await import(path.join(ROOT, 'evals/run.mjs'));
+const os = await import('node:os');
 
 let passed = 0;
 let failed = 0;
@@ -45,6 +48,12 @@ async function testAsync(name, fn) {
 
 function assert(cond, msg) {
   if (!cond) throw new Error(msg ?? 'assertion failed');
+}
+
+function eq(a, b, msg) {
+  if (a !== b) {
+    throw new Error(`${msg ?? 'not equal'}: got ${JSON.stringify(a)}, want ${JSON.stringify(b)}`);
+  }
 }
 
 /* ---------------------------------------------------------------- *
@@ -413,6 +422,242 @@ await testAsync('CLI rejects an unknown subcommand', async () => {
     failed = true;
   }
   assert(failed, 'unknown command should exit non-zero');
+});
+
+/* ---------------------------------------------------------------- *
+ * Installer safety — regression guards for the data-loss bug
+ * ---------------------------------------------------------------- */
+
+function scratchProject() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-install-'));
+  fs.mkdirSync(path.join(dir, '.github'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# MY OWN INSTRUCTIONS\n');
+  fs.writeFileSync(path.join(dir, '.github/copilot-instructions.md'), '# my rules\n');
+  return dir;
+}
+
+test('installer: plan classifies create / conflict / identical', () => {
+  const dir = scratchProject();
+  const src = path.join(DIST, 'agents-md');
+  const entries = plan(src, dir);
+  const s = summarise(entries);
+  assert(s.conflict.length >= 1, 'should detect the pre-existing AGENTS.md as a conflict');
+  assert(s.create > 0, 'should also have new files to create');
+});
+
+test('installer: default mode never overwrites an existing file', () => {
+  const dir = scratchProject();
+  const before = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'skip' });
+  eq(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8'), before, 'AGENTS.md must be untouched');
+});
+
+test('installer: dry run writes nothing at all', () => {
+  const dir = scratchProject();
+  const countBefore = fs.readdirSync(dir).length;
+  apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'overwrite', dryRun: true });
+  eq(fs.readdirSync(dir).length, countBefore, 'dry run must not create files');
+  assert(fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8').startsWith('# MY OWN'), 'unchanged');
+});
+
+test('installer: --force still backs up user-authored files', () => {
+  const dir = scratchProject();
+  const original = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  const r = apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'overwrite' });
+  assert(r.backedUp.length > 0, 'should have taken a backup');
+  assert(fs.existsSync(path.join(dir, 'AGENTS.md.bak')), 'AGENTS.md.bak must exist');
+  eq(fs.readFileSync(path.join(dir, 'AGENTS.md.bak'), 'utf8'), original, 'backup must hold the original');
+});
+
+test('installer: re-running on a clean install is idempotent', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-idem-'));
+  apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'skip' });
+  const second = apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'skip' });
+  eq(second.created, 0, 'nothing new on the second run');
+  eq(second.skipped, 0, 'identical files are not conflicts');
+  assert(second.identical > 0, 'should recognise files as identical');
+});
+
+test('installer: user-owned file list covers the known-dangerous paths', () => {
+  for (const f of ['AGENTS.md', '.github/copilot-instructions.md', 'CLAUDE.md']) {
+    assert(isUserOwned(f), `${f} should be treated as user-authored`);
+  }
+  assert(!isUserOwned('.claude/agents/rn-security.md'), 'generated files are ours to replace');
+});
+
+/* ---------------------------------------------------------------- *
+ * Version single-source-of-truth
+ * ---------------------------------------------------------------- */
+
+test('every generated manifest uses the package.json version', () => {
+  const marketplace = JSON.parse(
+    fs.readFileSync(path.join(DIST, 'claude-code/.claude-plugin/marketplace.json'), 'utf8'),
+  );
+  const plugin = JSON.parse(
+    fs.readFileSync(path.join(DIST, 'claude-code/plugins/react-native-agents/.claude-plugin/plugin.json'), 'utf8'),
+  );
+  const index = JSON.parse(fs.readFileSync(path.join(DIST, 'index.json'), 'utf8'));
+
+  eq(marketplace.metadata.version, VERSION, 'marketplace metadata');
+  eq(marketplace.plugins[0].version, VERSION, 'marketplace plugin entry');
+  eq(plugin.version, VERSION, 'plugin.json');
+  eq(index.version, VERSION, 'index.json');
+});
+
+test('no hardcoded version literals remain in the generators', () => {
+  for (const rel of ['scripts/lib/targets.mjs', 'mcp-server/index.mjs']) {
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const hits = src.match(/version:\s*['"]\d+\.\d+\.\d+['"]/g);
+    assert(!hits, `${rel} hardcodes a version: ${hits?.join(', ')}`);
+  }
+});
+
+/* ---------------------------------------------------------------- *
+ * Knowledge freshness
+ * ---------------------------------------------------------------- */
+
+test('knowledge.json declares verification metadata', () => {
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(KNOWLEDGE.last_verified), 'last_verified must be a date');
+  assert(KNOWLEDGE.reactNative?.verified_through, 'reactNative.verified_through required');
+  assert(KNOWLEDGE.expo?.verified_through, 'expo.verified_through required');
+  assert(KNOWLEDGE.reactNative?.min_supported, 'reactNative.min_supported required');
+});
+
+test('shared context states the same RN version as knowledge.json', () => {
+  const rn = KNOWLEDGE.reactNative.verified_through;
+  assert(shared.includes(rn), `shared/rn-context.md should mention RN ${rn}`);
+});
+
+test('shared context tells agents to trust package.json over the baseline table', () => {
+  assert(
+    /package\.json/i.test(shared) && /authoritative|verify|re-verify/i.test(shared),
+    'context must defer to the project as ground truth',
+  );
+});
+
+test('knowledge age is reported and not absurd', () => {
+  const age = knowledgeAgeDays();
+  assert(age >= 0, `negative age: ${age} — last_verified is in the future`);
+});
+
+/* ---------------------------------------------------------------- *
+ * No invented benchmarks in the output contract
+ * ---------------------------------------------------------------- */
+
+test('the output-contract example does not model a fabricated measurement', () => {
+  // The example is imitated more strongly than the rule, so it must comply.
+  const contract = shared.slice(shared.indexOf('## Output contract'));
+  const invented = contract.match(/\b(roughly|approximately|about|~)\s*\d+\s+(wasted|extra)\s+\w*\s*renders?/i);
+  assert(!invented, `example fabricates a measurement: "${invented?.[0]}"`);
+});
+
+test('the measurement rule distinguishes standards from fabrication', () => {
+  assert(/never invent a measurement/i.test(shared), 'rule must be explicit');
+  assert(/wcag|4\.5:1|44/i.test(shared), 'rule must permit citing published standards');
+});
+
+/* ---------------------------------------------------------------- *
+ * MCP intent routing
+ * ---------------------------------------------------------------- */
+
+const routeCases = [
+  ['My large product catalogue is stuttering', 'rn-performance'],
+  ['the app freezes when I open the inbox', 'rn-performance'],
+  ['is it safe to keep the JWT where I am keeping it', 'rn-security'],
+  ['the store rejected my build again', 'rn-release'],
+  ['screen reader users cannot use the cart', 'rn-ui-accessibility'],
+  ['my tests keep failing randomly', 'rn-testing'],
+  ['can you refactor this messy component', 'rn-code-quality'],
+];
+
+for (const [task, expected] of routeCases) {
+  test(`routing: "${task.slice(0, 40)}" → ${expected}`, () => {
+    const ranked = scoreAgents(task, agents);
+    eq(ranked[0]?.id, expected, `ranked: ${ranked.slice(0, 2).map((r) => `${r.id}(${r.score})`).join(', ')}`);
+  });
+}
+
+test('routing: semantic phrasing with no jargon still routes', () => {
+  // The team's example — contains no RN vocabulary at all.
+  const ranked = scoreAgents('My large product catalogue is stuttering', agents);
+  eq(ranked[0].id, 'rn-performance');
+  eq(ranked[0].confidence, 'high', `confidence was ${ranked[0].confidence}`);
+});
+
+test('routing: unrelated text matches nothing rather than guessing', () => {
+  eq(scoreAgents('how do I make a burrito', agents).length, 0);
+});
+
+test('routing: admits low confidence instead of asserting a winner', () => {
+  const { text } = explainRouting('something is a bit odd', agents);
+  assert(/no specialist clearly matches|guess/i.test(text), text.slice(0, 200));
+});
+
+/* ---------------------------------------------------------------- *
+ * Eval suite integrity
+ * ---------------------------------------------------------------- */
+
+const evalCases = loadCases(path.join(ROOT, 'evals'));
+
+test('every agent has at least one eval case', () => {
+  const covered = new Set(evalCases.map((c) => c.def.agent));
+  for (const a of agents) assert(covered.has(a.id), `no eval case for ${a.id}`);
+});
+
+test('eval cases reference real agents and have assertions', () => {
+  const ids = new Set(agents.map((a) => a.id));
+  for (const c of evalCases) {
+    assert(ids.has(c.def.agent), `${c.id}: unknown agent ${c.def.agent}`);
+    assert(c.def.expect?.length > 0, `${c.id}: no expectations`);
+    assert(c.input.trim().length > 50, `${c.id}: fixture too small to be meaningful`);
+  }
+});
+
+test('eval forbid patterns are valid regexes', () => {
+  for (const c of evalCases) {
+    for (const f of c.def.forbid ?? []) {
+      if (f.pattern) new RegExp(f.pattern, 'i'); // throws if invalid
+    }
+  }
+});
+
+test('eval scoring catches premature FlashList advice', () => {
+  const def = evalCases.find((c) => c.id === 'performance/unstable-render-item').def;
+  const bad = scoreOutput('Just switch to FlashList, it is 3x faster.', def);
+  assert(bad.violations.length >= 1, 'should flag premature FlashList');
+  assert(!bad.pass, 'must not pass');
+});
+
+test('eval scoring accepts a measured answer mentioning FlashList', () => {
+  const def = evalCases.find((c) => c.id === 'performance/unstable-render-item').def;
+  const good = scoreOutput(
+    'renderItem is an inline arrow so rows re-render. Profile with React DevTools first; consider FlashList after you measure.',
+    def,
+  );
+  eq(good.violations.length, 0, `unexpected violations: ${good.violations.map((v) => v.name).join(', ')}`);
+});
+
+test('eval scoring catches the AsyncStorage-is-encrypted claim', () => {
+  const def = evalCases.find((c) => c.id === 'security/jwt-in-asyncstorage').def;
+  const bad = scoreOutput('AsyncStorage is encrypted so the token is safe there.', def);
+  assert(bad.violations.some((v) => /encrypted/i.test(v.name)), 'should flag the false claim');
+});
+
+/* ---------------------------------------------------------------- *
+ * Repository hygiene
+ * ---------------------------------------------------------------- */
+
+test('gitignore covers FUSE artifacts and packed tarballs', () => {
+  const gi = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+  assert(gi.includes('.fuse_hidden'), 'FUSE artifacts must be ignored');
+  assert(gi.includes('*.tgz'), 'packed tarballs must be ignored');
+});
+
+test('CI triggers on both main and master', () => {
+  const ci = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  const m = ci.match(/branches:\s*\[([^\]]+)\]/);
+  assert(m, 'no branches filter found');
+  assert(/main/.test(m[1]) && /master/.test(m[1]), `branches: [${m[1]}] — must cover both`);
 });
 
 /* ---------------------------------------------------------------- *

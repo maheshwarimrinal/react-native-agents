@@ -1,0 +1,51 @@
+name: Agent evaluations
+
+# Evals call a real model, so they cost money and are non-deterministic. They do
+# not run on every PR — that would be expensive and would produce flaky red
+# builds that people learn to ignore. On demand and weekly is the right cadence.
+on:
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: 'Limit to one agent id (blank = all)'
+        required: false
+        default: ''
+      model:
+        description: 'Model to evaluate'
+        required: false
+        default: claude-sonnet-5
+  schedule:
+    - cron: '0 10 * * 1' # Mondays, after the freshness check
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    # Without a key the run would fail noisily on every fork and schedule.
+    if: github.repository == 'maheshwarimrinal/react-native-agents'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Validate definitions first (free)
+        run: node evals/run.mjs --validate
+
+      - name: Run evaluations
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          node evals/run.mjs \
+            --model "${{ inputs.model || 'claude-sonnet-5' }}" \
+            ${{ inputs.agent && format('--agent {0}', inputs.agent) || '' }} \
+            --budget 5 --json --verbose
+
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: eval-results
+          path: evals/results.json

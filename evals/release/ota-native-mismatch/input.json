@@ -1,0 +1,25 @@
+{
+  "$file": "app.json",
+  "expo": {
+    "name": "ShopApp",
+    "version": "2.3.0",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/abc-123",
+      "fallbackToCacheTimeout": 30000,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "android": {
+      "versionCode": 42,
+      "allowBackup": true
+    },
+    "ios": {
+      "buildNumber": "42"
+    },
+    "plugins": [
+      "expo-camera",
+      "react-native-ble-plx"
+    ]
+  },
+  "$note": "This PR also adds react-native-ble-plx to package.json dependencies and publishes an OTA update to the production branch."
+}

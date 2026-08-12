@@ -1,0 +1,63 @@
+name: Knowledge freshness
+
+# The agents claim to be current on React Native. That claim decays silently
+# unless something checks it, so this compares knowledge.json against the live
+# npm registry and opens a maintenance issue when we fall behind.
+on:
+  schedule:
+    - cron: '0 9 * * 1' # Mondays, 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Compare knowledge.json against npm
+        id: check
+        run: node scripts/freshness.mjs --github-output
+
+      - name: Open a maintenance issue
+        if: steps.check.outputs.stale == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const title = ${{ toJSON(steps.check.outputs.title) }};
+            const body = ${{ toJSON(steps.check.outputs.body) }};
+
+            // Don't pile up duplicates — update the existing open issue instead.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'knowledge-freshness',
+            });
+
+            if (existing.data.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                title,
+                body,
+              });
+              core.info(`Updated issue #${existing.data[0].number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['knowledge-freshness', 'maintenance'],
+              });
+              core.info(`Opened issue #${created.data.number}`);
+            }

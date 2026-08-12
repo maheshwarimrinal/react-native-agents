@@ -1,0 +1,56 @@
+{
+  "agent": "rn-testing",
+  "title": "Snapshot-only test, store-internals assertions, testID queries, sleep-based waiting, over-mocking",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Mocking useCheckout — the hook under test — means test 2 and 3 assert against a mock. That is the most important finding and the easiest to miss.",
+
+  "expect": [
+    {
+      "name": "flags assertions against store internals rather than user-visible behaviour",
+      "any": ["internal", "implementation", "getstate", "behaviour", "behavior", "user-visible"]
+    },
+    {
+      "name": "flags the arbitrary sleep as a flakiness source",
+      "any": ["settimeout", "sleep", "arbitrary", "flaky", "findby", "waitfor"]
+    },
+    {
+      "name": "recommends findBy/waitFor instead of a fixed delay",
+      "any": ["findby", "waitfor", "waitforelementtoberemoved"]
+    },
+    {
+      "name": "flags testID queries where role or label would be better",
+      "any": ["getbyrole", "getbytext", "getbylabeltext", "accessib", "testid"]
+    },
+    {
+      "name": "flags the low-value snapshot test",
+      "any": ["snapshot", "tomatchsnapshot", "asserts nothing", "low value"]
+    },
+    {
+      "name": "flags mocking the module under test",
+      "any": ["mock", "usecheckout", "testing the mock", "over-mock", "too many mock"]
+    },
+    {
+      "name": "flags uninformative test names",
+      "any": ["test 1", "test name", "describe what", "naming"]
+    }
+  ],
+
+  "expectSeverity": ["P1", "P2"],
+
+  "forbid": [
+    {
+      "name": "recommends adding more snapshot tests",
+      "pattern": "(add|more|additional)\\s+snapshot\\s+test"
+    },
+    {
+      "name": "recommends a blanket retry to fix flakiness",
+      "all": ["retry"],
+      "unless": ["not", "avoid", "instead", "hide", "mask", "rather than"]
+    },
+    {
+      "name": "sets a coverage percentage target as the fix",
+      "pattern": "(100|90|80)%\\s+coverage"
+    }
+  ]
+}

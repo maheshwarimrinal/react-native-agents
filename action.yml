@@ -1,0 +1,114 @@
+name: React Native Audit
+description: >-
+  Expert React Native review on every pull request — performance, security, code
+  quality, accessibility, testing, and release. Routes only the relevant
+  specialists at the changed files, so it stays cheap.
+author: Mrinal Maheshwari
+
+branding:
+  icon: smartphone
+  color: blue
+
+inputs:
+  api-key:
+    description: >-
+      Anthropic or OpenAI API key. Runs in your CI with your key — no data goes
+      to any third party beyond your chosen model provider.
+    required: true
+
+  provider:
+    description: 'anthropic | openai | mock'
+    required: false
+    default: anthropic
+
+  model:
+    description: 'Model id. Defaults to claude-sonnet-5 (anthropic) or gpt-5 (openai).'
+    required: false
+    default: ''
+
+  agents:
+    description: >-
+      Comma-separated agent ids to force (rn-performance, rn-security,
+      rn-code-quality, rn-ui-accessibility, rn-testing, rn-release).
+      Leave empty to auto-route based on which files changed — recommended,
+      and typically 60-70% cheaper.
+    required: false
+    default: ''
+
+  max-agents:
+    description: 'Cap how many agents may run on one PR. Cost control.'
+    required: false
+    default: '6'
+
+  budget-usd:
+    description: >-
+      Hard spend cap per run, in USD. The run stops cleanly and reports what it
+      managed to review rather than silently overspending.
+    required: false
+    default: '2'
+
+  fail-on:
+    description: 'Fail the check when a finding at this severity or worse appears: P0 | P1 | P2 | P3 | never'
+    required: false
+    default: never
+
+  dry-run:
+    description: 'Route and report which agents would run, without calling the model.'
+    required: false
+    default: 'false'
+
+  github-token:
+    description: 'Token used to read the PR diff and post comments.'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  total:
+    description: 'Total findings.'
+    value: ${{ steps.audit.outputs.total }}
+  p0:
+    description: 'Count of P0 (critical) findings.'
+    value: ${{ steps.audit.outputs.p0 }}
+  p1:
+    description: 'Count of P1 (high) findings.'
+    value: ${{ steps.audit.outputs.p1 }}
+  p2:
+    description: 'Count of P2 findings.'
+    value: ${{ steps.audit.outputs.p2 }}
+  p3:
+    description: 'Count of P3 findings.'
+    value: ${{ steps.audit.outputs.p3 }}
+  cost-usd:
+    description: 'Estimated USD spent on this run.'
+    value: ${{ steps.audit.outputs.cost-usd }}
+  agents:
+    description: 'Comma-separated agent ids that actually ran.'
+    value: ${{ steps.audit.outputs.agents }}
+  findings-json:
+    description: 'All findings as a JSON array.'
+    value: ${{ steps.audit.outputs.findings-json }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node
+      uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+      with:
+        node-version: 20
+
+    # Zero dependencies by design — nothing to install.
+    - name: Run React Native audit
+      id: audit
+      shell: bash
+      run: node "${{ github.action_path }}/action/index.mjs"
+      env:
+        INPUT_API_KEY: ${{ inputs.api-key }}
+        INPUT_PROVIDER: ${{ inputs.provider }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_AGENTS: ${{ inputs.agents }}
+        INPUT_MAX_AGENTS: ${{ inputs.max-agents }}
+        INPUT_BUDGET_USD: ${{ inputs.budget-usd }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
