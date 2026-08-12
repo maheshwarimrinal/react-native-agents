@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.tmp/
+
+# Artifacts left behind by FUSE-mounted filesystems
+.fuse_hidden*
+
+# Packed tarballs from `npm pack`
+*.tgz

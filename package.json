@@ -1,0 +1,56 @@
+{
+  "name": "react-native-agents",
+  "version": "1.0.0",
+  "description": "Expert React Native agents for performance, security, code quality, accessibility, testing, and release — portable across Claude Code, Cursor, Windsurf, Copilot, Codex, and any MCP client.",
+  "type": "module",
+  "bin": {
+    "react-native-agents": "./scripts/cli.mjs",
+    "rn-agents": "./scripts/cli.mjs",
+    "rn-agents-mcp": "./mcp-server/index.mjs"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check",
+    "test": "node scripts/test.mjs",
+    "install-agents": "node scripts/cli.mjs install",
+    "mcp": "node mcp-server/index.mjs"
+  },
+  "files": [
+    "agents",
+    "shared",
+    "scripts",
+    "mcp-server",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "react-native",
+    "expo",
+    "ai-agents",
+    "claude-code",
+    "cursor",
+    "windsurf",
+    "copilot",
+    "mcp",
+    "performance",
+    "security",
+    "accessibility",
+    "code-review",
+    "vibe-coding"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {},
+  "author": "Mrinal Maheshwari (https://github.com/maheshwarimrinal)",
+  "homepage": "https://github.com/maheshwarimrinal/react-native-agents#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maheshwarimrinal/react-native-agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/maheshwarimrinal/react-native-agents/issues"
+  }
+}

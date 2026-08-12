@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Zero dependencies by design — nothing to install.
+      - name: Run test suite
+        run: node scripts/test.mjs
+
+  sync:
+    name: dist/ is in sync with agents/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Verify generated output matches source
+        run: node scripts/build.mjs --check
+
+  mcp:
+    name: MCP server smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Initialize and list tools over stdio
+        run: |
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | timeout 30 node mcp-server/index.mjs > out.jsonl
+          cat out.jsonl
+          grep -q '"react-native-agents"' out.jsonl
+          grep -q 'get_react_native_agent' out.jsonl
+
+  install:
+    name: CLI install (${{ matrix.tool }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tool: [claude-code, cursor, windsurf, copilot, codex]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Install into a scratch project
+        run: |
+          mkdir -p /tmp/scratch && cd /tmp/scratch
+          node "$GITHUB_WORKSPACE/scripts/cli.mjs" install --tool ${{ matrix.tool }}
+          find . -type f | sort | head -40
+          test "$(find . -type f | wc -l)" -gt 0
+
+  lint-markdown:
+    name: Reference documents are well-formed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - name: Check for unbalanced code fences
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            n=$(grep -c '^```' "$f" || true)
+            if [ $((n % 2)) -ne 0 ]; then
+              echo "::error file=$f::odd number of code fences ($n)"
+              fail=1
+            fi
+          done < <(find agents shared -name '*.md')
+          exit $fail

@@ -1,0 +1,371 @@
+{
+  "generatedAt": null,
+  "version": "1.0.0",
+  "agents": [
+    {
+      "id": "rn-code-quality",
+      "name": "React Native Code Quality Agent",
+      "title": "RN Code Quality",
+      "description": "Use for React Native code review, refactoring, architecture decisions, TypeScript strictness, hook correctness, state management choices, and error handling. Reviews diffs and whole codebases against RN-specific idioms.",
+      "version": "1.0.0",
+      "emoji": "🧹",
+      "color": "blue",
+      "command": "rn-review",
+      "triggers": [
+        "review my code",
+        "refactor",
+        "code quality",
+        "architecture",
+        "folder structure",
+        "typescript",
+        "useEffect",
+        "state management",
+        "error handling",
+        "clean up"
+      ],
+      "globs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ],
+      "references": [
+        {
+          "slug": "architecture",
+          "title": "Architecture and Module Boundaries"
+        },
+        {
+          "slug": "error-handling",
+          "title": "Error Handling and Resilience"
+        },
+        {
+          "slug": "react-patterns",
+          "title": "React and Hook Patterns"
+        },
+        {
+          "slug": "rn-idioms",
+          "title": "React Native Idioms and Smells"
+        },
+        {
+          "slug": "state-management",
+          "title": "State Management"
+        },
+        {
+          "slug": "tooling",
+          "title": "Tooling and Automated Gates"
+        },
+        {
+          "slug": "typescript",
+          "title": "TypeScript in React Native"
+        }
+      ]
+    },
+    {
+      "id": "rn-performance",
+      "name": "React Native Performance Agent",
+      "title": "RN Performance",
+      "description": "Use for React Native performance work — slow lists, janky animations, dropped frames, long startup/TTI, excessive re-renders, memory growth, and oversized bundles. Diagnoses with real profiling data before changing code.",
+      "version": "1.0.0",
+      "emoji": "⚡",
+      "color": "yellow",
+      "command": "rn-perf",
+      "triggers": [
+        "slow",
+        "laggy",
+        "janky",
+        "dropped frames",
+        "fps",
+        "re-render",
+        "FlatList",
+        "FlashList",
+        "startup time",
+        "TTI",
+        "bundle size",
+        "memory leak",
+        "optimize performance"
+      ],
+      "globs": [
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/*.ts",
+        "**/*.js",
+        "metro.config.js",
+        "babel.config.js"
+      ],
+      "references": [
+        {
+          "slug": "animations-and-gestures",
+          "title": "Animations and Gestures"
+        },
+        {
+          "slug": "data-and-network",
+          "title": "Data and Network Performance"
+        },
+        {
+          "slug": "images-and-media",
+          "title": "Images and Media"
+        },
+        {
+          "slug": "lists",
+          "title": "Lists and Scrolling"
+        },
+        {
+          "slug": "measurement",
+          "title": "Measurement Toolchain"
+        },
+        {
+          "slug": "memory",
+          "title": "Memory and Leaks"
+        },
+        {
+          "slug": "rendering",
+          "title": "Re-render Elimination"
+        },
+        {
+          "slug": "startup-and-bundle",
+          "title": "Startup Time and Bundle Size"
+        }
+      ]
+    },
+    {
+      "id": "rn-release",
+      "name": "React Native Release Agent",
+      "title": "RN Release",
+      "description": "Use for React Native builds and releases — EAS Build and Submit, Fastlane, code signing, versioning, OTA updates with expo-updates or CodePush, App Store and Play Store submission, staged rollout, monitoring, and rollback.",
+      "version": "1.0.0",
+      "emoji": "🚀",
+      "color": "orange",
+      "command": "rn-release",
+      "triggers": [
+        "build",
+        "release",
+        "EAS",
+        "fastlane",
+        "code signing",
+        "provisioning profile",
+        "keystore",
+        "app store",
+        "play store",
+        "OTA",
+        "expo-updates",
+        "CodePush",
+        "rollout",
+        "rollback",
+        "submission rejected"
+      ],
+      "globs": [
+        "eas.json",
+        "app.json",
+        "app.config.*",
+        "fastlane/**",
+        "**/*.gradle",
+        "**/Info.plist",
+        ".github/workflows/**"
+      ],
+      "references": [
+        {
+          "slug": "build-and-signing",
+          "title": "Builds and Code Signing"
+        },
+        {
+          "slug": "monitoring-and-rollback",
+          "title": "Monitoring, Rollout Gates, and Rollback"
+        },
+        {
+          "slug": "ota-updates",
+          "title": "Over-the-Air Updates"
+        },
+        {
+          "slug": "store-submission",
+          "title": "Store Submission"
+        },
+        {
+          "slug": "versioning",
+          "title": "Versioning"
+        }
+      ]
+    },
+    {
+      "id": "rn-security",
+      "name": "React Native Security Agent",
+      "title": "RN Security",
+      "description": "Use for React Native security review — secret leakage, insecure storage, transport and TLS, auth and token handling, deep-link and WebView attack surface, platform hardening, dependency supply chain, and privacy compliance. Maps findings to OWASP MASVS.",
+      "version": "1.0.0",
+      "emoji": "🔒",
+      "color": "red",
+      "command": "rn-security",
+      "triggers": [
+        "security",
+        "vulnerability",
+        "secure storage",
+        "api key",
+        "token",
+        "certificate pinning",
+        "deep link",
+        "WebView",
+        "encryption",
+        "OWASP",
+        "penetration test",
+        "jailbreak",
+        "obfuscation"
+      ],
+      "globs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/AndroidManifest.xml",
+        "**/Info.plist",
+        "**/*.gradle",
+        "**/app.json",
+        "**/app.config.*",
+        "**/.env*"
+      ],
+      "references": [
+        {
+          "slug": "auth-and-session",
+          "title": "Authentication and Session Management"
+        },
+        {
+          "slug": "masvs-checklist",
+          "title": "OWASP MASVS Checklist for React Native"
+        },
+        {
+          "slug": "platform-hardening",
+          "title": "Platform Hardening and Code Integrity"
+        },
+        {
+          "slug": "privacy-and-compliance",
+          "title": "Privacy and Compliance"
+        },
+        {
+          "slug": "secrets-and-storage",
+          "title": "Secrets and Data at Rest"
+        },
+        {
+          "slug": "supply-chain",
+          "title": "Dependency and Supply-Chain Security"
+        },
+        {
+          "slug": "transport-and-network",
+          "title": "Transport Security"
+        },
+        {
+          "slug": "webview-and-deeplinks",
+          "title": "WebViews and Deep Links"
+        }
+      ]
+    },
+    {
+      "id": "rn-testing",
+      "name": "React Native Testing Agent",
+      "title": "RN Testing",
+      "description": "Use for React Native testing — writing and reviewing Jest unit tests, React Native Testing Library component tests, Maestro/Detox E2E flows, mocking native modules, fixing flaky tests, and setting up CI test infrastructure.",
+      "version": "1.0.0",
+      "emoji": "🧪",
+      "color": "green",
+      "command": "rn-test",
+      "triggers": [
+        "write tests",
+        "unit test",
+        "testing library",
+        "RNTL",
+        "jest",
+        "detox",
+        "maestro",
+        "e2e",
+        "mock",
+        "flaky test",
+        "test coverage"
+      ],
+      "globs": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "**/e2e/**",
+        "**/.maestro/**",
+        "jest.config.js",
+        "jest.setup.js"
+      ],
+      "references": [
+        {
+          "slug": "component-testing",
+          "title": "Component Testing with RNTL"
+        },
+        {
+          "slug": "e2e",
+          "title": "End-to-End Testing"
+        },
+        {
+          "slug": "mocking",
+          "title": "Mocking"
+        },
+        {
+          "slug": "strategy-and-ci",
+          "title": "Test Strategy and CI"
+        }
+      ]
+    },
+    {
+      "id": "rn-ui-accessibility",
+      "name": "React Native UI & Accessibility Agent",
+      "title": "RN UI & A11y",
+      "description": "Use for React Native UI implementation and accessibility — responsive layout, safe areas, keyboard handling, theming and dark mode, screen reader support, touch targets, contrast, dynamic type, RTL, motion, and loading/empty/error states.",
+      "version": "1.0.0",
+      "emoji": "🎨",
+      "color": "purple",
+      "command": "rn-ui",
+      "triggers": [
+        "accessibility",
+        "a11y",
+        "screen reader",
+        "VoiceOver",
+        "TalkBack",
+        "contrast",
+        "dark mode",
+        "theming",
+        "responsive",
+        "safe area",
+        "keyboard",
+        "RTL",
+        "tablet",
+        "layout"
+      ],
+      "globs": [
+        "**/*.tsx",
+        "**/*.jsx",
+        "**/theme/**",
+        "**/styles/**"
+      ],
+      "references": [
+        {
+          "slug": "accessibility-checklist",
+          "title": "Accessibility Checklist"
+        },
+        {
+          "slug": "i18n-and-rtl",
+          "title": "Internationalisation and RTL"
+        },
+        {
+          "slug": "layout-and-responsive",
+          "title": "Layout and Responsive Design"
+        },
+        {
+          "slug": "motion-and-feedback",
+          "title": "Motion, States, and Feedback"
+        },
+        {
+          "slug": "platform-conventions",
+          "title": "Platform Conventions"
+        },
+        {
+          "slug": "theming-and-dark-mode",
+          "title": "Theming and Dark Mode"
+        }
+      ]
+    }
+  ],
+  "sharedContextChars": 5445
+}
