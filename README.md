@@ -383,10 +383,28 @@ jobs:
       - uses: actions/checkout@v4
       - uses: maheshwarimrinal/react-native-agents@v1
         with:
+          provider: anthropic # or openai
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           budget-usd: '1.50'
           fail-on: never # tighten to P0 once the team trusts the signal
 ```
+
+The Action supports both Anthropic and OpenAI. Store the matching API key as a GitHub Actions
+repository secret and set the provider explicitly:
+
+```yaml
+# Anthropic
+provider: anthropic
+model: claude-sonnet-5
+api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+# OpenAI
+provider: openai
+model: gpt-5
+api-key: ${{ secrets.OPENAI_API_KEY }}
+```
+
+See [`action.yml`](action.yml) for every input, output, budget control, and severity-gate option.
 
 Findings post as inline review comments, plus one summary comment that **updates in place**
 rather than spamming the PR on every push.

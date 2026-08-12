@@ -1,6 +1,7 @@
 # Drop this in .github/workflows/rn-audit.yml in your React Native repo.
 #
-# Add ANTHROPIC_API_KEY as a repository secret:
+# Add one provider key as a repository secret:
+#   ANTHROPIC_API_KEY for Anthropic (default), or OPENAI_API_KEY for OpenAI.
 #   Settings → Secrets and variables → Actions → New repository secret
 name: React Native audit
 
@@ -42,6 +43,7 @@ jobs:
 
       - uses: maheshwarimrinal/react-native-agents@v1
         with:
+          provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
 
           # Stop the run cleanly rather than overspending on a huge PR.
@@ -53,3 +55,8 @@ jobs:
 
           # Optional: force a specific agent set instead of auto-routing.
           # agents: rn-security,rn-performance
+
+          # For OpenAI, use instead:
+          # provider: openai
+          # model: gpt-5
+          # api-key: ${{ secrets.OPENAI_API_KEY }}
