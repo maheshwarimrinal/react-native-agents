@@ -1,8 +1,7 @@
 name: React Native Audit
 description: >-
-  Expert React Native review on every pull request — performance, security, code
-  quality, accessibility, testing, and release. Routes only the relevant
-  specialists at the changed files, so it stays cheap.
+  React Native PR review for performance, security, quality, accessibility,
+  testing, and release.
 author: Mrinal Maheshwari
 
 branding:

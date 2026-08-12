@@ -1,6 +1,6 @@
 {
   "name": "@maheshwarimrinal/react-native-agents",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Expert React Native agents for performance, security, code quality, accessibility, testing, and release \u2014 portable across Claude Code, Cursor, Windsurf, Copilot, Codex, and any MCP client.",
   "type": "module",
   "bin": {
