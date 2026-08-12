@@ -1,0 +1,82 @@
+name: Publish to npm
+
+# Publishes when a version tag is pushed:
+#   npm version patch && git push --follow-tags
+#
+# Requires an NPM_TOKEN secret: an npm "Automation" access token
+# (npmjs.com → Access Tokens → Generate → Automation), which bypasses 2FA
+# for CI while still requiring 2FA for interactive publishes.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run every check and pack, but do not publish'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # required for npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      # No dependencies by design, so there is nothing to install.
+      - name: Verify dist/ is in sync with agents/
+        run: node scripts/build.mjs --check
+
+      - name: Run test suite
+        run: node scripts/test.mjs
+
+      - name: Verify the tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          echo "tag=$TAG package.json=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+
+      - name: Inspect the tarball
+        run: |
+          npm pack --dry-run
+          echo "--- files that will ship ---"
+          npm pack --dry-run --json | node -e "
+            let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+              const f=JSON.parse(d)[0];
+              console.log('name:', f.name, f.version);
+              console.log('files:', f.entryCount, '| unpacked:', (f.unpackedSize/1024/1024).toFixed(2)+'MB');
+            });"
+
+      - name: Publish
+        if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        if: success()
+        run: |
+          V=$(node -p "require('./package.json').version")
+          N=$(node -p "require('./package.json').name")
+          {
+            echo "### Published \`$N@$V\`"
+            echo ""
+            echo '```bash'
+            echo "npx $N@$V install"
+            echo '```'
+            echo ""
+            echo "https://www.npmjs.com/package/$N"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -320,6 +320,41 @@ test('package.json declares a bin matching the package name', () => {
   assert(pkg.bin?.[unscoped], `no bin named "${unscoped}" (has: ${Object.keys(pkg.bin ?? {})})`);
 });
 
+test('scoped package is configured to publish publicly', () => {
+  // Scoped packages default to "restricted", which requires a paid npm org —
+  // publishing without this fails with a 402 that reads like a billing problem.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  if (pkg.name.startsWith('@')) {
+    assert(
+      pkg.publishConfig?.access === 'public',
+      `scoped package needs publishConfig.access="public" (got: ${pkg.publishConfig?.access})`,
+    );
+  }
+});
+
+test('publishConfig does not force provenance', () => {
+  // `provenance: true` in publishConfig breaks local `npm publish` — provenance
+  // can only be generated from a supported CI runner. The workflow passes
+  // --provenance explicitly instead, so both paths work.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert(
+    pkg.publishConfig?.provenance !== true,
+    'publishConfig.provenance=true breaks manual publish; pass --provenance in CI instead',
+  );
+});
+
+test('prepublishOnly gates the release on build sync and tests', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const s = pkg.scripts?.prepublishOnly ?? '';
+  assert(s.includes('--check'), 'prepublishOnly must verify dist/ is in sync');
+  assert(s.includes('test'), 'prepublishOnly must run the test suite');
+});
+
+test('version is valid semver', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert(/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(pkg.version), `bad version: ${pkg.version}`);
+});
+
 test('repository metadata points at the real repo', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   for (const [field, value] of [

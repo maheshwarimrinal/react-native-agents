@@ -2,11 +2,11 @@
 /**
  * rn-agents — install React Native agents into a project, for any supported tool.
  *
- *   npx github:maheshwarimrinal/react-native-agents install                 auto-detect and install
- *   npx github:maheshwarimrinal/react-native-agents install --tool cursor   install for a specific tool
- *   npx github:maheshwarimrinal/react-native-agents install --agents rn-performance,rn-security
- *   npx github:maheshwarimrinal/react-native-agents list
- *   npx github:maheshwarimrinal/react-native-agents mcp                     run the MCP server on stdio
+ *   npx @maheshwarimrinal/react-native-agents install                 auto-detect and install
+ *   npx @maheshwarimrinal/react-native-agents install --tool cursor   install for a specific tool
+ *   npx @maheshwarimrinal/react-native-agents install --agents rn-performance,rn-security
+ *   npx @maheshwarimrinal/react-native-agents list
+ *   npx @maheshwarimrinal/react-native-agents mcp                     run the MCP server on stdio
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -91,12 +91,12 @@ async function main() {
     for (const [k, t] of Object.entries(TOOLS)) console.log(`  ${c.cyan(k.padEnd(14))} ${t.label}`);
     console.log(`
   ${c.bold('Usage')}
-    npx github:maheshwarimrinal/react-native-agents install                 auto-detect your tool
-    npx github:maheshwarimrinal/react-native-agents install --tool cursor   install for one tool
-    npx github:maheshwarimrinal/react-native-agents install --tool all      install for every tool
-    npx github:maheshwarimrinal/react-native-agents install --agents rn-security,rn-performance
-    npx github:maheshwarimrinal/react-native-agents list
-    npx github:maheshwarimrinal/react-native-agents mcp                     run the MCP server (stdio)
+    npx @maheshwarimrinal/react-native-agents install                 auto-detect your tool
+    npx @maheshwarimrinal/react-native-agents install --tool cursor   install for one tool
+    npx @maheshwarimrinal/react-native-agents install --tool all      install for every tool
+    npx @maheshwarimrinal/react-native-agents install --agents rn-security,rn-performance
+    npx @maheshwarimrinal/react-native-agents list
+    npx @maheshwarimrinal/react-native-agents mcp                     run the MCP server (stdio)
 `);
     return;
   }

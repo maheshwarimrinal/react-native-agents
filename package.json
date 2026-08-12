@@ -1,5 +1,5 @@
 {
-  "name": "react-native-agents",
+  "name": "@maheshwarimrinal/react-native-agents",
   "version": "1.0.0",
   "description": "Expert React Native agents for performance, security, code quality, accessibility, testing, and release — portable across Claude Code, Cursor, Windsurf, Copilot, Codex, and any MCP client.",
   "type": "module",
@@ -13,7 +13,8 @@
     "check": "node scripts/build.mjs --check",
     "test": "node scripts/test.mjs",
     "install-agents": "node scripts/cli.mjs install",
-    "mcp": "node mcp-server/index.mjs"
+    "mcp": "node mcp-server/index.mjs",
+    "prepublishOnly": "node scripts/build.mjs --check && node scripts/test.mjs"
   },
   "files": [
     "agents",
@@ -33,6 +34,7 @@
     "windsurf",
     "copilot",
     "mcp",
+    "mcp-server",
     "performance",
     "security",
     "accessibility",
@@ -44,6 +46,9 @@
     "node": ">=18"
   },
   "dependencies": {},
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "Mrinal Maheshwari (https://github.com/maheshwarimrinal)",
   "homepage": "https://github.com/maheshwarimrinal/react-native-agents#readme",
   "repository": {

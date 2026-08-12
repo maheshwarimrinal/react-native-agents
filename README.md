@@ -6,6 +6,7 @@
 
 Written once. Runs in Claude Code, Cursor, Windsurf, GitHub Copilot, Codex, and any MCP client.
 
+[![npm](https://img.shields.io/npm/v/@maheshwarimrinal/react-native-agents.svg)](https://www.npmjs.com/package/@maheshwarimrinal/react-native-agents)
 [![CI](https://github.com/maheshwarimrinal/react-native-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/maheshwarimrinal/react-native-agents/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
@@ -105,13 +106,13 @@ bridge-batching tricks — rather than repeating it.
 
 ```bash
 # Auto-detect your tool and install
-npx github:maheshwarimrinal/react-native-agents install
+npx @maheshwarimrinal/react-native-agents install
 
 # Or be explicit
-npx github:maheshwarimrinal/react-native-agents install --tool cursor
+npx @maheshwarimrinal/react-native-agents install --tool cursor
 
 # See what's available first
-npx github:maheshwarimrinal/react-native-agents list
+npx @maheshwarimrinal/react-native-agents list
 ```
 
 Then ask your assistant a React Native question. It routes to the right specialist automatically:
@@ -141,7 +142,7 @@ Every option below is zero-install — no dependencies, nothing to compile.
 **Or drop the files in directly:**
 
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --tool claude-code
+npx @maheshwarimrinal/react-native-agents install --tool claude-code
 ```
 
 This writes:
@@ -167,7 +168,7 @@ small while making the full depth available.
 <summary><b>Cursor</b></summary>
 
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --tool cursor
+npx @maheshwarimrinal/react-native-agents install --tool cursor
 ```
 
 Writes `.cursor/rules/`:
@@ -188,7 +189,7 @@ the `globs` against the files you're editing. To force one, `@`-mention it: `@rn
 <summary><b>Windsurf</b></summary>
 
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --tool windsurf
+npx @maheshwarimrinal/react-native-agents install --tool windsurf
 ```
 
 Writes `.windsurf/rules/` with the correct activation modes:
@@ -209,7 +210,7 @@ section boundary and emits a build warning rather than silently losing content.
 <summary><b>GitHub Copilot</b></summary>
 
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --tool copilot
+npx @maheshwarimrinal/react-native-agents install --tool copilot
 ```
 
 Writes three layers:
@@ -228,7 +229,7 @@ Pick a chat mode from the dropdown in the Copilot chat panel to talk to a specif
 <summary><b>Codex / Zed / Aider / anything reading AGENTS.md</b></summary>
 
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --tool codex
+npx @maheshwarimrinal/react-native-agents install --tool codex
 ```
 
 ```
@@ -281,7 +282,7 @@ The server implements MCP's JSON-RPC 2.0 over stdio directly, with **no SDK depe
 <summary><b>Everything at once</b></summary>
 
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --tool all
+npx @maheshwarimrinal/react-native-agents install --tool all
 ```
 
 Useful for a shared team repo where people use different editors.
@@ -292,7 +293,7 @@ Useful for a shared team repo where people use different editors.
 <summary><b>Install only some agents</b></summary>
 
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --agents rn-security,rn-performance
+npx @maheshwarimrinal/react-native-agents install --agents rn-security,rn-performance
 ```
 
 </details>
@@ -734,7 +735,7 @@ since prebuild will discard it.
 
 **Can I use just one agent?**
 ```bash
-npx github:maheshwarimrinal/react-native-agents install --agents rn-security
+npx @maheshwarimrinal/react-native-agents install --agents rn-security
 ```
 
 **Can I customise them for my team?**
@@ -742,14 +743,16 @@ Yes — fork it, edit `agents/`, run `npm run build`, and point your team at you
 intended workflow for house conventions, internal libraries, and company-specific policies.
 
 **Why commit `dist/`?**
-So `npx github:maheshwarimrinal/...` works with no build step. CI guarantees it stays in sync.
+So `npx` works with no build step — the published tarball and the git repo are both immediately
+runnable. CI guarantees `dist/` stays in sync with `agents/`.
 
-**Is this on npm?**
-No — distribution is GitHub-only. `npx github:maheshwarimrinal/react-native-agents` works for every command,
-the Claude Code plugin marketplace reads the repo directly, and the other four tool integrations
-are plain file copies. The package is npm-ready if that changes (correct `bin` entries, a `files`
-allowlist, zero dependencies), so publishing later is a single `npm publish` with no structural
-change.
+**Why is the package scoped?**
+The unscoped name `react-native-agents` is held by an unrelated placeholder package on npm, so
+the scope is the only way to keep the name. Scoped packages also can't be squatted.
+
+**Can I install straight from GitHub instead of npm?**
+Yes — every command works with `npx github:maheshwarimrinal/react-native-agents …`. Useful for
+trying `main` before a release lands, or if you'd rather not pull from npm at all.
 
 **Why no npm dependencies?**
 Faster installs, no supply-chain surface, and nothing to break when a transitive dependency
