@@ -1,6 +1,6 @@
 {
   "generatedAt": null,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "knowledge": {
     "$comment": "Freshness metadata for the React Native knowledge in agents/ and shared/. This is the single source of truth for 'what have we actually checked?'. The scheduled freshness workflow compares these against the live npm registry and opens an issue when they fall behind. Update `last_verified` only after genuinely reviewing the affected references — bumping the date without reading is worse than leaving it stale, because it launders an unchecked claim as a verified one.",
     "last_verified": "2026-08-12",
@@ -25,6 +25,48 @@
     }
   },
   "agents": [
+    {
+      "id": "rn-build",
+      "name": "React Native Implementation Agent",
+      "title": "RN Build",
+      "description": "Use when writing new React Native code — screens, components, forms, lists, navigation, data fetching. Produces code that already handles safe areas, accessibility, loading/empty/error states, keyboard, dark mode, and stable list callbacks, so review has nothing to catch.",
+      "version": "1.0.0",
+      "emoji": "🏗️",
+      "color": "teal",
+      "command": "rn-new",
+      "triggers": [
+        "create a screen",
+        "build a component",
+        "implement",
+        "add a form",
+        "new screen",
+        "scaffold",
+        "write a list",
+        "how do i build"
+      ],
+      "globs": [
+        "**/*.tsx",
+        "**/*.ts"
+      ],
+      "references": [
+        {
+          "slug": "components",
+          "title": "Building a Reusable Component"
+        },
+        {
+          "slug": "forms",
+          "title": "Building a Form"
+        },
+        {
+          "slug": "lists-and-data",
+          "title": "Lists and Data Fetching"
+        },
+        {
+          "slug": "screens",
+          "title": "Building a Screen"
+        }
+      ]
+    },
     {
       "id": "rn-code-quality",
       "name": "React Native Code Quality Agent",
@@ -80,6 +122,122 @@
         {
           "slug": "typescript",
           "title": "TypeScript in React Native"
+        }
+      ]
+    },
+    {
+      "id": "rn-doctor",
+      "name": "React Native Doctor Agent",
+      "title": "RN Doctor",
+      "description": "Use when a React Native build, install, or dev server fails — Gradle errors, pod install failures, Metro \"unable to resolve module\", Xcode signing and archive errors, version conflicts after an upgrade or a merge, or \"it works on my machine\". Diagnoses from the actual error output.",
+      "version": "1.0.0",
+      "emoji": "🩺",
+      "color": "cyan",
+      "command": "rn-doctor",
+      "triggers": [
+        "build failed",
+        "build error",
+        "pod install",
+        "gradle",
+        "could not resolve",
+        "unable to resolve module",
+        "command failed",
+        "works on my machine",
+        "clean build",
+        "xcode error",
+        "metro bundler",
+        "dependency conflict",
+        "after upgrade"
+      ],
+      "globs": [
+        "**/*.gradle",
+        "**/gradle.properties",
+        "**/Podfile",
+        "**/Podfile.lock",
+        "**/metro.config.js",
+        "**/babel.config.js",
+        "**/package.json"
+      ],
+      "references": [
+        {
+          "slug": "android-gradle",
+          "title": "Android and Gradle Failures"
+        },
+        {
+          "slug": "environment-drift",
+          "title": "Environment Drift and \"Works on My Machine\""
+        },
+        {
+          "slug": "ios-cocoapods",
+          "title": "iOS, CocoaPods, and Xcode Failures"
+        },
+        {
+          "slug": "method",
+          "title": "Diagnostic Method"
+        },
+        {
+          "slug": "metro-resolution",
+          "title": "Metro, Resolution, and Bundling Failures"
+        }
+      ]
+    },
+    {
+      "id": "rn-native-modules",
+      "name": "React Native Native Modules Agent",
+      "title": "RN Native Modules",
+      "description": "Use for React Native native code — writing or reviewing TurboModules and Fabric components, codegen specs, JSI, Swift/Kotlin/Objective-C/C++ implementation, threading across the JS boundary, podspec and gradle packaging, autolinking, and migrating legacy bridge modules to the New Architecture.",
+      "version": "1.0.0",
+      "emoji": "🔧",
+      "color": "magenta",
+      "command": "rn-native",
+      "triggers": [
+        "native module",
+        "turbomodule",
+        "fabric",
+        "jsi",
+        "codegen",
+        "swift",
+        "kotlin",
+        "objective-c",
+        "native component",
+        "bridge",
+        "podspec",
+        "autolinking",
+        "new architecture migration"
+      ],
+      "globs": [
+        "**/*.kt",
+        "**/*.java",
+        "**/*.swift",
+        "**/*.m",
+        "**/*.mm",
+        "**/*.h",
+        "**/*.cpp",
+        "**/*.podspec",
+        "**/Native*.ts",
+        "**/*Spec.ts",
+        "**/build.gradle"
+      ],
+      "references": [
+        {
+          "slug": "codegen-and-packaging",
+          "title": "Codegen, Packaging, and Autolinking"
+        },
+        {
+          "slug": "fabric-components",
+          "title": "Fabric Components"
+        },
+        {
+          "slug": "migration-from-bridge",
+          "title": "Migrating from the Legacy Bridge"
+        },
+        {
+          "slug": "threading-and-jsi",
+          "title": "Threading and JSI"
+        },
+        {
+          "slug": "turbomodules",
+          "title": "TurboModules"
         }
       ]
     },

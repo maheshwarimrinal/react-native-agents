@@ -56,12 +56,20 @@ Rules that matter:
  * @param {object} [opts.projectContext] detected RN/Expo versions etc.
  * @param {(m:string)=>void} [opts.log]
  */
-export async function runAudit({ agents, sharedContext, diffFiles, llm, projectContext = {}, log = () => {} }) {
-  const rendered = renderForPrompt(diffFiles);
+export async function runAudit({
+  agents,
+  sharedContext,
+  diffFiles,
+  llm,
+  projectContext = {},
+  matchedFiles = {},
+  log = () => {},
+}) {
   const findings = [];
   const errors = [];
   const perAgent = {};
   let budgetHit = false;
+  let anyTruncated = 0;
 
   const contextBlock = [
     '## Project context',
@@ -98,15 +106,33 @@ export async function runAudit({ agents, sharedContext, diffFiles, llm, projectC
       references,
     ].join('\n');
 
+    // Send this agent only the files that routed it.
+    //
+    // Previously every agent received one shared diff truncated to a global
+    // character budget. On a large pull request that silently dropped whole
+    // files in arbitrary order — the native-modules agent could be handed a
+    // diff containing no native code and would correctly report nothing, which
+    // is indistinguishable from a clean review. Per-agent slicing removes that
+    // failure entirely and makes each prompt smaller and cheaper.
+    const own = matchedFiles[agent.id];
+    const scoped =
+      own?.length ? diffFiles.filter((f) => own.includes(f.path)) : diffFiles;
+    const rendered = renderForPrompt(scoped);
+    anyTruncated += rendered.truncatedFiles;
+
     const user = [
       `You are reviewing a pull request.`,
       '',
       contextBlock,
       '',
-      '## Changed files',
+      '## Files routed to you',
       '',
-      diffFiles.map((f) => `- ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`).join('\n'),
+      scoped.map((f) => `- ${f.path} (${f.status}, +${f.additions}/-${f.deletions})`).join('\n'),
       '',
+      scoped.length < diffFiles.length
+        ? `_${diffFiles.length - scoped.length} other file(s) changed in this pull request are ` +
+          'outside your area and were routed to other specialists. Review only what is below._\n'
+        : '',
       '## Diff',
       '',
       'Each line is prefixed with its line number in the new file, then the diff marker.',
@@ -116,7 +142,7 @@ export async function runAudit({ agents, sharedContext, diffFiles, llm, projectC
       OUTPUT_CONTRACT,
     ].join('\n');
 
-    log(`▸ ${agent.title ?? agent.name}`);
+    log(`▸ ${agent.title ?? agent.name} ${scoped.length} file(s)`);
 
     try {
       const raw = await llm.complete({ system, user });
@@ -124,7 +150,11 @@ export async function runAudit({ agents, sharedContext, diffFiles, llm, projectC
       for (const f of parsed.findings) {
         findings.push({ ...f, agent: agent.id, agentTitle: agent.title ?? agent.name });
       }
-      perAgent[agent.id] = { findings: parsed.findings.length, summary: parsed.summary };
+      perAgent[agent.id] = {
+        findings: parsed.findings.length,
+        summary: parsed.summary,
+        files: scoped.length,
+      };
       log(`  ${parsed.findings.length} finding(s)`);
     } catch (err) {
       if (err instanceof BudgetExceededError) {
@@ -145,7 +175,7 @@ export async function runAudit({ agents, sharedContext, diffFiles, llm, projectC
     perAgent,
     errors,
     budgetHit,
-    truncatedFiles: rendered.truncatedFiles,
+    truncatedFiles: anyTruncated,
     usage: { calls: llm.calls, inTokens: llm.inTokens, outTokens: llm.outTokens, costUsd: llm.spentUsd },
   };
 }
@@ -200,37 +230,72 @@ export function parseFindings(raw) {
  * higher-severity one and note the corroboration.
  */
 export function dedupe(findings) {
-  const byLocation = new Map();
+  /** @type {any[]} */
+  const kept = [];
 
   for (const f of findings) {
-    const key = `${f.file ?? '?'}:${f.line ?? '?'}:${normalizeTitle(f.title)}`;
-    const existing = byLocation.get(key);
-    if (!existing) {
-      byLocation.set(key, { ...f, alsoFlaggedBy: [] });
+    // Exact-key matching is too brittle in practice: two agents describing the
+    // same defect rarely word the title identically, and they often cite lines a
+    // few apart. Compare by similarity instead, or the same issue is reported
+    // twice at different severities — which reads as noise and erodes trust.
+    const match = kept.find((k) => isSameIssue(k, f));
+
+    if (!match) {
+      kept.push({ ...f, alsoFlaggedBy: [] });
       continue;
     }
-    const keep = SEVERITY_RANK[f.severity] < SEVERITY_RANK[existing.severity] ? f : existing;
-    const drop = keep === f ? existing : f;
-    byLocation.set(key, {
+
+    const keep = SEVERITY_RANK[f.severity] < SEVERITY_RANK[match.severity] ? f : match;
+    const drop = keep === f ? match : f;
+
+    Object.assign(match, {
       ...keep,
-      alsoFlaggedBy: [...new Set([...(existing.alsoFlaggedBy ?? []), drop.agent])].filter(
-        (a) => a !== keep.agent,
+      alsoFlaggedBy: [...new Set([...(match.alsoFlaggedBy ?? []), drop.agent])].filter(
+        (a) => a && a !== keep.agent,
       ),
     });
   }
 
-  return [...byLocation.values()];
+  return kept;
 }
 
-function normalizeTitle(t) {
-  return t
-    .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, '')
-    .split(/\s+/)
-    .filter((w) => w.length > 3)
-    .slice(0, 6)
-    .sort()
-    .join(' ');
+/**
+ * Two findings describe the same issue when they sit in the same file, close
+ * enough together, and share most of their meaningful vocabulary.
+ */
+export function isSameIssue(a, b, { lineWindow = 12, overlap = 0.5 } = {}) {
+  if ((a.file ?? null) !== (b.file ?? null)) return false;
+
+  // Both unplaced: fall back to title similarity alone.
+  if (a.line != null && b.line != null && Math.abs(a.line - b.line) > lineWindow) return false;
+
+  const wa = significantWords(a.title);
+  const wb = significantWords(b.title);
+  if (wa.size === 0 || wb.size === 0) return false;
+
+  let shared = 0;
+  for (const w of wa) if (wb.has(w)) shared += 1;
+
+  // Jaccard-ish: measured against the smaller set so a terse title still matches
+  // a verbose one describing the same thing.
+  return shared / Math.min(wa.size, wb.size) >= overlap;
+}
+
+const STOPWORDS = new Set([
+  'the', 'and', 'but', 'not', 'this', 'that', 'with', 'from', 'into', 'for', 'are', 'was',
+  'has', 'have', 'been', 'its', 'your', 'you', 'they', 'them', 'their', 'when', 'where',
+  'which', 'while', 'should', 'could', 'would', 'does', 'here', 'there', 'than', 'then',
+  'action', 'file', 'code', 'used', 'using', 'use', 'set', 'sets', 'add', 'adds',
+]);
+
+function significantWords(title) {
+  return new Set(
+    String(title ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOPWORDS.has(w)),
+  );
 }
 
 function bySeverityThenFile(a, b) {

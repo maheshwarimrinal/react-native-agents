@@ -65,12 +65,19 @@ export function matchesGlob(file, glob) {
 }
 
 /* ------------------------------------------------------------------ *
- * Signal files — strong hints that a specific agent is required,
- * regardless of what the agent's own globs say.
+ * Signal files — strong hints that a specific agent is required, regardless of
+ * what the agent's own globs say.
  *
  * Agent globs are broad by design (an agent wants to be *available* for any
  * TS file). For routing we need the opposite: evidence that this agent is
  * actually warranted. These patterns encode that evidence.
+ *
+ * Config filenames are prefixed to match at any depth rather than written bare.
+ * A bare `eas.json` only matches at the repository root, which silently skips
+ * the app in every monorepo (`apps/mobile/eas.json`) and anywhere the React
+ * Native project is not the top-level one. node_modules, build output, and
+ * vendored copies are removed by IGNORED before matching, so the broader
+ * pattern does not drag those back in.
  * ------------------------------------------------------------------ */
 
 export const SIGNALS = {
@@ -82,9 +89,9 @@ export const SIGNALS = {
     '**/*.entitlements',
     '**/network_security_config.xml',
     '**/PrivacyInfo.xcprivacy',
-    'package-lock.json',
-    'yarn.lock',
-    'pnpm-lock.yaml',
+    // A dependency change is the supply-chain signal worth reviewing. The
+    // lockfiles themselves are thousands of lines of hashes — see IGNORED.
+    '**/package.json',
     '**/*{auth,Auth,login,Login,token,Token,crypto,Crypto,secure,Secure,session,Session}*',
     '**/*{webview,WebView,deeplink,DeepLink,linking,Linking}*',
     '**/*{api,Api,API,fetch,client,Client,http,Http}*',
@@ -93,10 +100,10 @@ export const SIGNALS = {
     '**/*{List,list,Feed,feed,Scroll,scroll,Grid,grid}*',
     '**/*{Animated,animation,Animation,gesture,Gesture,Reanimated}*',
     '**/*{Image,image,Video,video,Media,media}*',
-    'metro.config.js',
-    'babel.config.js',
+    '**/metro.config.js',
+    '**/babel.config.js',
     '**/*{Screen,screen,Page,page}*',
-    'package.json',
+    '**/package.json',
   ],
   'rn-ui-accessibility': [
     '**/*.{tsx,jsx}',
@@ -111,21 +118,50 @@ export const SIGNALS = {
     '**/__tests__/**',
     '**/e2e/**',
     '**/.maestro/**',
-    'jest.config.*',
-    'jest.setup.*',
+    '**/jest.config.*',
+    '**/jest.setup.*',
   ],
   'rn-release': [
-    'eas.json',
-    'app.json',
-    'app.config.*',
+    '**/eas.json',
+    '**/app.json',
+    '**/app.config.*',
     '**/fastlane/**',
     '**/*.gradle',
     '**/Info.plist',
     '**/Podfile*',
-    'package.json',
+    '**/package.json',
     '.github/workflows/**',
   ],
+  'rn-native-modules': [
+    // Kotlin/Swift/ObjC++ are RN-specific enough to route on their own.
+    '**/*.{kt,swift,mm}',
+    // .java/.h/.cpp appear in plenty of unrelated contexts, so require a name
+    // that indicates a React Native module or component rather than any file.
+    '**/*{Module,Manager,Spec,Package,ComponentView,ViewManager,TurboModule}.{java,h,cpp,m}',
+    '**/android/src/**/*.{java,h,cpp}',
+    '**/ios/**/*.{h,cpp,m}',
+    '**/*.podspec',
+    '**/Native*.ts',
+    '**/*NativeComponent.ts',
+    '**/*Spec.ts',
+    '**/build.gradle',
+    '**/react-native.config.js',
+  ],
 };
+
+/**
+ * Agents that review a changeset, versus ones that need a human to bring a
+ * question, an error log, or a request.
+ *
+ * `rn-doctor` needs a build failure; `rn-build` needs something to build. Firing
+ * them at a diff spends tokens to produce a comment with nothing to say, and
+ * noise is what gets review bots muted.
+ */
+export const REVIEW_MODES = new Set(['review', 'both', undefined]);
+
+export function isReviewAgent(agent) {
+  return REVIEW_MODES.has(agent.mode);
+}
 
 /**
  * Files that never warrant an audit — routing them wastes tokens and produces
@@ -136,7 +172,15 @@ export const IGNORED = [
   '**/dist/**',
   '**/build/**',
   '**/coverage/**',
+  // Every lockfile, consistently. Previously only `*.lock` was excluded, so
+  // yarn.lock was skipped while package-lock.json and pnpm-lock.yaml were sent
+  // to the model — thousands of lines of hashes for no usable signal.
   '**/*.lock',
+  '**/package-lock.json',
+  '**/pnpm-lock.yaml',
+  '**/bun.lockb',
+  '**/Podfile.lock',
+  '**/Gemfile.lock',
   '**/*.snap',
   '**/*.{png,jpg,jpeg,gif,webp,svg,ico,mp4,mov,ttf,otf,woff,woff2}',
   '**/*.min.js',
@@ -173,17 +217,33 @@ export function route(changedFiles, agents, opts = {}) {
       reasons: Object.fromEntries(opts.only.map((id) => [id, ['explicitly requested']])),
       selected: agents.filter((a) => wanted.has(a.id)),
       skipped: agents.filter((a) => !wanted.has(a.id)),
+      // Explicit selection bypasses matching, so every agent sees everything.
+      matchedFiles: Object.fromEntries(opts.only.map((id) => [id, files])),
     };
   }
 
+  // Interactive agents can't review a diff — exclude them before scoring so
+  // they never consume budget on a pull request.
+  const interactive = agents.filter((a) => !isReviewAgent(a));
+  for (const a of interactive) reasons[a.id] = ['not a review agent — needs a direct request'];
+  const reviewable = agents.filter(isReviewAgent);
+
   if (files.length === 0) {
-    return { files, reasons, selected: [], skipped: [...agents] };
+    return { files, reasons, selected: [], skipped: [...agents], matchedFiles: {} };
   }
 
-  const scored = agents.map((agent) => {
+  // Which files matched which agent. Retaining this is what lets the audit send
+  // each specialist only its own files instead of one shared diff — the
+  // difference between the native agent reliably seeing native code and it
+  // being truncated away on a large pull request.
+  /** @type {Record<string, string[]>} */
+  const matchedFiles = {};
+
+  const scored = reviewable.map((agent) => {
     const why = [];
     const signals = SIGNALS[agent.id] ?? agent.globs ?? [];
     const hits = files.filter((f) => signals.some((g) => matchesGlob(f, g)));
+    matchedFiles[agent.id] = hits;
 
     if (hits.length) {
       why.push(
@@ -219,6 +279,7 @@ export function route(changedFiles, agents, opts = {}) {
   return {
     files,
     reasons,
+    matchedFiles,
     selected: selected.map((s) => s.agent),
     skipped: agents.filter((a) => !selectedIds.has(a.id)),
   };

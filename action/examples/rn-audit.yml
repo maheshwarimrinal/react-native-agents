@@ -14,13 +14,16 @@ on:
       - '**/*.tsx'
       - '**/*.js'
       - '**/*.jsx'
+      - '**/*.kt'
+      - '**/*.swift'
+      - '**/*.mm'
       - '**/*.gradle'
       - '**/Info.plist'
       - '**/AndroidManifest.xml'
-      - 'package.json'
-      - 'app.json'
-      - 'app.config.*'
-      - 'eas.json'
+      - '**/package.json'
+      - '**/app.json'
+      - '**/app.config.*'
+      - '**/eas.json'
 
 permissions:
   contents: read
@@ -41,7 +44,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: maheshwarimrinal/react-native-agents@v1
+      - uses: maheshwarimrinal/react-native-agents@v1.0.2
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -53,10 +56,38 @@ jobs:
           # team trusts the signal. Gating too early trains people to ignore it.
           fail-on: never
 
+          # Leave this on. If an agent errors — bad key, no credits, provider
+          # outage — the run produces zero findings, which looks identical to a
+          # clean diff. Failing loudly is the point.
+          fail-on-error: true
+
           # Optional: force a specific agent set instead of auto-routing.
-          # agents: rn-security,rn-performance
+          # Auto-routing is usually cheaper — it picks only the specialists the
+          # changed files warrant.
+          # agents: rn-security,rn-performance,rn-native-modules
 
           # For OpenAI, use instead:
           # provider: openai
           # model: gpt-5
           # api-key: ${{ secrets.OPENAI_API_KEY }}
+
+  # Deterministic bundle-size check. No model call, no API key, no cost —
+  # so it can run on every pull request regardless of your audit budget.
+  bundle-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Check bundle size against the base branch
+        run: |
+          npx @maheshwarimrinal/react-native-agents size \
+            --base "origin/${{ github.base_ref }}" \
+            --budget-delta 150kb

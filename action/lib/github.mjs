@@ -12,6 +12,7 @@
  */
 import { findPosition, nearestChangedLine } from './diff.mjs';
 import { countBySeverity } from './audit.mjs';
+import { isIgnored } from './router.mjs';
 
 const STICKY_MARKER = '<!-- rn-agents-audit -->';
 
@@ -50,6 +51,19 @@ export class GitHub {
     return r.status === 204 ? null : r.json();
   }
 
+  /**
+   * Fetch the pull request diff.
+   *
+   * The `.diff` media type is one request and gives a real unified diff, but
+   * GitHub refuses it with **406 (`too_large`)** past roughly 300 files or
+   * 20,000 lines. That is not rare — any PR that regenerates build output or
+   * touches a lockfile crosses it easily.
+   *
+   * So on 406 we fall back to the paginated files API and rebuild a unified
+   * diff from the per-file patches. That path is strictly better in one way:
+   * we can drop ignored files (node_modules, dist, lockfiles) *before*
+   * requesting their content, which is usually what made the diff oversized.
+   */
   async getDiff() {
     const r = await fetch(`${this.apiUrl}/repos/${this.repo}/pulls/${this.prNumber}`, {
       headers: {
@@ -58,8 +72,72 @@ export class GitHub {
         'x-github-api-version': '2022-11-28',
       },
     });
-    if (!r.ok) throw new Error(`Could not fetch PR diff: ${r.status}`);
-    return r.text();
+
+    if (r.ok) return r.text();
+
+    if (r.status === 406) {
+      this.log('  Diff too large for the diff endpoint — rebuilding from the files API…');
+      return this.getDiffFromFiles();
+    }
+
+    const body = await r.text().catch(() => '');
+    throw new Error(
+      `Could not fetch PR diff: ${r.status}${describeStatus(r.status)}` +
+        (body ? `\n    ${body.slice(0, 300)}` : ''),
+    );
+  }
+
+  /**
+   * Rebuild a unified diff from `GET /pulls/{n}/files`.
+   *
+   * Paginated at 100 per page, up to 3000 files. Each entry carries a `patch`
+   * — absent for binary files and for individual files GitHub considers too
+   * large, which we surface rather than silently dropping.
+   */
+  async getDiffFromFiles() {
+    const files = [];
+    for (let page = 1; page <= 30; page++) {
+      const batch = await this.#api(
+        `/repos/${this.repo}/pulls/${this.prNumber}/files?per_page=100&page=${page}`,
+      );
+      files.push(...batch);
+      if (batch.length < 100) break;
+    }
+
+    // Drop files no agent would review before reassembling. This is what makes
+    // an oversized PR tractable — generated output is usually the bulk of it.
+    const relevant = files.filter((f) => !isIgnored(f.filename));
+    const skipped = files.length - relevant.length;
+    const noPatch = relevant.filter((f) => !f.patch);
+
+    this.log(
+      `  ${files.length} changed file(s): ${relevant.length} reviewable` +
+        (skipped ? `, ${skipped} ignored` : '') +
+        (noPatch.length ? `, ${noPatch.length} without a patch (binary or too large)` : ''),
+    );
+
+    if (relevant.length === 0) {
+      return '';
+    }
+
+    // The files API gives hunks without the `diff --git` framing our parser
+    // expects, so rebuild the headers around each patch.
+    return relevant
+      .filter((f) => f.patch)
+      .map((f) => {
+        const from = f.status === 'added' ? '/dev/null' : `a/${f.previous_filename ?? f.filename}`;
+        const to = f.status === 'removed' ? '/dev/null' : `b/${f.filename}`;
+        const mode =
+          f.status === 'added' ? 'new file mode 100644\n'
+          : f.status === 'removed' ? 'deleted file mode 100644\n'
+          : '';
+        return (
+          `diff --git a/${f.previous_filename ?? f.filename} b/${f.filename}\n` +
+          mode +
+          `--- ${from}\n+++ ${to}\n${f.patch}\n`
+        );
+      })
+      .join('');
   }
 
   /**
@@ -137,6 +215,18 @@ export class GitHub {
       `/repos/${this.repo}/issues/${this.prNumber}/comments?per_page=100`,
     );
     return comments.find((c) => c.body?.includes(STICKY_MARKER)) ?? null;
+  }
+}
+
+/** Turn a bare status code into something actionable. */
+function describeStatus(status) {
+  switch (status) {
+    case 401: return ' — the token is invalid or expired.';
+    case 403: return ' — the token lacks permission. The workflow needs `pull-requests: write`.';
+    case 404: return ' — pull request not found, or the token cannot see this repository.';
+    case 406: return ' — GitHub considers this diff too large (over ~300 files or ~20,000 lines).';
+    case 422: return ' — the request was rejected as unprocessable.';
+    default: return status >= 500 ? ' — GitHub server error; retrying later may help.' : '';
   }
 }
 
