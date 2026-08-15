@@ -637,6 +637,47 @@ test('eval scoring accepts a measured answer mentioning FlashList', () => {
   eq(good.violations.length, 0, `unexpected violations: ${good.violations.map((v) => v.name).join(', ')}`);
 });
 
+test('eval fixtures contain no scanner-triggering credential literals', () => {
+  // A realistic-looking key in a public repo trips GitHub secret scanning and
+  // gitleaks — and is a bad look in the repo whose own security agent forbids it.
+  const patterns = [
+    /sk_live_[A-Za-z0-9]{12,}/,
+    /sk_test_[A-Za-z0-9]{12,}/,
+    /AKIA[0-9A-Z]{16}/,
+    /ghp_[A-Za-z0-9]{20,}/,
+    /AIza[0-9A-Za-z_-]{30,}/,
+    /xox[baprs]-[A-Za-z0-9-]{10,}/,
+  ];
+  for (const c of evalCases) {
+    for (const p of patterns) {
+      const m = c.input.match(p);
+      assert(!m, `${c.id} contains a scanner-triggering literal: ${m?.[0]?.slice(0, 12)}…`);
+    }
+  }
+});
+
+test('the security fixture still expresses a genuine P0, not a defanged placeholder', () => {
+  // Redacting the literal must not quietly turn the case into one that a
+  // *correct* agent fails — a transparent placeholder is not a P0, so demanding
+  // P0 + "rotate" would reward over-reacting instead of good judgement.
+  const c = evalCases.find((x) => x.id === 'security/jwt-in-asyncstorage');
+  assert(c, 'security eval case missing');
+
+  const defanged = /=\s*['"](EXAMPLE|PLACEHOLDER|CHANGEME|TODO|XXX)[_A-Z]*['"]/.test(c.input);
+  assert(
+    !defanged,
+    'fixture uses a transparent placeholder — a correct agent would rate it low, ' +
+      'so expectSeverity P0 would fail good behaviour. Express the P0 by mechanism instead.',
+  );
+
+  if (c.def.expectSeverity?.includes('P0')) {
+    assert(
+      /EXPO_PUBLIC_\w*(SECRET|KEY|TOKEN)|api\.stripe\.com|authorization/i.test(c.input),
+      'case demands P0 but the fixture has no mechanism that justifies one',
+    );
+  }
+});
+
 test('eval scoring catches the AsyncStorage-is-encrypted claim', () => {
   const def = evalCases.find((c) => c.id === 'security/jwt-in-asyncstorage').def;
   const bad = scoreOutput('AsyncStorage is encrypted so the token is safe there.', def);
@@ -651,6 +692,35 @@ test('gitignore covers FUSE artifacts and packed tarballs', () => {
   const gi = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
   assert(gi.includes('.fuse_hidden'), 'FUSE artifacts must be ignored');
   assert(gi.includes('*.tgz'), 'packed tarballs must be ignored');
+});
+
+test('third-party actions are pinned to a commit SHA, not a mutable tag', () => {
+  // The repo's own security agent tells users to do this (supply-chain.md);
+  // failing to follow our own advice is both a risk and a credibility problem.
+  const dir = path.join(ROOT, '.github/workflows');
+  for (const f of fs.readdirSync(dir)) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8');
+    for (const [, ref] of src.matchAll(/uses:\s*([^\s#]+)/g)) {
+      if (ref.startsWith('./')) continue; // local action — no pinning needed
+      const [, version] = ref.split('@');
+      assert(
+        /^[0-9a-f]{40}$/.test(version ?? ''),
+        `${f}: "${ref}" is not pinned to a full commit SHA`,
+      );
+    }
+  }
+});
+
+test('the demo workflow exercises the working tree, not a published release', () => {
+  // It triggers on action/** changes, so pinning it to a published tag would
+  // let a PR that breaks the action pass its own demo.
+  const src = fs.readFileSync(path.join(ROOT, '.github/workflows/demo-audit.yml'), 'utf8');
+  if (/paths:[\s\S]*?action\//.test(src)) {
+    assert(
+      /uses:\s*\.\/\s*$/m.test(src),
+      'demo-audit.yml triggers on action/** but does not run `uses: ./`',
+    );
+  }
 });
 
 test('CI triggers on both main and master', () => {
