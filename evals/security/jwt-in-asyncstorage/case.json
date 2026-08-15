@@ -1,33 +1,41 @@
 {
   "agent": "rn-security",
-  "title": "Tokens in AsyncStorage, live Stripe secret in the bundle, PII logging, incomplete logout",
+  "title": "Live Stripe secret inlined via EXPO_PUBLIC_, tokens in AsyncStorage, PII logging, incomplete logout",
   "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
 
-  "notes": "The hardcoded live secret key must be the top finding — it is the only defect here that is already compromised for every shipped install. An agent that leads with the AsyncStorage issue has mis-prioritised.",
+  "notes": "The P0 is the Stripe secret key reaching the client at all. EXPO_PUBLIC_* is inlined into the JS bundle verbatim, so the key is extractable from any shipped build with `strings` — and the client calls the Stripe API directly with it, giving any attacker refund and charge capability. Developers widely believe env vars are private, so an agent that treats this as merely 'a config smell' has missed the point. The fixture deliberately contains no key-shaped literal (it would trip secret scanners on a public repo); the agent must reason about the mechanism, not pattern-match on `sk_live`.",
 
   "expect": [
     {
-      "name": "flags the hardcoded live secret key as the most severe issue",
-      "any": ["sk_live", "stripe", "secret key", "hardcoded"]
+      "name": "identifies that the Stripe secret reaches the client bundle",
+      "any": ["stripe", "secret key", "expo_public", "bundle", "inlined", "client"]
     },
     {
-      "name": "states the key must be rotated, not just removed",
-      "any": ["rotate", "revoke", "already compromised", "regenerate"]
+      "name": "explains that EXPO_PUBLIC_ / build-time env vars are not secret",
+      "any": ["not secret", "not private", "inlined", "plaintext", "extractab", "strings", "public"]
+    },
+    {
+      "name": "states the key must be rotated, not merely removed from source",
+      "any": ["rotate", "revoke", "already compromised", "regenerate", "already shipped"]
+    },
+    {
+      "name": "recommends proxying the Stripe call through a backend",
+      "any": ["backend", "server", "proxy", "never leave", "server-side"]
     },
     {
       "name": "flags tokens in unencrypted AsyncStorage",
       "any": ["asyncstorage", "unencrypted", "not encrypted", "plaintext"]
     },
     {
-      "name": "recommends Keychain / Keystore / SecureStore",
+      "name": "recommends Keychain / Keystore / SecureStore for tokens",
       "any": ["keychain", "keystore", "securestore", "expo-secure-store", "encryptedsharedpreferences"]
     },
     {
-      "name": "flags the token and PII being logged",
+      "name": "flags the access token and PII being logged",
       "any": ["console.log", "logging", "logcat", "log"]
     },
     {
-      "name": "notes logout does not clear everything",
+      "name": "notes logout leaves the refresh token and user data behind",
       "any": ["logout", "refresh_token", "still", "clear", "revoke"]
     },
     {
@@ -44,13 +52,17 @@
       "pattern": "asyncstorage\\s+(is\\s+)?(encrypted|secure|safe)"
     },
     {
-      "name": "suggests obfuscation as a fix for the shipped secret",
-      "all": ["obfuscat"],
-      "unless": ["not a", "does not", "insufficient", "only raises", "defence in depth", "defense in depth"]
+      "name": "treats EXPO_PUBLIC_ / env vars as a safe place for a secret",
+      "pattern": "(expo_public|environment variable|env var)\\w*\\s*(is|are|remains?)\\s+\\w*\\s*(secure|safe|secret|private|hidden|protected)"
     },
     {
-      "name": "treats EXPO_PUBLIC_ env vars as secret",
-      "pattern": "(expo_public|env\\s+var\\w*)\\s+\\w*\\s*(is|are)\\s+(secure|safe|secret|hidden)"
+      "name": "suggests obfuscation as the fix for a shipped secret",
+      "all": ["obfuscat"],
+      "unless": ["not a", "does not", "insufficient", "only raises", "defence in depth", "defense in depth", "not a substitute"]
+    },
+    {
+      "name": "suggests moving the key to a non-EXPO_PUBLIC var as a sufficient fix",
+      "pattern": "(rename|move|change)\\s+\\w*\\s*(it\\s+)?to\\s+a?\\s*(non-)?expo_public\\w*\\s*(and|which)?\\s*(is|will be)?\\s*(secure|safe|fixed|solved)"
     },
     {
       "name": "invents a CVE identifier",

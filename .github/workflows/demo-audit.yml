@@ -18,10 +18,15 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
-      - uses: maheshwarimrinal/react-native-agents@v1.0.1
+
+      # `./` runs the action from this checkout, not the published release.
+      # This workflow triggers on `action/**` changes, so it must exercise the
+      # working tree — pinning to @v1.0.1 here would run the old published code
+      # and silently pass a PR that broke the action.
+      - uses: ./
         with:
           provider: openai
           model: gpt-5
