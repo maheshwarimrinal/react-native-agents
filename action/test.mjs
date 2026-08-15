@@ -266,6 +266,148 @@ test('a podspec routes to the native-modules agent', () => {
 });
 
 /* ---------------------------------------------------------------- *
+ * Fetching the diff — the 406 "too_large" path
+ * ---------------------------------------------------------------- */
+
+const { GitHub } = await import('./lib/github.mjs');
+
+/**
+ * Stand in for fetch so the fallback can be exercised without network.
+ * Must await `fn()` — returning the promise would restore the real fetch
+ * before the async work under test had run.
+ */
+async function withMockFetch(handler, fn) {
+  const real = globalThis.fetch;
+  globalThis.fetch = handler;
+  try {
+    return await fn();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+const PR_FILES = [
+  { filename: 'dist/claude-code/x.md', status: 'modified', patch: '@@ -1 +1 @@\n-a\n+b' },
+  { filename: 'package-lock.json', status: 'modified', patch: '@@ -1 +1 @@\n-x\n+y' },
+  { filename: 'src/Feed.tsx', status: 'modified', patch: '@@ -10,2 +10,3 @@\n context\n+const a = 1;' },
+  { filename: 'src/New.tsx', status: 'added', patch: '@@ -0,0 +1,2 @@\n+import x;\n+export default x;' },
+  { filename: 'assets/logo.png', status: 'modified' }, // binary: no patch
+];
+
+await testAsync('a 406 diff falls back to the files API instead of failing', async () => {
+  // GitHub refuses the diff endpoint past ~300 files or ~20,000 lines, which any
+  // PR regenerating build output crosses. Previously this aborted the whole run.
+  const gh = new GitHub({ token: 't', repo: 'o/r', prNumber: 1, sha: 'abc' });
+  const diff = await withMockFetch(
+    async (url) => {
+      if (!String(url).includes('/files')) {
+        return { ok: false, status: 406, text: async () => '{"message":"too_large"}' };
+      }
+      const page = Number(new URL(url).searchParams.get('page'));
+      return { ok: true, status: 200, json: async () => (page === 1 ? PR_FILES : []) };
+    },
+    () => gh.getDiff(),
+  );
+
+  const parsed = parseDiff(diff);
+  const paths = changedFilePaths(parsed);
+  assert(paths.includes('src/Feed.tsx'), `expected src/Feed.tsx, got ${paths}`);
+  assert(paths.includes('src/New.tsx'), `expected src/New.tsx, got ${paths}`);
+});
+
+await testAsync('the fallback drops ignored files before rebuilding', async () => {
+  // Generated output and lockfiles are usually what made the diff oversized in
+  // the first place, so filtering them is what makes the PR reviewable at all.
+  const gh = new GitHub({ token: 't', repo: 'o/r', prNumber: 1, sha: 'abc' });
+  const diff = await withMockFetch(
+    async (url) => {
+      if (!String(url).includes('/files')) {
+        return { ok: false, status: 406, text: async () => '' };
+      }
+      const page = Number(new URL(url).searchParams.get('page'));
+      return { ok: true, status: 200, json: async () => (page === 1 ? PR_FILES : []) };
+    },
+    () => gh.getDiff(),
+  );
+
+  assert(!diff.includes('dist/claude-code'), 'generated output must not be reassembled');
+  assert(!diff.includes('package-lock.json'), 'lockfiles must not be reassembled');
+  assert(!diff.includes('logo.png'), 'binary files have no patch to include');
+});
+
+await testAsync('the rebuilt diff keeps correct line numbers and file status', async () => {
+  const gh = new GitHub({ token: 't', repo: 'o/r', prNumber: 1, sha: 'abc' });
+  const diff = await withMockFetch(
+    async (url) => {
+      if (!String(url).includes('/files')) return { ok: false, status: 406, text: async () => '' };
+      const page = Number(new URL(url).searchParams.get('page'));
+      return { ok: true, status: 200, json: async () => (page === 1 ? PR_FILES : []) };
+    },
+    () => gh.getDiff(),
+  );
+
+  const parsed = parseDiff(diff);
+  const feed = parsed.find((f) => f.path === 'src/Feed.tsx');
+  const added = parsed.find((f) => f.path === 'src/New.tsx');
+  eq(added.status, 'added', 'new files must be marked added');
+  eq(feed.hunks[0].lines.find((l) => l.type === '+').newLine, 11, 'line numbers must survive rebuild');
+});
+
+await testAsync('the fallback paginates beyond one page', async () => {
+  const gh = new GitHub({ token: 't', repo: 'o/r', prNumber: 1, sha: 'abc' });
+  const bigPage = Array.from({ length: 100 }, (_, i) => ({
+    filename: `src/F${i}.tsx`, status: 'modified', patch: '@@ -1 +1 @@\n-a\n+b',
+  }));
+  let pagesRequested = 0;
+
+  const diff = await withMockFetch(
+    async (url) => {
+      if (!String(url).includes('/files')) return { ok: false, status: 406, text: async () => '' };
+      pagesRequested += 1;
+      const page = Number(new URL(url).searchParams.get('page'));
+      return { ok: true, status: 200, json: async () => (page === 1 ? bigPage : [bigPage[0]]) };
+    },
+    () => gh.getDiff(),
+  );
+
+  assert(pagesRequested >= 2, `should request a second page, requested ${pagesRequested}`);
+  assert(parseDiff(diff).length > 90, 'should reassemble the full first page');
+});
+
+await testAsync('non-406 failures still raise, with an actionable message', async () => {
+  const gh = new GitHub({ token: 't', repo: 'o/r', prNumber: 1, sha: 'abc' });
+  for (const [status, expect] of [[403, /permission|pull-requests: write/i], [404, /not found/i], [401, /invalid or expired/i]]) {
+    let err = null;
+    try {
+      await withMockFetch(
+        async () => ({ ok: false, status, text: async () => '' }),
+        () => gh.getDiff(),
+      );
+    } catch (e) {
+      err = e;
+    }
+    assert(err, `${status} should throw`);
+    assert(expect.test(err.message), `${status} message unhelpful: ${err.message}`);
+  }
+});
+
+await testAsync('a PR of only ignored files yields an empty diff, not a crash', async () => {
+  const gh = new GitHub({ token: 't', repo: 'o/r', prNumber: 1, sha: 'abc' });
+  const diff = await withMockFetch(
+    async (url) => {
+      if (!String(url).includes('/files')) return { ok: false, status: 406, text: async () => '' };
+      const page = Number(new URL(url).searchParams.get('page'));
+      return {
+        ok: true, status: 200,
+        json: async () => (page === 1 ? [{ filename: 'dist/a.md', status: 'modified', patch: '@@ -1 +1 @@\n-a\n+b' }] : []),
+      };
+    },
+    () => gh.getDiff(),
+  );
+  eq(diff, '', 'nothing reviewable should produce an empty diff');
+});
+
+/* ---------------------------------------------------------------- *
  * Bundle size — deterministic, no model involved
  * ---------------------------------------------------------------- */
 
