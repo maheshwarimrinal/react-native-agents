@@ -28,7 +28,15 @@ export function buildBundle({ cwd, platform = 'android', outDir, expo = null }) 
   const bundleOut = path.join(outDir, `index.${platform}.bundle`);
   const mapOut = `${bundleOut}.map`;
 
-  const isExpo = expo ?? (fs.existsSync(path.join(cwd, 'app.json')) && hasDep(cwd, 'expo'));
+  // Expo projects may configure via app.json, app.config.js, or app.config.ts —
+  // checking only app.json sends managed projects down the bare react-native
+  // path, which then fails because the RN CLI is not installed.
+  const isExpo =
+    expo ??
+    (hasDep(cwd, 'expo') &&
+      ['app.json', 'app.config.js', 'app.config.ts', 'app.config.mjs'].some((f) =>
+        fs.existsSync(path.join(cwd, f)),
+      ));
   const entry = findEntry(cwd);
 
   const args = isExpo

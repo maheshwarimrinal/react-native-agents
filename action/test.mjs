@@ -17,7 +17,8 @@ const { globToRegExp, matchesGlob, isIgnored, route, addedLines } = await import
 const { parseDiff, renderForPrompt, findPosition, nearestChangedLine, changedFilePaths } =
   await import('./lib/diff.mjs');
 const { LLM, estimateTokens, estimateCost, BudgetExceededError } = await import('./lib/llm.mjs');
-const { parseFindings, dedupe, countBySeverity, gateFails } = await import('./lib/audit.mjs');
+const awaitedAudit = await import('./lib/audit.mjs');
+const { parseFindings, dedupe, countBySeverity, gateFails } = awaitedAudit;
 const { renderSummary } = await import('./lib/github.mjs');
 const { detectProject } = await import('./index.mjs');
 const { loadAgents } = await import('../scripts/lib/source.mjs');
@@ -731,6 +732,121 @@ test('renderForPrompt respects the total character budget', () => {
 });
 
 /* ---------------------------------------------------------------- *
+ * Per-agent diff scoping — the silent-miss bug
+ * ---------------------------------------------------------------- */
+
+const { runAudit } = awaitedAudit;
+
+/** A PR big enough that a shared diff would be truncated. */
+function bigDiffWithNativeFileLast() {
+  let d = '';
+  for (let i = 0; i < 40; i++) {
+    d += `diff --git a/src/Screen${i}.tsx b/src/Screen${i}.tsx\n--- a/src/Screen${i}.tsx\n+++ b/src/Screen${i}.tsx\n@@ -1,1 +1,80 @@\n`;
+    for (let j = 0; j < 80; j++) d += `+const v${j} = "${'y'.repeat(40)}";\n`;
+  }
+  d +=
+    'diff --git a/android/src/main/java/com/x/FooModule.kt b/android/src/main/java/com/x/FooModule.kt\n' +
+    '--- a/android/src/main/java/com/x/FooModule.kt\n+++ b/android/src/main/java/com/x/FooModule.kt\n' +
+    '@@ -1,1 +1,3 @@\n+class FooModule : ReactContextBaseJavaModule() {\n+  @ReactMethod fun read(p: String) = File(p).readText()\n+}\n';
+  return d;
+}
+
+test('a shared diff would drop the native file — the bug this guards', () => {
+  // Reproduces the PR #6 miss: rn-native-modules reported 0 findings on a
+  // deliberately broken .kt file because the shared diff was truncated first.
+  const files = parseDiff(bigDiffWithNativeFileLast());
+  const shared = renderForPrompt(files);
+  assert(
+    !shared.text.includes('FooModule.kt'),
+    'fixture is no longer large enough to demonstrate truncation',
+  );
+});
+
+await testAsync('each agent receives only the files that routed it', async () => {
+  const files = parseDiff(bigDiffWithNativeFileLast());
+  const { selected, matchedFiles } = route(changedFilePaths(files), agents);
+
+  const seen = {};
+  const llm = {
+    calls: 0, inTokens: 0, outTokens: 0, spentUsd: 0,
+    async complete({ user }) {
+      this.calls += 1;
+      return JSON.stringify({ findings: [], summary: '' });
+    },
+  };
+  // Capture what each agent was actually shown.
+  const spy = {
+    ...llm,
+    async complete(args) {
+      seen[Object.keys(seen).length] = args.user;
+      return llm.complete.call(llm, args);
+    },
+  };
+
+  await runAudit({
+    agents: selected,
+    sharedContext: 'ctx',
+    diffFiles: files,
+    llm: spy,
+    matchedFiles,
+    log: () => {},
+  });
+
+  const nativeIndex = selected.findIndex((a) => a.id === 'rn-native-modules');
+  assert(nativeIndex >= 0, 'native agent should have been routed');
+  const nativePrompt = seen[nativeIndex];
+  assert(
+    nativePrompt.includes('FooModule.kt'),
+    'the native agent must see native code even on a large PR — this is the silent-miss bug',
+  );
+});
+
+await testAsync('scoping keeps unrelated files out of a specialist prompt', async () => {
+  const files = parseDiff(bigDiffWithNativeFileLast());
+  const { selected, matchedFiles } = route(changedFilePaths(files), agents);
+
+  const prompts = [];
+  await runAudit({
+    agents: selected,
+    sharedContext: 'ctx',
+    diffFiles: files,
+    matchedFiles,
+    llm: {
+      calls: 0, inTokens: 0, outTokens: 0, spentUsd: 0,
+      async complete({ user }) { prompts.push(user); return '{"findings":[],"summary":""}'; },
+    },
+    log: () => {},
+  });
+
+  const nativeIndex = selected.findIndex((a) => a.id === 'rn-native-modules');
+  const nativePrompt = prompts[nativeIndex];
+  assert(!nativePrompt.includes('Screen1.tsx'), 'native agent should not receive React screens');
+  assert(
+    /outside your area/.test(nativePrompt),
+    'the prompt should say other files went to other specialists, so silence is not misread',
+  );
+});
+
+await testAsync('agents matched only by keyword still receive the full diff', async () => {
+  // Some agents route on diff-body keywords rather than filenames; scoping must
+  // not starve them of context.
+  const files = parseDiff(SAMPLE_DIFF);
+  const prompts = [];
+  await runAudit({
+    agents: [agents.find((a) => a.id === 'rn-security')],
+    sharedContext: 'ctx',
+    diffFiles: files,
+    matchedFiles: {}, // no file matches recorded
+    llm: {
+      calls: 0, inTokens: 0, outTokens: 0, spentUsd: 0,
+      async complete({ user }) { prompts.push(user); return '{"findings":[],"summary":""}'; },
+    },
+    log: () => {},
+  });
+  assert(prompts[0].includes('Feed.tsx'), 'fallback to the full diff when nothing was matched');
+});
+
+/* ---------------------------------------------------------------- *
  * Cost control
  * ---------------------------------------------------------------- */
 
@@ -820,6 +936,46 @@ test('dedupes the same issue found by two agents, keeping higher severity', () =
   eq(out[0].severity, 'P0');
   eq(out[0].agent, 'rn-security');
   assert(out[0].alsoFlaggedBy.includes('rn-code-quality'), 'should record corroboration');
+});
+
+test('dedupe merges the same issue described in different words', () => {
+  // Observed on PR #6: rn-release and rn-performance both flagged the undeclared
+  // `budget-hit` output, worded differently and two lines apart, and both were
+  // posted. Duplicate findings read as noise and erode trust in the whole report.
+  const out = dedupe([
+    { severity: 'P2', title: "Output 'budget-hit' is produced by the action but not declared in action.yml", file: 'action.yml', line: 92, agent: 'rn-release' },
+    { severity: 'P3', title: 'Action sets a `budget-hit` output but it is not declared in action.yml outputs', file: 'action.yml', line: 95, agent: 'rn-performance' },
+  ]);
+  eq(out.length, 1, 'should merge into one finding');
+  eq(out[0].severity, 'P2', 'keeps the higher severity');
+  assert(out[0].alsoFlaggedBy.includes('rn-performance'), 'records corroboration');
+});
+
+test('dedupe does not merge across different files', () => {
+  const out = dedupe([
+    { severity: 'P2', title: 'Missing accessibility label', file: 'a.tsx', line: 5, agent: 'x' },
+    { severity: 'P2', title: 'Missing accessibility label', file: 'b.tsx', line: 5, agent: 'y' },
+  ]);
+  eq(out.length, 2);
+});
+
+test('dedupe does not merge distant lines in the same file', () => {
+  const out = dedupe([
+    { severity: 'P2', title: 'Missing accessibility label on the button', file: 'a.tsx', line: 5, agent: 'x' },
+    { severity: 'P2', title: 'Missing accessibility label on the button', file: 'a.tsx', line: 400, agent: 'y' },
+  ]);
+  eq(out.length, 2, 'the same defect in two places is two findings');
+});
+
+test('dedupe similarity ignores boilerplate words', () => {
+  const { isSameIssue } = awaitedAudit;
+  assert(
+    !isSameIssue(
+      { title: 'The action file should use the code', file: 'a', line: 1 },
+      { title: 'This code file sets the action', file: 'a', line: 1 },
+    ),
+    'titles made only of stopwords must not be treated as the same issue',
+  );
 });
 
 test('keeps genuinely different findings on the same line', () => {

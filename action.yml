@@ -98,6 +98,9 @@ outputs:
   agents-failed:
     description: 'Comma-separated ids of agents that errored.'
     value: ${{ steps.audit.outputs.agents-failed }}
+  budget-hit:
+    description: 'true when the budget cap stopped the run before every agent had run.'
+    value: ${{ steps.audit.outputs.budget-hit }}
   findings-json:
     description: 'All findings as a JSON array.'
     value: ${{ steps.audit.outputs.findings-json }}

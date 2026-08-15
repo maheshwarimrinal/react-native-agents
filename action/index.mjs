@@ -176,7 +176,7 @@ async function main() {
   // --- Route ----------------------------------------------------------
   const agents = loadAgents();
   const sharedContext = loadSharedContext();
-  const { selected, skipped, reasons } = route(changed, agents, {
+  const { selected, skipped, reasons, matchedFiles } = route(changed, agents, {
     only: only.length ? only : undefined,
     maxAgents,
     diffText,
@@ -207,6 +207,7 @@ async function main() {
     diffFiles,
     llm,
     projectContext,
+    matchedFiles,
     log,
   });
 

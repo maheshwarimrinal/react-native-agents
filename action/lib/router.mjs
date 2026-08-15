@@ -217,6 +217,8 @@ export function route(changedFiles, agents, opts = {}) {
       reasons: Object.fromEntries(opts.only.map((id) => [id, ['explicitly requested']])),
       selected: agents.filter((a) => wanted.has(a.id)),
       skipped: agents.filter((a) => !wanted.has(a.id)),
+      // Explicit selection bypasses matching, so every agent sees everything.
+      matchedFiles: Object.fromEntries(opts.only.map((id) => [id, files])),
     };
   }
 
@@ -227,13 +229,21 @@ export function route(changedFiles, agents, opts = {}) {
   const reviewable = agents.filter(isReviewAgent);
 
   if (files.length === 0) {
-    return { files, reasons, selected: [], skipped: [...agents] };
+    return { files, reasons, selected: [], skipped: [...agents], matchedFiles: {} };
   }
+
+  // Which files matched which agent. Retaining this is what lets the audit send
+  // each specialist only its own files instead of one shared diff — the
+  // difference between the native agent reliably seeing native code and it
+  // being truncated away on a large pull request.
+  /** @type {Record<string, string[]>} */
+  const matchedFiles = {};
 
   const scored = reviewable.map((agent) => {
     const why = [];
     const signals = SIGNALS[agent.id] ?? agent.globs ?? [];
     const hits = files.filter((f) => signals.some((g) => matchesGlob(f, g)));
+    matchedFiles[agent.id] = hits;
 
     if (hits.length) {
       why.push(
@@ -269,6 +279,7 @@ export function route(changedFiles, agents, opts = {}) {
   return {
     files,
     reasons,
+    matchedFiles,
     selected: selected.map((s) => s.agent),
     skipped: agents.filter((a) => !selectedIds.has(a.id)),
   };
