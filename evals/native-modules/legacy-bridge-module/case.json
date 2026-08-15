@@ -1,0 +1,59 @@
+{
+  "agent": "rn-native-modules",
+  "title": "Legacy bridge module with threading, promise, and lifecycle defects",
+  "context": { "reactNative": "0.87", "language": "Kotlin" },
+
+  "notes": "Layered defects. The architectural one is that ReactContextBaseJavaModule + @ReactMethod is the removed bridge API on 0.87 — this does not work at all, so it must be the headline. Beneath that: authenticate() returns without settling the promise when currentActivity is null (a silent hang in JS with nothing in the logs), BiometricPrompt is constructed off the main thread, readKeyFile is synchronous disk I/O blocking the JS thread, the companion object holds a static ReactApplicationContext, and the Timer is never cancelled so it survives every dev reload.",
+
+  "expect": [
+    {
+      "name": "identifies that this uses the removed legacy bridge API",
+      "any": ["legacy", "bridge", "removed", "reactcontextbasejavamodule", "turbomodule", "0.82"]
+    },
+    {
+      "name": "recommends migrating to a TurboModule with a codegen spec",
+      "any": ["turbomodule", "spec", "codegen", "nativebiometricsspec", "getenforcing"]
+    },
+    {
+      "name": "catches the unsettled promise when currentActivity is null",
+      "any": ["promise", "never", "unsettled", "hang", "reject", "currentactivity", "early return"]
+    },
+    {
+      "name": "catches BiometricPrompt being used off the main thread",
+      "any": ["main thread", "ui thread", "uithreadutil", "runonuithread", "thread {"]
+    },
+    {
+      "name": "catches synchronous file I/O blocking the JS thread",
+      "any": ["readkeyfile", "synchronous", "blocking", "blocks", "disk", "i/o"]
+    },
+    {
+      "name": "catches the static ReactApplicationContext leak",
+      "any": ["companion", "static", "leak", "context"]
+    },
+    {
+      "name": "catches the timer that is never cancelled",
+      "any": ["timer", "cancel", "invalidate", "leak", "reload"]
+    }
+  ],
+
+  "expectSeverity": ["P0", "P1"],
+
+  "forbid": [
+    {
+      "name": "treats the legacy bridge API as merely outdated rather than non-functional",
+      "pattern": "(bridge|reactcontextbasejavamodule)\\s+(is\\s+)?(still\\s+)?(fine|ok|okay|supported|works)"
+    },
+    {
+      "name": "suggests keeping @ReactMethod on a modern React Native version",
+      "pattern": "(keep|retain|continue)\\s+(using\\s+)?@?reactmethod"
+    },
+    {
+      "name": "claims module methods already run on the main thread",
+      "pattern": "(already|by default)\\s+(runs?|executes?)\\s+on\\s+the\\s+(main|ui)\\s+thread"
+    },
+    {
+      "name": "invents a Kotlin or React Native API to fix it",
+      "any": ["TurboModuleManager.register(", "ReactMethodAsync", "@TurboMethod"]
+    }
+  ]
+}

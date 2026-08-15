@@ -1,0 +1,54 @@
+{
+  "agent": "rn-doctor",
+  "title": "Kotlin metadata conflict after adding Reanimated",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "The error names the cause exactly: metadata 2.0.0 vs compiler 1.9.24, and the project pins kotlinVersion 1.9.24. The fix is raising kotlinVersion. The interesting failure mode is an agent that recommends the nuclear reset — the developer has already said they tried node_modules deletion and gradlew clean, so repeating that ignores the evidence and wastes another 20 minutes.",
+
+  "expect": [
+    {
+      "name": "identifies the Kotlin version conflict as the cause",
+      "any": ["kotlin", "metadata", "1.9.24", "2.0.0", "incompatible version"]
+    },
+    {
+      "name": "points at the kotlinVersion pin in android/build.gradle",
+      "any": ["kotlinversion", "build.gradle", "ext {", "pin"]
+    },
+    {
+      "name": "gives the actual fix: raise the Kotlin version",
+      "any": ["raise", "bump", "update kotlin", "2.0", "increase"]
+    },
+    {
+      "name": "connects it to the newly added library",
+      "any": ["reanimated", "newly added", "new dependency", "the merge", "added"]
+    },
+    {
+      "name": "offers a command to confirm the conflict",
+      "any": ["dependencies", "gradlew", "grep", "kotlin-stdlib", "verify", "confirm"]
+    }
+  ],
+
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "recommends the nuclear reset the developer already tried",
+      "pattern": "(delete|remove|rm -rf)\\s+node_modules",
+      "unless": ["already tried", "you have already", "since you", "won't help", "will not help"]
+    },
+    {
+      "name": "recommends gradlew clean, which was already done",
+      "pattern": "(run|try)\\s+`?\\./gradlew clean",
+      "unless": ["already", "after", "won't help", "will not help"]
+    },
+    {
+      "name": "blames a stale cache despite a clear version-mismatch error",
+      "pattern": "(stale|clear the|invalidate)\\s+cache\\s+(is|as)\\s+the\\s+(cause|problem|issue)"
+    },
+    {
+      "name": "suggests downgrading the library instead of fixing the version",
+      "pattern": "(downgrade|remove)\\s+reanimated",
+      "unless": ["last resort", "if that fails", "alternative", "otherwise"]
+    }
+  ]
+}

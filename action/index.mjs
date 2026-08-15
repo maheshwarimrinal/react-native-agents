@@ -111,6 +111,9 @@ async function main() {
     input('model', provider === 'openai' ? 'gpt-5' : 'claude-sonnet-5');
   const budgetUsd = Number(args.budget ?? input('budget-usd', '2'));
   const failOn = args['fail-on'] ?? input('fail-on', 'never');
+  // Default true: an audit where agents errored produced no signal, and a green
+  // check that means "we didn't actually look" is worse than a red one.
+  const failOnError = String(args['fail-on-error'] ?? input('fail-on-error', 'true')) !== 'false';
   const only = (args.agents ?? input('agents', '')).split(',').map((s) => s.trim()).filter(Boolean);
   const maxAgents = Number(args['max-agents'] ?? input('max-agents', '6'));
   const dryRun = args['dry-run'] === 'true' || input('dry-run') === 'true';
@@ -239,15 +242,55 @@ async function main() {
   log(`  P0 ${counts.P0}  P1 ${counts.P1}  P2 ${counts.P2}  P3 ${counts.P3}  (${result.findings.length} total)`);
   log(`  ${result.usage.calls} call(s), ~$${result.usage.costUsd.toFixed(3)}`);
 
+  setOutput('errors', result.errors.length);
+  setOutput('agents-failed', result.errors.map((e) => e.agent).join(','));
+  setOutput('budget-hit', String(result.budgetHit));
+
   if (result.errors.length) {
-    log(c.yellow(`\n  ${result.errors.length} agent(s) errored:`));
-    for (const e of result.errors) log(c.yellow(`    ${e.agent}: ${e.message}`));
+    log(c.red(`\n  ${result.errors.length} agent(s) errored:`));
+    for (const e of result.errors) log(c.red(`    ${e.agent}: ${e.message}`));
   }
+
+  // An audit where every agent failed reports zero findings, which is
+  // indistinguishable from a clean diff unless we say otherwise. This is how a
+  // "no credits remaining" error ends up wearing a green tick.
+  const allAgentsFailed = result.errors.length > 0 && result.errors.length === selected.length;
 
   if (gateFailed) {
     log(c.red(`\n  ✗ Failing: fail-on=${failOn} threshold met.\n`));
     process.exit(1);
   }
+
+  if (allAgentsFailed) {
+    log(c.red('\n  ✗ Every agent failed — this run reviewed nothing.\n'));
+    process.exit(1);
+  }
+
+  if (result.errors.length && failOnError) {
+    log(
+      c.red(
+        `\n  ✗ ${result.errors.length} of ${selected.length} agent(s) failed, so this review is incomplete.` +
+          '\n    Set fail-on-error: false to treat partial results as a pass.\n',
+      ),
+    );
+    process.exit(1);
+  }
+
+  if (result.budgetHit && failOnError) {
+    log(
+      c.red(
+        '\n  ✗ Budget cap reached before every agent ran, so this review is incomplete.' +
+          '\n    Raise budget-usd, or set fail-on-error: false to accept partial coverage.\n',
+      ),
+    );
+    process.exit(1);
+  }
+
+  if (result.errors.length || result.budgetHit) {
+    log(c.yellow('\n  ⚠ Passed, but coverage was incomplete (fail-on-error is off).\n'));
+    return;
+  }
+
   log(c.green('\n  ✓ Passed.\n'));
 }
 

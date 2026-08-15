@@ -125,7 +125,36 @@ export const SIGNALS = {
     'package.json',
     '.github/workflows/**',
   ],
+  'rn-native-modules': [
+    // Kotlin/Swift/ObjC++ are RN-specific enough to route on their own.
+    '**/*.{kt,swift,mm}',
+    // .java/.h/.cpp appear in plenty of unrelated contexts, so require a name
+    // that indicates a React Native module or component rather than any file.
+    '**/*{Module,Manager,Spec,Package,ComponentView,ViewManager,TurboModule}.{java,h,cpp,m}',
+    '**/android/src/**/*.{java,h,cpp}',
+    '**/ios/**/*.{h,cpp,m}',
+    '**/*.podspec',
+    '**/Native*.ts',
+    '**/*NativeComponent.ts',
+    '**/*Spec.ts',
+    '**/build.gradle',
+    'react-native.config.js',
+  ],
 };
+
+/**
+ * Agents that review a changeset, versus ones that need a human to bring a
+ * question, an error log, or a request.
+ *
+ * `rn-doctor` needs a build failure; `rn-build` needs something to build. Firing
+ * them at a diff spends tokens to produce a comment with nothing to say, and
+ * noise is what gets review bots muted.
+ */
+export const REVIEW_MODES = new Set(['review', 'both', undefined]);
+
+export function isReviewAgent(agent) {
+  return REVIEW_MODES.has(agent.mode);
+}
 
 /**
  * Files that never warrant an audit — routing them wastes tokens and produces
@@ -176,11 +205,17 @@ export function route(changedFiles, agents, opts = {}) {
     };
   }
 
+  // Interactive agents can't review a diff — exclude them before scoring so
+  // they never consume budget on a pull request.
+  const interactive = agents.filter((a) => !isReviewAgent(a));
+  for (const a of interactive) reasons[a.id] = ['not a review agent — needs a direct request'];
+  const reviewable = agents.filter(isReviewAgent);
+
   if (files.length === 0) {
     return { files, reasons, selected: [], skipped: [...agents] };
   }
 
-  const scored = agents.map((agent) => {
+  const scored = reviewable.map((agent) => {
     const why = [];
     const signals = SIGNALS[agent.id] ?? agent.globs ?? [];
     const hits = files.filter((f) => signals.some((g) => matchesGlob(f, g)));

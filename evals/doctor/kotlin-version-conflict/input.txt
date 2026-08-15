@@ -1,0 +1,49 @@
+$ npx react-native run-android
+
+info Installing the app...
+
+> Task :react-native-reanimated:compileDebugKotlin FAILED
+
+e: file:///Users/dev/app/node_modules/react-native-reanimated/android/src/main/java/com/swmansion/reanimated/NodesManager.kt:14:1
+  Class 'kotlin.collections.ArraysKt___ArraysKt' was compiled with an incompatible version of Kotlin.
+  The actual metadata version is 2.0.0, but the compiler version 1.9.24 can read versions up to 1.9.0.
+
+e: file:///Users/dev/app/node_modules/react-native-reanimated/android/src/main/java/com/swmansion/reanimated/ReanimatedModule.kt:22:1
+  Class 'com.facebook.react.bridge.ReactApplicationContext' was compiled with an incompatible version of Kotlin.
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':react-native-reanimated:compileDebugKotlin'.
+> Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+
+BUILD FAILED in 47s
+
+---
+Context provided by the developer:
+
+"This started right after I merged main this morning. It built fine yesterday.
+The only thing in the merge was a package.json change adding react-native-reanimated
+and a couple of screens. I already tried deleting node_modules and rebuilding, and
+I ran ./gradlew clean. Same error every time."
+
+$ cat android/build.gradle | head -20
+buildscript {
+    ext {
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 35
+        targetSdkVersion = 35
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "1.9.24"
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}

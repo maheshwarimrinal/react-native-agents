@@ -69,6 +69,19 @@ async function main() {
     return;
   }
 
+  // Deterministic bundle analysis — no API key, no model call, no cost.
+  if (cmd === 'size') {
+    process.argv = [process.argv[0], path.join(ROOT, 'action', 'size.mjs'), ...process.argv.slice(3)];
+    await import(path.join(ROOT, 'action', 'size.mjs'));
+    return;
+  }
+
+  if (cmd === 'audit') {
+    process.argv = [process.argv[0], path.join(ROOT, 'action', 'index.mjs'), ...process.argv.slice(3)];
+    await import(path.join(ROOT, 'action', 'index.mjs'));
+    return;
+  }
+
   if (cmd === 'list' || args.help || args.h) {
     const agents = loadAgents();
     console.log(c.bold('\n  React Native Agents\n'));
@@ -90,6 +103,11 @@ async function main() {
     npx @maheshwarimrinal/react-native-agents list
     npx @maheshwarimrinal/react-native-agents mcp                     run the MCP server (stdio)
 
+  ${c.bold('Analysis')}
+    npx @maheshwarimrinal/react-native-agents size                    bundle composition ${c.dim('(free — no API key)')}
+    npx @maheshwarimrinal/react-native-agents size --base main        regression vs a base branch
+    npx @maheshwarimrinal/react-native-agents audit --diff-file d.diff  agent review of a diff
+
   ${c.bold('Existing files')}
     Conflicts are ${c.bold('skipped by default')} — nothing you wrote is ever replaced silently.
 
@@ -102,7 +120,7 @@ async function main() {
   }
 
   if (cmd !== 'install') {
-    console.error(c.red(`Unknown command: ${cmd}. Try \`install\`, \`list\`, or \`mcp\`.`));
+    console.error(c.red(`Unknown command: ${cmd}. Try \`install\`, \`list\`, \`size\`, \`audit\`, or \`mcp\`.`));
     process.exit(1);
   }
 

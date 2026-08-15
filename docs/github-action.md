@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: maheshwarimrinal/react-native-agents@v1.0.1
+      - uses: maheshwarimrinal/react-native-agents@v1.0.2
         with:
           provider: anthropic
           model: claude-sonnet-5
@@ -32,7 +32,7 @@ jobs:
 For OpenAI:
 
 ```yaml
-- uses: maheshwarimrinal/react-native-agents@v1.0.1
+- uses: maheshwarimrinal/react-native-agents@v1.0.2
   with:
     provider: openai
     model: gpt-5
@@ -48,6 +48,7 @@ Add the matching key under repository **Settings → Secrets and variables → A
 | `provider` | `anthropic` | `anthropic` or `openai` |
 | `model` | Provider default | Model identifier |
 | `api-key` | required | Provider API key |
+| `fail-on-error` | `true` | Fail the check when an agent errors or the budget cap stops the run early. An audit where agents failed reviewed nothing, so a pass would be misleading. Set `false` to accept partial coverage. |
 | `agents` | auto | Comma-separated forced agent IDs |
 | `max-agents` | `6` | Maximum agents per run |
 | `budget-usd` | `2` | Hard estimated spend cap |

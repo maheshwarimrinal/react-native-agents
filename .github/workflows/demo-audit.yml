@@ -24,7 +24,7 @@ jobs:
 
       # `./` runs the action from this checkout, not the published release.
       # This workflow triggers on `action/**` changes, so it must exercise the
-      # working tree — pinning to @v1.0.1 here would run the old published code
+      # working tree — pinning to a published tag here would run the old released code
       # and silently pass a PR that broke the action.
       - uses: ./
         with:

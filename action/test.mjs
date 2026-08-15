@@ -22,6 +22,8 @@ const { renderSummary } = await import('./lib/github.mjs');
 const { detectProject } = await import('./index.mjs');
 const { loadAgents } = await import('../scripts/lib/source.mjs');
 
+const actionYml = fs.readFileSync(path.join(ROOT, 'action.yml'), 'utf8');
+
 let passed = 0;
 const failures = [];
 
@@ -162,6 +164,287 @@ test('addedLines extracts only additions', () => {
   const lines = addedLines('+++ b/x\n+added\n-removed\n context\n+also');
   eq(lines.length, 2);
   eq(lines[0], 'added');
+});
+
+/* ---------------------------------------------------------------- *
+ * Review vs interactive agents
+ * ---------------------------------------------------------------- */
+
+const { isReviewAgent } = await import('./lib/router.mjs');
+
+test('interactive agents are never routed to a pull request', () => {
+  // rn-doctor needs an error log and rn-build needs a request; firing them at a
+  // diff spends tokens to say nothing, and noise gets review bots muted.
+  const everyFile = [
+    'src/App.tsx', 'android/app/build.gradle', 'ios/Podfile', 'package.json',
+    'src/__tests__/a.test.tsx', 'eas.json', 'src/native/Thing.kt',
+  ];
+  const ids = route(everyFile, agents).selected.map((a) => a.id);
+  for (const interactive of ['rn-doctor', 'rn-build']) {
+    assert(!ids.includes(interactive), `${interactive} must not be routed for review; got ${ids}`);
+  }
+});
+
+test('interactive agents are still reachable when explicitly requested', () => {
+  const { selected } = route(['README.md'], agents, { only: ['rn-doctor'] });
+  eq(selected.length, 1);
+  eq(selected[0].id, 'rn-doctor');
+});
+
+test('review-mode agents are unaffected by the mode filter', () => {
+  for (const id of ['rn-security', 'rn-performance', 'rn-native-modules']) {
+    const a = agents.find((x) => x.id === id);
+    assert(isReviewAgent(a), `${id} should be reviewable (mode=${a.mode})`);
+  }
+});
+
+test('native code routes to the native-modules agent', () => {
+  const ids = route(['android/src/main/java/com/x/FooModule.kt'], agents).selected.map((a) => a.id);
+  assert(ids.includes('rn-native-modules'), `got ${ids}`);
+});
+
+test('a podspec routes to the native-modules agent', () => {
+  const ids = route(['MyLib.podspec'], agents).selected.map((a) => a.id);
+  assert(ids.includes('rn-native-modules'), `got ${ids}`);
+});
+
+/* ---------------------------------------------------------------- *
+ * Bundle size — deterministic, no model involved
+ * ---------------------------------------------------------------- */
+
+const size = await import('./lib/size.mjs');
+
+test('size: VLQ decodes the base case', () => {
+  const v = size.decodeVLQ('AAAA');
+  eq(v.length, 4);
+  eq(v[0], 0);
+});
+
+test('size: VLQ handles negative and multi-digit values', () => {
+  assert(size.decodeVLQ('D')[0] === -1, `got ${size.decodeVLQ('D')[0]}`);
+  assert(Number.isInteger(size.decodeVLQ('gB')[0]));
+});
+
+test('size: attributes node_modules paths to package names', () => {
+  eq(size.packageOf('node_modules/lodash/get.js'), 'lodash');
+  eq(size.packageOf('../../node_modules/moment/locale/fr.js'), 'moment');
+});
+
+test('size: keeps npm scopes intact', () => {
+  eq(size.packageOf('node_modules/@react-navigation/native/lib/index.js'), '@react-navigation/native');
+});
+
+test('size: groups app code by its top directories', () => {
+  eq(size.packageOf('src/screens/Feed.tsx'), 'src/screens');
+});
+
+test('size: rolls many modules up into one package total', () => {
+  const bySource = new Map([
+    ['node_modules/lodash/get.js', 1000],
+    ['node_modules/lodash/set.js', 500],
+    ['src/app/index.tsx', 300],
+  ]);
+  const byPackage = size.rollUpToPackages(bySource);
+  eq(byPackage.get('lodash'), 1500);
+});
+
+test('size: rollup is sorted largest first', () => {
+  const byPackage = size.rollUpToPackages(
+    new Map([['node_modules/small/a.js', 10], ['node_modules/big/b.js', 9000]]),
+  );
+  eq([...byPackage.keys()][0], 'big');
+});
+
+test('size: comparison reports added, removed, and changed', () => {
+  const base = { totalBytes: 1000, byPackage: new Map([['keep', 400], ['gone', 300]]) };
+  const head = { totalBytes: 1400, byPackage: new Map([['keep', 400], ['fresh', 700]]) };
+  const cmp = size.compare(base, head);
+  eq(cmp.totalDelta, 400);
+  const byName = Object.fromEntries(cmp.rows.map((r) => [r.name, r.status]));
+  eq(byName.fresh, 'added');
+  eq(byName.gone, 'removed');
+  assert(!('keep' in byName), 'unchanged packages should not appear');
+});
+
+test('size: budget verdict fails on an excessive delta', () => {
+  const cmp = { totalAfter: 2000, totalDelta: 500, percent: 33 };
+  eq(size.budgetVerdict(cmp, { maxDeltaBytes: 100 }).pass, false);
+  eq(size.budgetVerdict(cmp, { maxDeltaBytes: 1000 }).pass, true);
+});
+
+test('size: budget verdict fails on an excessive percentage', () => {
+  const cmp = { totalAfter: 2000, totalDelta: 500, percent: 33 };
+  eq(size.budgetVerdict(cmp, { maxPercent: 10 }).pass, false);
+});
+
+test('size: no budget means no failure', () => {
+  eq(size.budgetVerdict({ totalAfter: 9e9, totalDelta: 9e9, percent: 900 }, {}).pass, true);
+});
+
+test('size: formats bytes at each magnitude', () => {
+  eq(size.fmtBytes(512), '512 B');
+  eq(size.fmtBytes(2048), '2.0 KB');
+  eq(size.fmtBytes(2 * 1024 * 1024), '2.00 MB');
+});
+
+test('size: report surfaces a lighter alternative when one is known', () => {
+  const cmp = size.compare(
+    { totalBytes: 100, byPackage: new Map() },
+    { totalBytes: 1000, byPackage: new Map([['moment', 900]]) },
+  );
+  const md = size.renderComparison(cmp, { pass: true, failures: [] });
+  assert(/date-fns|dayjs/.test(md), 'should suggest a lighter date library');
+});
+
+test('size: report states the numbers are measured, not estimated', () => {
+  const md = size.renderComparison(
+    size.compare({ totalBytes: 10, byPackage: new Map() }, { totalBytes: 10, byPackage: new Map() }),
+    { pass: true, failures: [] },
+  );
+  assert(/measured/i.test(md), 'must not read as an estimate');
+});
+
+test('size: analyzer performs no model call', () => {
+  // The whole commercial argument is that this costs nothing to run.
+  const src = fs.readFileSync(path.join(HERE, 'lib/size.mjs'), 'utf8');
+  assert(!/anthropic|openai|api[_-]?key|LLM\(/i.test(src), 'size analysis must stay deterministic');
+});
+
+test('size: parses human-readable budget strings', async () => {
+  const { parseSize } = await import('./size.mjs');
+  eq(parseSize('100kb'), 102400);
+  eq(parseSize('1.5mb'), 1572864);
+  eq(parseSize('2048'), 2048);
+  eq(parseSize(undefined), null);
+});
+
+test('size: a malformed budget throws instead of silently disabling the check', async () => {
+  // Returning null here would leave the run green with no budget enforced —
+  // the exact outcome the budget exists to prevent.
+  const { parseSize, parsePercent } = await import('./size.mjs');
+  for (const bad of ['nope', '1.2.3mb', '-5kb', '10gbb', 'kb']) {
+    let threw = false;
+    try { parseSize(bad); } catch { threw = true; }
+    assert(threw, `parseSize(${JSON.stringify(bad)}) should throw, not return silently`);
+  }
+  for (const bad of ['abc', '-1', 'NaN']) {
+    let threw = false;
+    try { parsePercent(bad); } catch { threw = true; }
+    assert(threw, `parsePercent(${JSON.stringify(bad)}) should throw`);
+  }
+});
+
+test('size: a zero budget means "no increase allowed", not "unset"', async () => {
+  const { parseSize } = await import('./size.mjs');
+  eq(parseSize('0'), 0);
+  const cmp = { totalAfter: 1100, totalDelta: 100, percent: 10 };
+  eq(size.budgetVerdict(cmp, { maxDeltaBytes: 0 }).pass, false, 'delta 0 must be enforced');
+  eq(size.budgetVerdict(cmp, { maxPercent: 0 }).pass, false, 'percent 0 must be enforced');
+});
+
+test('size: an unset budget still passes', () => {
+  const cmp = { totalAfter: 1e9, totalDelta: 1e9, percent: 999 };
+  eq(size.budgetVerdict(cmp, { maxDeltaBytes: null, maxPercent: null }).pass, true);
+});
+
+test('size: source index deltas persist across generated lines', () => {
+  // Resetting the source-index delta per line silently attributes bytes to the
+  // wrong package — the bug is invisible without a multi-line fixture.
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const enc = (n) => {
+    let v = n < 0 ? ((-n) << 1) | 1 : n << 1;
+    let o = '';
+    do { let d = v & 31; v >>>= 5; if (v > 0) d |= 32; o += B64[d]; } while (v > 0);
+    return o;
+  };
+  const seg = (a, b, c, d) => enc(a) + enc(b) + enc(c) + enc(d);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-map-'));
+  const bundle = path.join(dir, 'b.js');
+  // Line 1 → source 0, line 2 → source 1 (delta +1 carried across the ';').
+  fs.writeFileSync(bundle, 'AAAA\nBBBB');
+  fs.writeFileSync(`${bundle}.map`, JSON.stringify({
+    version: 3,
+    sources: ['node_modules/alpha/a.js', 'node_modules/beta/b.js'],
+    mappings: [seg(0, 0, 0, 0), seg(0, 1, 0, 0)].join(';'),
+  }));
+
+  const r = size.attribute(bundle, `${bundle}.map`);
+  eq(r.bySource.get('node_modules/alpha/a.js'), 4, 'line 1 belongs to alpha');
+  eq(r.bySource.get('node_modules/beta/b.js'), 4, 'line 2 belongs to beta — delta must carry over');
+});
+
+test('size: segments split one line across several sources', () => {
+  const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const enc = (n) => {
+    let v = n < 0 ? ((-n) << 1) | 1 : n << 1;
+    let o = '';
+    do { let d = v & 31; v >>>= 5; if (v > 0) d |= 32; o += B64[d]; } while (v > 0);
+    return o;
+  };
+  const seg = (a, b, c, d) => enc(a) + enc(b) + enc(c) + enc(d);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-map2-'));
+  const bundle = path.join(dir, 'b.js');
+  fs.writeFileSync(bundle, 'AAAABBBBBBCCCC'); // 4 + 6 + 4
+  fs.writeFileSync(`${bundle}.map`, JSON.stringify({
+    version: 3,
+    sources: ['node_modules/alpha/a.js', 'node_modules/beta/b.js', 'src/app/c.js'],
+    mappings: [seg(0, 0, 0, 0), seg(4, 1, 0, 0), seg(6, 1, 0, 0)].join(','),
+  }));
+
+  const r = size.attribute(bundle, `${bundle}.map`);
+  eq(r.bySource.get('node_modules/alpha/a.js'), 4);
+  eq(r.bySource.get('node_modules/beta/b.js'), 6);
+  eq(r.bySource.get('src/app/c.js'), 4);
+  eq(r.attributedBytes, 14, 'every mapped byte attributed exactly once');
+});
+
+test('size: reports attributed bytes so coverage can be stated honestly', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-map3-'));
+  const bundle = path.join(dir, 'b.js');
+  fs.writeFileSync(bundle, 'unmapped runtime preamble');
+  fs.writeFileSync(`${bundle}.map`, JSON.stringify({ version: 3, sources: [], mappings: '' }));
+  const r = size.attribute(bundle, `${bundle}.map`);
+  eq(r.attributedBytes, 0);
+  assert(r.totalBytes > 0, 'total still measured');
+});
+
+test('size: bundle build refuses to download a CLI it does not have', () => {
+  const src = fs.readFileSync(path.join(HERE, 'lib/size.mjs'), 'utf8');
+  assert(/--no-install/.test(src), 'npx must not silently fetch an unpinned CLI');
+});
+
+test('size: base comparison supports every common package manager', async () => {
+  const { detectPackageManager } = await import('./size.mjs');
+  for (const [file, expected] of [
+    ['package-lock.json', 'npm'],
+    ['yarn.lock', 'yarn'],
+    ['pnpm-lock.yaml', 'pnpm'],
+    ['bun.lockb', 'bun'],
+  ]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-pm-'));
+    fs.writeFileSync(path.join(dir, file), '');
+    eq(detectPackageManager(dir)?.name, expected, `${file} → ${expected}`);
+  }
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-pm-none-'));
+  eq(detectPackageManager(empty), null, 'no lockfile must be detectable, not assumed npm');
+});
+
+test('size: a failed base build exits non-zero instead of falling back', () => {
+  // Falling back to a single-bundle report would skip the comparison AND the
+  // budget check while still exiting 0. Assert on the catch block's behaviour
+  // rather than on prose, which legitimately mentions the fallback.
+  const src = fs.readFileSync(path.join(HERE, 'size.mjs'), 'utf8');
+  const catchBlock = src.slice(src.indexOf('Could not build the base bundle'));
+  const body = catchBlock.slice(0, catchBlock.indexOf('} finally'));
+
+  assert(/process\.exit\(2\)/.test(body), 'base-build failure needs a distinct non-zero exit');
+  assert(
+    !/renderReport\(/.test(body),
+    'must not print a single-bundle report as a fallback — that hides the skipped budget check',
+  );
+  assert(!/^\s*return;\s*$/m.test(body), 'must not return successfully from the failure path');
 });
 
 /* ---------------------------------------------------------------- *
@@ -483,6 +766,45 @@ await testAsync('fail-on gate exits non-zero when tripped', async () => {
   eq(code, 1, 'should exit 1 when the gate trips');
 });
 
+await testAsync('audit fails when every agent errors', async () => {
+  // The bug this guards: all agents failing (bad key, no credits) produced zero
+  // findings, which is indistinguishable from a clean diff — reported as ✓ Passed.
+  const f = path.join(os.tmpdir(), 'rn-allfail.diff');
+  fs.writeFileSync(f, SAMPLE_DIFF);
+  let err = null;
+  try {
+    // A real provider with a junk key: every agent call fails.
+    await run(
+      ['--diff-file', f, '--provider', 'anthropic', '--api-key', 'sk-ant-invalid', '--workspace', ROOT],
+      { ANTHROPIC_API_KEY: 'sk-ant-invalid' },
+    );
+  } catch (e) {
+    err = e;
+  }
+  assert(err, 'must not exit 0 when nothing was actually reviewed');
+  assert(
+    /reviewed nothing|agent\(s\) failed|errored/i.test(err.stdout + err.stderr),
+    `expected an explicit failure message, got: ${(err.stdout + err.stderr).slice(-300)}`,
+  );
+});
+
+await testAsync('fail-on-error can be disabled for partial coverage', async () => {
+  const f = path.join(os.tmpdir(), 'rn-partial.diff');
+  fs.writeFileSync(f, SAMPLE_DIFF);
+  // The mock provider succeeds, so this asserts the flag parses and the normal
+  // path is unaffected.
+  const { stdout } = await run([
+    '--diff-file', f, '--provider', 'mock', '--fail-on-error', 'false', '--workspace', ROOT,
+  ]);
+  assert(/Passed/.test(stdout), stdout.slice(-200));
+});
+
+test('action.yml exposes fail-on-error and wires it through', () => {
+  assert(/fail-on-error:/.test(actionYml), 'input missing');
+  assert(/INPUT_FAIL_ON_ERROR/.test(actionYml), 'env wiring missing');
+  assert(/default:\s*'true'/.test(actionYml), 'must default to failing on error');
+});
+
 await testAsync('empty diff exits cleanly', async () => {
   const f = path.join(os.tmpdir(), 'rn-empty.diff');
   fs.writeFileSync(f, '');
@@ -506,7 +828,6 @@ await testAsync('missing API key fails fast with a clear message', async () => {
  * Action manifest
  * ---------------------------------------------------------------- */
 
-const actionYml = fs.readFileSync(path.join(ROOT, 'action.yml'), 'utf8');
 
 test('action.yml declares every input the entrypoint reads', () => {
   for (const i of ['api-key', 'provider', 'model', 'agents', 'budget-usd', 'fail-on', 'github-token']) {

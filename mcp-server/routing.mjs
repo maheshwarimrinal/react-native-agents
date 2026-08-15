@@ -85,6 +85,53 @@ export const SIGNALS = {
     weak: ['verify', 'regression', 'confidence'],
   },
 
+  'rn-doctor': {
+    strong: [
+      'build failed', 'build fails', 'build error', 'wont build', "won't build", 'does not build',
+      'pod install', 'gradle', 'cocoapods', 'unable to resolve module', 'module not found',
+      'could not find', 'duplicate class', 'command failed', 'command phasescriptexecution',
+      'works on my machine', 'clean build', 'deriveddata', 'watchman', 'metro bundler',
+      'compilation failed', 'execution failed for task', 'sdk location not found',
+      'sandbox is not in sync', 'no such module', 'undefined symbols',
+      'version conflict', 'version mismatch', 'incompatible version', 'kotlin version',
+      'gradle version', 'agp version', 'jdk version', 'duplicate class', 'dependency conflict',
+      'build fails', 'android build', 'ios build', 'fails to build', 'wont compile',
+    ],
+    medium: [
+      'error', 'failing', 'broken', 'stuck', 'cache', 'xcode', 'android studio', 'jdk', 'java',
+      'node_modules', 'reinstall', 'after upgrade', 'after pull', 'ci fails', 'compile',
+    ],
+    weak: ['setup', 'install', 'environment', 'toolchain'],
+  },
+
+  'rn-build': {
+    strong: [
+      'create a screen', 'build a screen', 'new screen', 'add a component', 'create a component',
+      'build a component', 'implement', 'scaffold', 'write a form', 'add a form', 'build a list',
+      'how do i build', 'how do i create', 'generate a',
+      'create a', 'new checkout', 'implement a screen', 'implement a component',
+      'build me', 'write a screen', 'write a component', 'add a screen',
+    ],
+    medium: ['screen', 'component', 'form', 'modal', 'card', 'bottom sheet', 'add a'],
+    // Deliberately narrow. Bare verbs like "make" or "new" match almost any
+    // sentence and drag unrelated questions into this agent.
+    weak: ['need a component', 'need a screen'],
+  },
+
+  'rn-native-modules': {
+    strong: [
+      'native module', 'turbomodule', 'turbo module', 'fabric', 'jsi', 'codegen',
+      'native component', 'bridge module', 'podspec', 'autolinking', 'objective-c', 'objc',
+      'swift module', 'kotlin module', 'viewmanager', 'new architecture migration',
+      'rctbridgemodule', 'requirenativecomponent', 'host object',
+    ],
+    medium: [
+      'native', 'swift', 'kotlin', 'java', 'c++', 'cpp', 'spec', 'thread', 'main queue',
+      'native code', 'platform code', 'bridging header',
+    ],
+    weak: ['ios side', 'android side', 'wrap'],
+  },
+
   'rn-release': {
     strong: [
       'app store', 'play store', 'rejected', 'rejection', 'code signing', 'provisioning',

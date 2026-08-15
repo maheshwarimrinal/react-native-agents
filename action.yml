@@ -51,6 +51,15 @@ inputs:
     required: false
     default: never
 
+  fail-on-error:
+    description: >-
+      Fail the check when an agent errors or the budget cap stops the run early.
+      Defaults to true: an audit where agents failed reviewed nothing, and a
+      green check that means "we did not actually look" is worse than a red one.
+      Set to false to accept partial coverage.
+    required: false
+    default: 'true'
+
   dry-run:
     description: 'Route and report which agents would run, without calling the model.'
     required: false
@@ -83,6 +92,12 @@ outputs:
   agents:
     description: 'Comma-separated agent ids that actually ran.'
     value: ${{ steps.audit.outputs.agents }}
+  errors:
+    description: 'Number of agents that failed.'
+    value: ${{ steps.audit.outputs.errors }}
+  agents-failed:
+    description: 'Comma-separated ids of agents that errored.'
+    value: ${{ steps.audit.outputs.agents-failed }}
   findings-json:
     description: 'All findings as a JSON array.'
     value: ${{ steps.audit.outputs.findings-json }}
@@ -108,6 +123,7 @@ runs:
         INPUT_MAX_AGENTS: ${{ inputs.max-agents }}
         INPUT_BUDGET_USD: ${{ inputs.budget-usd }}
         INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
         INPUT_DRY_RUN: ${{ inputs.dry-run }}
         INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
         GITHUB_TOKEN: ${{ inputs.github-token }}

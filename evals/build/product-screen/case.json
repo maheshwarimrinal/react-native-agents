@@ -1,0 +1,75 @@
+{
+  "agent": "rn-build",
+  "title": "Product detail screen with an icon-only save button and a fetched entity",
+  "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
+
+  "notes": "Tests whether the agent produces production-ready code rather than a demo. The icon-only 'Save for later' button is the trap — generic output omits accessibilityLabel every time. The project already has TanStack Query, expo-image, safe-area-context, zod, and a theme, so inventing a different stack or hardcoding colours is a failure to read the context.",
+
+  "expect": [
+    {
+      "name": "labels the icon-only save button for screen readers",
+      "any": ["accessibilitylabel", "accessibility label", "save for later"]
+    },
+    {
+      "name": "uses the project's existing data layer rather than raw useEffect+fetch",
+      "any": ["usequery", "tanstack", "querykey", "react-query"]
+    },
+    {
+      "name": "handles loading, error, and the missing-product case",
+      "any": ["ispending", "isloading", "skeleton", "errorstate", "error"]
+    },
+    {
+      "name": "applies safe-area insets",
+      "any": ["usesafeareainsets", "insets", "safe area", "safeareaview"]
+    },
+    {
+      "name": "uses theme tokens instead of hardcoded colours",
+      "any": ["usetheme", "theme.", "tokens", "spacing."]
+    },
+    {
+      "name": "uses expo-image, which the project already depends on",
+      "any": ["expo-image", "contentfit", "cachepolicy"]
+    },
+    {
+      "name": "validates the API response at the boundary",
+      "any": ["zod", "z.object", "parse", "schema"]
+    },
+    {
+      "name": "hoists styles into StyleSheet.create",
+      "any": ["stylesheet.create"]
+    },
+    {
+      "name": "guards the add-to-cart action against double submission",
+      "any": ["disabled", "ispending", "issubmitting", "loading"]
+    }
+  ],
+
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "hardcodes colours instead of using the theme",
+      "pattern": "(color|backgroundColor)\\s*:\\s*['\"]#[0-9a-f]{3,8}['\"]"
+    },
+    {
+      "name": "uses deprecated SafeAreaView from react-native",
+      "pattern": "safeareaview[\\s\\S]{0,120}from\\s+['\"]react-native['\"]"
+    },
+    {
+      "name": "disables font scaling to protect the layout",
+      "pattern": "allowfontscaling\\s*=\\s*\\{?false"
+    },
+    {
+      "name": "captures Dimensions at module scope",
+      "pattern": "^const\\s+\\{[^}]*\\}\\s*=\\s*Dimensions\\.get"
+    },
+    {
+      "name": "leaves the implementation unfinished",
+      "pattern": "//\\s*(TODO|FIXME|implement this|your code here)"
+    },
+    {
+      "name": "introduces a redundant data library the project doesn't use",
+      "any": ["swr", "apollo", "redux-saga", "axios-hooks"]
+    }
+  ]
+}

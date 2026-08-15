@@ -19,7 +19,10 @@ every agent depends on them.
 
 Run these subagents in parallel where possible:
 
+- **rn-build** — RN Build
 - **rn-code-quality** — RN Code Quality
+- **rn-doctor** — RN Doctor
+- **rn-native-modules** — RN Native Modules
 - **rn-performance** — RN Performance
 - **rn-release** — RN Release
 - **rn-security** — RN Security
