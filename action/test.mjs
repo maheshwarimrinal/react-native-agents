@@ -126,6 +126,63 @@ test('routes test files to the testing agent', () => {
   assert(ids.includes('rn-testing'), `got ${ids}`);
 });
 
+test('config files route when the app is not at the repository root', () => {
+  // A bare `eas.json` signal only matches at the root, which silently skips the
+  // app in every monorepo — and in this repo's own demo under examples/.
+  for (const [file, expected] of [
+    ['apps/mobile/eas.json', 'rn-release'],
+    ['packages/app/app.config.ts', 'rn-release'],
+    ['apps/mobile/package.json', 'rn-release'],
+    ['packages/app/metro.config.js', 'rn-performance'],
+    ['apps/mobile/jest.config.js', 'rn-testing'],
+    ['apps/mobile/package.json', 'rn-security'],
+  ]) {
+    const ids = route([file], agents).selected.map((a) => a.id);
+    assert(ids.includes(expected), `${file} should route to ${expected}; got ${ids}`);
+  }
+});
+
+test('the bundled demo exercises every review agent it claims to', () => {
+  // The demo README lists expected findings per specialist; if routing skips one,
+  // that documented finding can never be produced.
+  const demo = [
+    'examples/react-native-audit-demo/eas.json',
+    'examples/react-native-audit-demo/src/screens/CatalogueScreen.tsx',
+    'examples/react-native-audit-demo/src/lib/auth.ts',
+    'examples/react-native-audit-demo/src/hooks/useCatalogue.ts',
+    'examples/react-native-audit-demo/src/screens/CatalogueScreen.test.tsx',
+  ];
+  const ids = route(demo, agents).selected.map((a) => a.id);
+  for (const expected of [
+    'rn-release', 'rn-performance', 'rn-security', 'rn-code-quality',
+    'rn-testing', 'rn-ui-accessibility',
+  ]) {
+    assert(ids.includes(expected), `demo should route ${expected}; got ${ids}`);
+  }
+});
+
+test('all lockfiles are ignored consistently', () => {
+  // Only `*.lock` was excluded before, so yarn.lock was skipped while
+  // package-lock.json and pnpm-lock.yaml were sent to the model — thousands of
+  // lines of hashes, no usable signal, and inconsistent between projects.
+  for (const f of [
+    'yarn.lock', 'package-lock.json', 'pnpm-lock.yaml', 'bun.lockb',
+    'ios/Podfile.lock', 'Gemfile.lock', 'apps/mobile/yarn.lock',
+  ]) {
+    assert(isIgnored(f), `${f} should be ignored`);
+  }
+});
+
+test('broadened config patterns still exclude vendored copies', () => {
+  for (const f of [
+    'node_modules/some-lib/package.json',
+    'ios/Pods/Foo/package.json',
+    'dist/app.json',
+  ]) {
+    eq(route([f], agents).selected.length, 0, `${f} must not route`);
+  }
+});
+
 test('routing actually reduces agent count for a narrow change', () => {
   const { selected } = route(['eas.json'], agents);
   assert(selected.length < agents.length, 'narrow change should not fan out to every agent');

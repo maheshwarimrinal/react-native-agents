@@ -65,12 +65,19 @@ export function matchesGlob(file, glob) {
 }
 
 /* ------------------------------------------------------------------ *
- * Signal files — strong hints that a specific agent is required,
- * regardless of what the agent's own globs say.
+ * Signal files — strong hints that a specific agent is required, regardless of
+ * what the agent's own globs say.
  *
  * Agent globs are broad by design (an agent wants to be *available* for any
  * TS file). For routing we need the opposite: evidence that this agent is
  * actually warranted. These patterns encode that evidence.
+ *
+ * Config filenames are prefixed to match at any depth rather than written bare.
+ * A bare `eas.json` only matches at the repository root, which silently skips
+ * the app in every monorepo (`apps/mobile/eas.json`) and anywhere the React
+ * Native project is not the top-level one. node_modules, build output, and
+ * vendored copies are removed by IGNORED before matching, so the broader
+ * pattern does not drag those back in.
  * ------------------------------------------------------------------ */
 
 export const SIGNALS = {
@@ -82,9 +89,9 @@ export const SIGNALS = {
     '**/*.entitlements',
     '**/network_security_config.xml',
     '**/PrivacyInfo.xcprivacy',
-    'package-lock.json',
-    'yarn.lock',
-    'pnpm-lock.yaml',
+    // A dependency change is the supply-chain signal worth reviewing. The
+    // lockfiles themselves are thousands of lines of hashes — see IGNORED.
+    '**/package.json',
     '**/*{auth,Auth,login,Login,token,Token,crypto,Crypto,secure,Secure,session,Session}*',
     '**/*{webview,WebView,deeplink,DeepLink,linking,Linking}*',
     '**/*{api,Api,API,fetch,client,Client,http,Http}*',
@@ -93,10 +100,10 @@ export const SIGNALS = {
     '**/*{List,list,Feed,feed,Scroll,scroll,Grid,grid}*',
     '**/*{Animated,animation,Animation,gesture,Gesture,Reanimated}*',
     '**/*{Image,image,Video,video,Media,media}*',
-    'metro.config.js',
-    'babel.config.js',
+    '**/metro.config.js',
+    '**/babel.config.js',
     '**/*{Screen,screen,Page,page}*',
-    'package.json',
+    '**/package.json',
   ],
   'rn-ui-accessibility': [
     '**/*.{tsx,jsx}',
@@ -111,18 +118,18 @@ export const SIGNALS = {
     '**/__tests__/**',
     '**/e2e/**',
     '**/.maestro/**',
-    'jest.config.*',
-    'jest.setup.*',
+    '**/jest.config.*',
+    '**/jest.setup.*',
   ],
   'rn-release': [
-    'eas.json',
-    'app.json',
-    'app.config.*',
+    '**/eas.json',
+    '**/app.json',
+    '**/app.config.*',
     '**/fastlane/**',
     '**/*.gradle',
     '**/Info.plist',
     '**/Podfile*',
-    'package.json',
+    '**/package.json',
     '.github/workflows/**',
   ],
   'rn-native-modules': [
@@ -138,7 +145,7 @@ export const SIGNALS = {
     '**/*NativeComponent.ts',
     '**/*Spec.ts',
     '**/build.gradle',
-    'react-native.config.js',
+    '**/react-native.config.js',
   ],
 };
 
@@ -165,7 +172,15 @@ export const IGNORED = [
   '**/dist/**',
   '**/build/**',
   '**/coverage/**',
+  // Every lockfile, consistently. Previously only `*.lock` was excluded, so
+  // yarn.lock was skipped while package-lock.json and pnpm-lock.yaml were sent
+  // to the model — thousands of lines of hashes for no usable signal.
   '**/*.lock',
+  '**/package-lock.json',
+  '**/pnpm-lock.yaml',
+  '**/bun.lockb',
+  '**/Podfile.lock',
+  '**/Gemfile.lock',
   '**/*.snap',
   '**/*.{png,jpg,jpeg,gif,webp,svg,ico,mp4,mov,ttf,otf,woff,woff2}',
   '**/*.min.js',
