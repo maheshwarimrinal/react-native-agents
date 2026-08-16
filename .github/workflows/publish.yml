@@ -63,7 +63,9 @@ jobs:
           echo "--- files that will ship ---"
           npm pack --dry-run --json | node -e "
             let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
-              const f=JSON.parse(d)[0];
+              // npm <= 11 emits an array; npm 12 emits an object keyed by package name.
+              const j=JSON.parse(d);
+              const f=Array.isArray(j)?j[0]:Object.values(j)[0];
               console.log('name:', f.name, f.version);
               console.log('files:', f.entryCount, '| unpacked:', (f.unpackedSize/1024/1024).toFixed(2)+'MB');
             });"
