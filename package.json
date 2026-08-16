@@ -17,6 +17,7 @@
     "install-agents": "node scripts/cli.mjs install",
     "mcp": "node mcp-server/index.mjs",
     "audit": "node action/index.mjs",
+    "version": "node scripts/build.mjs && git add dist",
     "prepublishOnly": "node scripts/build.mjs --check && node scripts/test.mjs && node action/test.mjs",
     "evals": "node evals/run.mjs",
     "evals:validate": "node evals/run.mjs --validate",
