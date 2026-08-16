@@ -11,6 +11,8 @@ Works with Claude Code, Cursor, Windsurf, GitHub Copilot, Codex, Zed, Aider, MCP
 [![CI](https://github.com/maheshwarimrinal/react-native-agents/actions/workflows/ci.yml/badge.svg)](https://github.com/maheshwarimrinal/react-native-agents/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+**[Project page](https://www.mrinalmaheshwari.com/projects/react-native-agents)** · [npm](https://www.npmjs.com/package/@maheshwarimrinal/react-native-agents) · [Marketplace](https://github.com/marketplace/actions/react-native-audit)
+
 </div>
 
 React Native Agents gives your AI coding tool specialist React Native guidance instead of generic React advice. The agents inspect the project context first, use deep references on demand, and explain findings with practical fixes and verification steps.
@@ -119,6 +121,7 @@ Bytes are attributed per source-map segment, so a package's number is measured r
 
 ## Documentation
 
+- [Project page](https://www.mrinalmaheshwari.com/projects/react-native-agents) — overview of the agents, the bundle-size analyzer, and the design decisions behind them
 - [Real-world demo](examples/react-native-audit-demo/README.md) — intentionally flawed React Native project with a PR audit workflow
 - [Installation by tool](docs/installation.md) — Claude Code, Cursor, Windsurf, Copilot, Codex, and MCP
 - [GitHub Action guide](docs/github-action.md) — providers, secrets, inputs, outputs, routing, and severity gates
