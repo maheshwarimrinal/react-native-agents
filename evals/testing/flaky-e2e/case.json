@@ -1,0 +1,52 @@
+{
+  "agent": "rn-testing",
+  "title": "Flaky E2E — sleep-based waits, shared state between tests, no state reset",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Every flakiness cause in one file: three arbitrary sleeps totalling 16 seconds, `launchApp` without clearing state so runs contaminate each other, and a second test that depends on data created by the first — so it fails in isolation, fails under parallelism, and fails on re-run. Also hardcoded credentials. The trap being tested is recommending a retry: retries hide race conditions, which are usually real bugs in the app rather than the test.",
+
+  "expect": [
+    {
+      "name": "flags the arbitrary sleeps as the primary flakiness cause",
+      "any": ["settimeout", "sleep", "arbitrary", "fixed", "hard-coded wait", "5000", "8000"]
+    },
+    {
+      "name": "recommends waiting on a condition instead",
+      "any": ["waitfor", "tobevisible().withtimeout", "withtimeout", "condition"]
+    },
+    {
+      "name": "flags shared state between tests",
+      "any": ["depends on", "shared state", "isolation", "previous test", "order-dependent", "in isolation"]
+    },
+    {
+      "name": "recommends clearing state on launch",
+      "any": ["clearstate", "delete: true", "reloadreactnative", "fresh", "reset"]
+    },
+    {
+      "name": "notes the credentials in the test file",
+      "any": ["credential", "password", "hardcoded", "secret", "env"]
+    }
+  ],
+
+  "expectSeverity": ["P1", "P2"],
+
+  "forbid": [
+    {
+      "name": "recommends retries to mask flakiness",
+      "all": ["retr"],
+      "unless": ["not", "avoid", "instead", "hide", "mask", "rather than", "do not"]
+    },
+    {
+      "name": "recommends simply increasing the timeouts",
+      "pattern": "(increase|raise|extend|bump)\\s+\\w*\\s*(the\\s+)?(sleep|settimeout|delay|wait time)"
+    },
+    {
+      "name": "suggests adding snapshot tests",
+      "pattern": "(add|use)\\s+\\w*\\s*snapshot"
+    },
+    {
+      "name": "sets a coverage target as the remedy",
+      "pattern": "(100|90|80)%\\s+coverage"
+    }
+  ]
+}

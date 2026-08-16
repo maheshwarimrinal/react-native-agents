@@ -68,6 +68,14 @@ The agent treats the New Architecture as the only architecture — the legacy br
 
 Command: `/rn-native`
 
+## Observability — `rn-observability`
+
+Use for crash reporting, monitoring, and telemetry: Sentry/Crashlytics/New Relic setup, symbolication with dSYMs and ProGuard mappings, source-map upload, breadcrumb and event schema, network instrumentation, distributed tracing, release health, alerting, and PII scrubbing.
+
+The agent's premise is that **broken telemetry looks exactly like a healthy app**. An empty crash dashboard means either the app is stable or the reporter is not working, and those are indistinguishable from the outside. It therefore starts by asking for proof — a symbolicated stack trace from a release build — before looking at coverage, and treats anything that silently disables reporting (a ProGuard rule that strips the SDK, an inverted `__DEV__` guard, a release/dist mismatch) as P0 or P1, because it removes the team's ability to know the app is broken.
+
+Command: `/rn-observe`
+
 ## Release — `rn-release`
 
 Use for EAS, Fastlane, signing, versioning, OTA updates, store submission, staged rollout, monitoring, and rollback.

@@ -132,6 +132,29 @@ export const SIGNALS = {
     '**/package.json',
     '.github/workflows/**',
   ],
+  'rn-observability': [
+    '**/*{sentry,Sentry,crashlytics,Crashlytics,newrelic,NewRelic,bugsnag,Bugsnag}*',
+    '**/*{telemetry,Telemetry,analytics,Analytics,tracking,Tracking,monitor,Monitor}*',
+    // Directory layouts, not just filenames — `src/analytics/events.ts` is the
+    // common shape and matches none of the patterns above.
+    '**/analytics/**',
+    '**/telemetry/**',
+    '**/monitoring/**',
+    '**/observability/**',
+    '**/instrumentation/**',
+    '**/proguard-rules.pro',
+    '**/sentry.properties',
+    '**/.sentryclirc',
+    // Root entry files only. SDK init belongs here, and moving it after an
+    // `await` silently loses startup crashes.
+    //
+    // `**\/App.tsx` was deliberately removed: almost every UI change touches
+    // App.tsx, so it fired an observability call on unrelated work. Telemetry
+    // added elsewhere is still caught by the diff keyword signals below.
+    'index.js',
+    'index.ts',
+    'index.tsx',
+  ],
   'rn-native-modules': [
     // Kotlin/Swift/ObjC++ are RN-specific enough to route on their own.
     '**/*.{kt,swift,mm}',

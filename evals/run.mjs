@@ -145,6 +145,24 @@ export function scoreOutput(text, def) {
   };
 }
 
+/**
+ * A clean fixture must produce (nearly) nothing.
+ *
+ * This is the most important assertion in the suite and the one most easily
+ * forgotten: an agent that invents problems to look useful is worse than one
+ * that misses some, because every false positive costs a human the time to
+ * dismiss it and erodes trust in the real findings.
+ */
+export function checkMaxFindings(findings, def) {
+  if (def.expectMaxFindings === undefined) return { ok: true, note: 'no cap' };
+  const ok = findings.length <= def.expectMaxFindings;
+  return {
+    ok,
+    note: `expected at most ${def.expectMaxFindings} finding(s), got ${findings.length}` +
+      (ok ? '' : `: ${findings.map((f) => `${f.severity} ${f.title}`).join(' | ')}`),
+  };
+}
+
 export function checkSeverity(findings, def) {
   if (!def.expectSeverity?.length) return { ok: true, note: 'no severity expectation' };
   if (!findings.length) return { ok: false, note: 'no structured findings emitted' };
@@ -166,7 +184,11 @@ function validate(cases, agents) {
     if (!def.agent) problems.push(`${id}: missing "agent"`);
     else if (!agentIds.has(def.agent)) problems.push(`${id}: unknown agent "${def.agent}"`);
     if (!def.title) problems.push(`${id}: missing "title"`);
-    if (!def.expect?.length) problems.push(`${id}: no expectations — the case asserts nothing`);
+    // A clean case legitimately has no `expect` entries — its whole assertion is
+    // that nothing was reported.
+    if (!def.expect?.length && def.expectMaxFindings === undefined) {
+      problems.push(`${id}: no expectations — the case asserts nothing`);
+    }
     if (!tc.input.trim()) problems.push(`${id}: empty input fixture`);
 
     for (const e of def.expect ?? []) {
@@ -221,8 +243,9 @@ async function main() {
   if (args.validate) {
     console.log(c.green(`\n  ✓ ${cases.length} eval case(s) are well-formed\n`));
     for (const tc of cases) {
+      const kind = tc.def.expectMaxFindings !== undefined ? c.green(`  clean (max ${tc.def.expectMaxFindings})`) : '';
       console.log(
-        `    ${c.cyan(tc.id.padEnd(46))} ${tc.def.expect.length} expect · ${(tc.def.forbid ?? []).length} forbid`,
+        `    ${c.cyan(tc.id.padEnd(46))} ${(tc.def.expect ?? []).length} expect · ${(tc.def.forbid ?? []).length} forbid${kind}`,
       );
     }
     console.log();
@@ -281,9 +304,10 @@ async function main() {
     const parsed = parseFindings(raw);
     const score = scoreOutput(raw, tc.def);
     const sev = checkSeverity(parsed.findings, tc.def);
-    const pass = score.pass && sev.ok;
+    const cap = checkMaxFindings(parsed.findings, tc.def);
+    const pass = score.pass && sev.ok && cap.ok;
 
-    results.push({ tc, raw, parsed, score, sev, pass });
+    results.push({ tc, raw, parsed, score, sev, cap, pass });
 
     const label = pass
       ? c.green('PASS')
@@ -293,7 +317,8 @@ async function main() {
     console.log(
       `${label}  ${score.expectPassed}/${score.expectTotal} expected` +
         (score.violations.length ? c.red(`  ${score.violations.length} violation(s)`) : '') +
-        (sev.ok ? '' : c.yellow(`  severity: ${sev.note}`)),
+        (sev.ok ? '' : c.yellow(`  severity: ${sev.note}`)) +
+        (cap.ok ? '' : c.red(`  noise: ${cap.note}`)),
     );
 
     if (args.verbose || !pass) {

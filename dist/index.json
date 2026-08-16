@@ -1,6 +1,6 @@
 {
   "generatedAt": null,
-  "version": "1.0.3",
+  "version": "1.1.0",
   "knowledge": {
     "$comment": "Freshness metadata for the React Native knowledge in agents/ and shared/. This is the single source of truth for 'what have we actually checked?'. The scheduled freshness workflow compares these against the live npm registry and opens an issue when they fall behind. Update `last_verified` only after genuinely reviewing the affected references — bumping the date without reading is worse than leaving it stale, because it launders an unchecked claim as a verified one.",
     "last_verified": "2026-08-12",
@@ -238,6 +238,71 @@
         {
           "slug": "turbomodules",
           "title": "TurboModules"
+        }
+      ]
+    },
+    {
+      "id": "rn-observability",
+      "name": "React Native Observability Agent",
+      "title": "RN Observability",
+      "description": "Use for React Native crash reporting, monitoring, and telemetry — Sentry/Crashlytics/New Relic setup, symbolication with dSYMs, ProGuard rules and source maps, breadcrumb and custom event schema, network instrumentation, distributed tracing, release health, alerting, and PII scrubbing. Specialises in telemetry that appears configured but silently reports nothing.",
+      "version": "1.0.0",
+      "emoji": "🔭",
+      "color": "indigo",
+      "command": "rn-observe",
+      "triggers": [
+        "crash reporting",
+        "crashlytics",
+        "sentry",
+        "new relic",
+        "bugsnag",
+        "symbolication",
+        "dsym",
+        "proguard",
+        "source maps",
+        "stack trace",
+        "breadcrumb",
+        "telemetry",
+        "monitoring",
+        "observability",
+        "analytics event",
+        "distributed tracing",
+        "session replay",
+        "crash-free",
+        "alerting"
+      ],
+      "globs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/proguard-rules.pro",
+        "**/*.gradle",
+        "**/Info.plist",
+        "**/sentry.properties",
+        "**/.sentryclirc",
+        "**/app.json",
+        "**/app.config.*"
+      ],
+      "references": [
+        {
+          "slug": "crash-reporting",
+          "title": "Crash Reporting Setup"
+        },
+        {
+          "slug": "events-and-tracing",
+          "title": "Breadcrumbs, Events, and Tracing"
+        },
+        {
+          "slug": "privacy-and-volume",
+          "title": "Privacy and Volume"
+        },
+        {
+          "slug": "silent-failures",
+          "title": "Silent Failures"
+        },
+        {
+          "slug": "symbolication",
+          "title": "Symbolication"
         }
       ]
     },

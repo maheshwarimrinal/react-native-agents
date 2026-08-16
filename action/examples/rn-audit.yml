@@ -44,7 +44,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: maheshwarimrinal/react-native-agents@v1.0.2
+      - uses: maheshwarimrinal/react-native-agents@v1.1.0
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
