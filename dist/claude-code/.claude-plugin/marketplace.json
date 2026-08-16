@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Expert React Native agents for performance, security, quality, a11y, testing, and release.",
-    "version": "1.0.2"
+    "version": "1.0.3"
   },
   "plugins": [
     {
       "name": "react-native-agents",
       "source": "./plugins/react-native-agents",
       "description": "Six specialist React Native agents: performance, security, code quality, UI/accessibility, testing, and release.",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "category": "development",
       "keywords": [
         "react-native",

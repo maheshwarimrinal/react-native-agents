@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: maheshwarimrinal/react-native-agents@v1.0.2
+      - uses: maheshwarimrinal/react-native-agents@v1.0.3
         with:
           provider: anthropic
           model: claude-sonnet-5
@@ -32,7 +32,7 @@ jobs:
 For OpenAI:
 
 ```yaml
-- uses: maheshwarimrinal/react-native-agents@v1.0.2
+- uses: maheshwarimrinal/react-native-agents@v1.0.3
   with:
     provider: openai
     model: gpt-5
