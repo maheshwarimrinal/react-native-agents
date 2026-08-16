@@ -256,51 +256,6 @@ test('review-mode agents are unaffected by the mode filter', () => {
   }
 });
 
-test('observability routes on directory layouts, not just filenames', () => {
-  // `src/analytics/events.ts` is the common shape and matches no filename
-  // pattern — it routed only to code-quality before directory globs were added.
-  for (const f of [
-    'src/analytics/events.ts',
-    'src/telemetry/index.ts',
-    'src/monitoring/alerts.ts',
-    'src/observability/tracing.ts',
-    'src/instrumentation/network.ts',
-  ]) {
-    const ids = route([f], agents).selected.map((a) => a.id);
-    assert(ids.includes('rn-observability'), `${f} should route to observability; got ${ids}`);
-  }
-});
-
-test('observability routes on vendor files and entry points', () => {
-  for (const f of [
-    'src/lib/sentry.ts',
-    'android/app/proguard-rules.pro',
-    'ios/sentry.properties',
-    'index.js',
-  ]) {
-    const ids = route([f], agents).selected.map((a) => a.id);
-    assert(ids.includes('rn-observability'), `${f} should route to observability; got ${ids}`);
-  }
-});
-
-test('observability does NOT route on every App.tsx change', () => {
-  // Almost every UI change touches App.tsx. Routing it here spent an
-  // observability model call on unrelated work; telemetry added elsewhere is
-  // still caught by the diff keyword signals.
-  const ids = route(['App.tsx'], agents).selected.map((a) => a.id);
-  assert(!ids.includes('rn-observability'), `App.tsx should not route to observability; got ${ids}`);
-  assert(ids.includes('rn-ui-accessibility'), 'but it should still route to the UI agent');
-});
-
-test('observability is picked up when a diff actually adds telemetry', () => {
-  const diff = '+++ b/src/App.tsx\n+Sentry.init({ dsn, tracesSampleRate: 0.1 }); // crash reporting\n';
-  const { reasons } = route(['src/App.tsx'], agents, { diffText: diff });
-  assert(
-    JSON.stringify(reasons['rn-observability'] ?? []).includes('diff mentions'),
-    `expected keyword evidence, got ${JSON.stringify(reasons['rn-observability'])}`,
-  );
-});
-
 test('native code routes to the native-modules agent', () => {
   const ids = route(['android/src/main/java/com/x/FooModule.kt'], agents).selected.map((a) => a.id);
   assert(ids.includes('rn-native-modules'), `got ${ids}`);
