@@ -3,9 +3,9 @@ name: Publish to npm
 # Publishes when a version tag is pushed:
 #   npm version patch && git push --follow-tags
 #
-# Requires an NPM_TOKEN secret: an npm "Automation" access token
-# (npmjs.com → Access Tokens → Generate → Automation), which bypasses 2FA
-# for CI while still requiring 2FA for interactive publishes.
+# Authentication is an npm trusted publisher (OIDC) bound to this repository and
+# this workflow file, configured at npmjs.com → package → Settings → Trusted
+# Publisher. No long-lived token is stored in repository secrets.
 on:
   push:
     tags: ['v*']
@@ -28,8 +28,16 @@ jobs:
 
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org
+
+      # OIDC trusted publishing needs npm >= 11.5.1. Older npm silently skips the
+      # token exchange and fails with ENEEDAUTH instead, so pin the floor here
+      # rather than relying on whichever npm the Node release happens to bundle.
+      - name: Ensure npm supports trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
 
       # No dependencies by design, so there is nothing to install.
       - name: Verify dist/ is in sync with agents/
@@ -60,11 +68,12 @@ jobs:
               console.log('files:', f.entryCount, '| unpacked:', (f.unpackedSize/1024/1024).toFixed(2)+'MB');
             });"
 
+      # Authentication comes from the npm trusted publisher (OIDC) configured for
+      # this package, using the id-token permission above. No NPM_TOKEN secret is
+      # involved, and provenance is attested from the workflow identity.
       - name: Publish
         if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Summary
         if: success()
