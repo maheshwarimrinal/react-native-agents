@@ -1,6 +1,6 @@
 {
   "name": "@maheshwarimrinal/react-native-agents",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Expert React Native agents for build failures, implementation, performance, security, code quality, accessibility, testing, native modules, and release — plus a deterministic bundle-size analyzer. Portable across Claude Code, Cursor, Windsurf, Copilot, Codex, MCP clients, and GitHub Actions.",
   "type": "module",
   "bin": {
