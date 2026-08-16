@@ -45,7 +45,7 @@ The GitHub Action reviews changed files using the relevant specialists and posts
 
 ```yaml
 - name: React Native audit
-  uses: maheshwarimrinal/react-native-agents@v1.0.2
+  uses: maheshwarimrinal/react-native-agents@v1.0.3
   with:
     provider: anthropic
     model: claude-sonnet-5
@@ -58,7 +58,7 @@ OpenAI is also supported:
 
 ```yaml
 - name: React Native audit
-  uses: maheshwarimrinal/react-native-agents@v1.0.2
+  uses: maheshwarimrinal/react-native-agents@v1.0.3
   with:
     provider: openai
     model: gpt-5
