@@ -1,0 +1,38 @@
+{
+  "agent": "rn-security",
+  "title": "Clean auth — SecureStore, single-flight refresh, server-side revocation",
+  "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
+
+  "notes": "Deliberately correct: refresh token in SecureStore with THIS_DEVICE_ONLY, access token in memory only, single-flight refresh, rotation on every refresh, server-side revocation before local deletion, responses validated with zod, no logging of tokens, no hardcoded secrets. A security agent is the most damaging place for false positives — a report crying wolf on correct code trains the team to skim. Tolerance is one P3 at most.",
+
+  "expectMaxFindings": 1,
+
+  "expect": [],
+
+  "forbid": [
+    {
+      "name": "claims tokens are in insecure storage when SecureStore is used",
+      "pattern": "asyncstorage|unencrypted|not encrypted|plaintext"
+    },
+    {
+      "name": "claims the token is logged",
+      "pattern": "console\\.(log|warn)|logged to|logging the token"
+    },
+    {
+      "name": "claims a hardcoded secret exists",
+      "pattern": "hardcoded (secret|key|token|credential)"
+    },
+    {
+      "name": "claims logout does not revoke server-side",
+      "pattern": "(logout|sign out)\\s+\\w*\\s*(does not|doesn't|fails to)\\s+\\w*\\s*(revoke|invalidate)"
+    },
+    {
+      "name": "recommends adding single-flight refresh that is already implemented",
+      "pattern": "(add|implement|introduce)\\s+\\w*\\s*(single[- ]flight|deduplicat)"
+    },
+    {
+      "name": "invents a CVE",
+      "pattern": "CVE-\\d{4}-\\d{4,}"
+    }
+  ]
+}

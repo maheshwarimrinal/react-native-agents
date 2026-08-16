@@ -23,6 +23,7 @@ Run these subagents in parallel where possible:
 - **rn-code-quality** — RN Code Quality
 - **rn-doctor** — RN Doctor
 - **rn-native-modules** — RN Native Modules
+- **rn-observability** — RN Observability
 - **rn-performance** — RN Performance
 - **rn-release** — RN Release
 - **rn-security** — RN Security

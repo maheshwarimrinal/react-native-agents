@@ -1,7 +1,7 @@
 {
   "name": "@maheshwarimrinal/react-native-agents",
-  "version": "1.0.3",
-  "description": "Expert React Native agents for build failures, implementation, performance, security, code quality, accessibility, testing, native modules, and release — plus a deterministic bundle-size analyzer. Portable across Claude Code, Cursor, Windsurf, Copilot, Codex, MCP clients, and GitHub Actions.",
+  "version": "1.1.0",
+  "description": "Expert React Native agents for build failures, implementation, performance, security, code quality, accessibility, testing, native modules, observability, and release \u2014 plus a deterministic bundle-size analyzer. Portable across Claude Code, Cursor, Windsurf, Copilot, Codex, MCP clients, and GitHub Actions.",
   "type": "module",
   "bin": {
     "react-native-agents": "./scripts/cli.mjs",
@@ -35,7 +35,11 @@
     "LICENSE",
     "evals",
     "knowledge.json",
-    "SECURITY.md"
+    "SECURITY.md",
+    "!**/.fuse_hidden*",
+    "!**/*.tgz",
+    "!**/.DS_Store",
+    "!evals/results.json"
   ],
   "keywords": [
     "react-native",
@@ -54,7 +58,10 @@
     "vibe-coding",
     "bundle-size",
     "turbomodules",
-    "build-errors"
+    "build-errors",
+    "observability",
+    "crash-reporting",
+    "monitoring"
   ],
   "license": "MIT",
   "engines": {

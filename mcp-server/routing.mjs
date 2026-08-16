@@ -132,6 +132,21 @@ export const SIGNALS = {
     weak: ['ios side', 'android side', 'wrap'],
   },
 
+  'rn-observability': {
+    strong: [
+      'crash reporting', 'crashlytics', 'sentry', 'new relic', 'newrelic', 'bugsnag',
+      'symbolicat', 'dsym', 'source map', 'sourcemap', 'stack trace', 'unreadable stack',
+      'no crashes', 'not reporting', 'not showing up', 'crash-free', 'crash free',
+      'breadcrumb', 'distributed tracing', 'session replay', 'observability', 'telemetry',
+      'instrumentation', 'proguard rules', 'minified stack',
+    ],
+    medium: [
+      'monitoring', 'analytics', 'metrics', 'logging', 'alerting', 'dashboard', 'tracing',
+      'custom event', 'error tracking', 'apm', 'proguard', 'release health', 'anr',
+    ],
+    weak: ['visibility', 'insight', 'report', 'track'],
+  },
+
   'rn-release': {
     strong: [
       'app store', 'play store', 'rejected', 'rejection', 'code signing', 'provisioning',
@@ -141,7 +156,10 @@ export const SIGNALS = {
     ],
     medium: [
       'release', 'deploy', 'publish', 'build', 'ship', 'submission', 'store', 'signing',
-      'sourcemap', 'source map', 'sentry', 'crash', 'monitoring', 'staged',
+      'staged',
+      // 'sentry', 'crash', 'monitoring', and 'source map' moved to
+      // rn-observability, which owns diagnosis. Release keeps the rollout-specific
+      // terms ('crash on launch', 'rollback') in its strong list.
     ],
     weak: ['production', 'launch', 'version'],
   },

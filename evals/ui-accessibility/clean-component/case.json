@@ -1,0 +1,38 @@
+{
+  "agent": "rn-ui-accessibility",
+  "title": "Clean component — labelled icon buttons, 44pt targets, theme tokens, scaling text",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Deliberately correct: every icon-only control has a role and an action-describing label, state is reported for the toggle, targets are 44x44 with hitSlop, colours come from the theme, text scales with a sane ceiling rather than being disabled, Android ripple and iOS pressed state both present, styles hoisted. Accessibility is where reflexive false positives are most likely, since the checklist is long and it is tempting to recite it. Tolerance is one P3.",
+
+  "expectMaxFindings": 1,
+
+  "expect": [],
+
+  "forbid": [
+    {
+      "name": "claims an icon button lacks an accessibility label",
+      "pattern": "(missing|no|without)\\s+\\w*\\s*(accessibilitylabel|accessibility label)"
+    },
+    {
+      "name": "claims touch targets are too small",
+      "pattern": "(touch )?targets?\\s+\\w*\\s*(are |is )?(too small|below|under)\\s*(the )?(44|48)?"
+    },
+    {
+      "name": "claims colours are hardcoded when the theme is used",
+      "pattern": "hardcoded (colou?rs?|hex)"
+    },
+    {
+      "name": "claims font scaling is disabled",
+      "pattern": "allowfontscaling\\s*=?\\s*\\{?false|font scaling (is )?disabled"
+    },
+    {
+      "name": "recommends adding a role that is already present",
+      "pattern": "(add|set|include)\\s+\\w*\\s*accessibilityrole"
+    },
+    {
+      "name": "asserts a contrast ratio it cannot compute from tokens",
+      "pattern": "contrast (ratio )?(of )?\\d(\\.\\d+)?:1"
+    }
+  ]
+}

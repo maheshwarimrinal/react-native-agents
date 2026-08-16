@@ -2,7 +2,7 @@
 
 # React Native Agents
 
-**Nine expert AI agents for React Native — build failures, implementation, performance, security, code quality, accessibility, testing, native modules, and release.**
+**Ten expert AI agents for React Native — build failures, implementation, performance, security, code quality, accessibility, testing, native modules, observability, and release.**
 
 Works with Claude Code, Cursor, Windsurf, GitHub Copilot, Codex, Zed, Aider, MCP clients, and GitHub Actions.
 
@@ -45,7 +45,7 @@ The GitHub Action reviews changed files using the relevant specialists and posts
 
 ```yaml
 - name: React Native audit
-  uses: maheshwarimrinal/react-native-agents@v1.0.3
+  uses: maheshwarimrinal/react-native-agents@v1.1.0
   with:
     provider: anthropic
     model: claude-sonnet-5
@@ -58,7 +58,7 @@ OpenAI is also supported:
 
 ```yaml
 - name: React Native audit
-  uses: maheshwarimrinal/react-native-agents@v1.0.3
+  uses: maheshwarimrinal/react-native-agents@v1.1.0
   with:
     provider: openai
     model: gpt-5
@@ -91,12 +91,13 @@ would rather accept partial coverage.
 | 🎨 UI & Accessibility | Layout, safe areas, screen readers, contrast, RTL, theming | `/rn-ui` |
 | 🧪 Testing | Jest, RNTL, mocking, Maestro, Detox, CI | `/rn-test` |
 | 🔧 Native Modules | TurboModules, Fabric, JSI, codegen, Swift/Kotlin, packaging, bridge migration | `/rn-native` |
+| 🔭 Observability | Crash reporting that silently doesn't work, symbolication, breadcrumbs, tracing, PII in telemetry | `/rn-observe` |
 | 🚀 Release | EAS, signing, OTA, stores, rollout, rollback | `/rn-release` |
 | 🔎 Audit | Runs and consolidates every review specialist | `/rn-audit` |
 
 Doctor and Build are deliberately excluded from pull-request routing — they need something brought to them, so firing them at a diff would spend tokens to say nothing.
 
-9 playbooks and 52 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
+10 playbooks and 57 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
 
 ## Bundle size, measured
 
