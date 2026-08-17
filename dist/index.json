@@ -1,6 +1,6 @@
 {
   "generatedAt": null,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "knowledge": {
     "$comment": "Freshness metadata for the React Native knowledge in agents/ and shared/. This is the single source of truth for 'what have we actually checked?'. The scheduled freshness workflow compares these against the live npm registry and opens an issue when they fall behind. Update `last_verified` only after genuinely reviewing the affected references — bumping the date without reading is worse than leaving it stale, because it launders an unchecked claim as a verified one.",
     "last_verified": "2026-08-12",
@@ -122,6 +122,107 @@
         {
           "slug": "typescript",
           "title": "TypeScript in React Native"
+        }
+      ]
+    },
+    {
+      "id": "rn-debug",
+      "name": "React Native Debug Agent",
+      "title": "RN Debug",
+      "description": "Use when a React Native app builds and runs but behaves wrong — a component re-rendering endlessly, state that will not update, a network call that silently fails, a layout that is right on one device and wrong on another, an animation that stutters, or a bug that only appears in release. Covers the post-Flipper tooling: React Native DevTools, the Hermes debugger, network and performance inspection.",
+      "version": "1.0.0",
+      "emoji": "🔍",
+      "color": "sky",
+      "command": "rn-debug",
+      "triggers": [
+        "not working",
+        "not updating",
+        "infinite loop",
+        "re-render",
+        "rerender",
+        "state not updating",
+        "silently fails",
+        "only in release",
+        "only on android",
+        "only on ios",
+        "cannot reproduce",
+        "flipper",
+        "devtools",
+        "debugger",
+        "console.log",
+        "breakpoint"
+      ],
+      "globs": [
+        "**/*.{ts,tsx,js,jsx}"
+      ],
+      "references": [
+        {
+          "slug": "method",
+          "title": "Debugging Method"
+        },
+        {
+          "slug": "network-and-async",
+          "title": "Network and Async Bugs"
+        },
+        {
+          "slug": "react-state-bugs",
+          "title": "State and Render Bugs"
+        },
+        {
+          "slug": "release-only-bugs",
+          "title": "Bugs That Only Happen in Release"
+        },
+        {
+          "slug": "tooling",
+          "title": "Tooling After Flipper"
+        }
+      ]
+    },
+    {
+      "id": "rn-dependencies",
+      "name": "React Native Dependencies Agent",
+      "title": "RN Dependencies",
+      "description": "Use when choosing, auditing, or removing a React Native dependency — is a library New Architecture ready, is it maintained, what does it cost in bundle size and native build time, is there a lighter alternative or a core API that already does it, and what does adding it commit you to. Answers the \"should we add this?\" question before it becomes a migration problem.",
+      "version": "1.0.0",
+      "emoji": "📦",
+      "color": "lime",
+      "command": "rn-deps",
+      "triggers": [
+        "should i use",
+        "which library",
+        "is this package",
+        "alternative to",
+        "add a dependency",
+        "remove a dependency",
+        "unmaintained",
+        "abandoned library",
+        "bundle size",
+        "new architecture support",
+        "library health"
+      ],
+      "globs": [
+        "**/package.json"
+      ],
+      "references": [
+        {
+          "slug": "alternatives",
+          "title": "Alternatives and Replacements"
+        },
+        {
+          "slug": "bundle-cost",
+          "title": "Bundle Cost"
+        },
+        {
+          "slug": "evaluation",
+          "title": "Evaluating a Dependency"
+        },
+        {
+          "slug": "health-signals",
+          "title": "Reading Maintenance Honestly"
+        },
+        {
+          "slug": "native-cost",
+          "title": "Native Dependencies Cost More"
         }
       ]
     },
@@ -609,6 +710,72 @@
         {
           "slug": "theming-and-dark-mode",
           "title": "Theming and Dark Mode"
+        }
+      ]
+    },
+    {
+      "id": "rn-upgrade",
+      "name": "React Native Upgrade Agent",
+      "title": "RN Upgrade",
+      "description": "Use for React Native and Expo version upgrades and New Architecture migration — planning an upgrade path, the RN/React/Expo/Gradle/Kotlin/Xcode version matrix, Fabric and TurboModule migration, the interop layer, Codegen specs, package scope moves, and breaking changes between versions. Specialises in the failures an upgrade introduces that do not appear until runtime.",
+      "version": "1.0.0",
+      "emoji": "⬆️",
+      "color": "pink",
+      "command": "rn-upgrade",
+      "triggers": [
+        "upgrade",
+        "migration",
+        "new architecture",
+        "fabric",
+        "turbomodule",
+        "turbo module",
+        "codegen",
+        "bridgeless",
+        "interop layer",
+        "version bump",
+        "expo sdk",
+        "breaking change",
+        "deprecated",
+        "upgrade helper",
+        "react native version"
+      ],
+      "globs": [
+        "**/package.json",
+        "**/*.gradle",
+        "**/gradle.properties",
+        "**/gradle-wrapper.properties",
+        "**/Podfile",
+        "**/Podfile.lock",
+        "**/react-native.config.js",
+        "**/metro.config.js",
+        "**/babel.config.js",
+        "**/app.json",
+        "**/app.config.*"
+      ],
+      "references": [
+        {
+          "slug": "breaking-changes",
+          "title": "Breaking Changes"
+        },
+        {
+          "slug": "dependency-compatibility",
+          "title": "Dependency Compatibility"
+        },
+        {
+          "slug": "method",
+          "title": "Upgrade Method"
+        },
+        {
+          "slug": "new-architecture",
+          "title": "New Architecture Migration"
+        },
+        {
+          "slug": "verification",
+          "title": "Verification"
+        },
+        {
+          "slug": "version-matrix",
+          "title": "Version Matrix"
         }
       ]
     }

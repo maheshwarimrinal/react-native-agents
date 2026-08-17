@@ -1,0 +1,49 @@
+{
+  "agent": "rn-upgrade",
+  "title": "Tooltip stopped working after upgrading across the Fabric boundary",
+  "context": { "reactNative": "0.87", "upgradedFrom": "0.74", "language": "TypeScript" },
+
+  "notes": "The canonical silent upgrade regression. The outer View wrapping the Pressable contributes no rendering, so Fabric flattens it out of the native hierarchy and the ref is never assigned. measureInWindow simply never fires its callback — no throw, no warning, green build. The failure mode being tested is diagnosing this as a React state or timing bug, which is what it superficially resembles. A correct answer names view flattening, connects it to the version change, and gives collapsable={false} or a restructure as the fix.",
+
+  "expect": [
+    {
+      "name": "identifies view flattening as the cause",
+      "any": ["flatten", "view flattening", "removed from the native", "collapsed"]
+    },
+    {
+      "name": "connects it to Fabric / the New Architecture",
+      "any": ["fabric", "new architecture", "new arch", "renderer"]
+    },
+    {
+      "name": "explains that the ref is never assigned rather than the measure failing",
+      "any": ["ref", "null", "never assigned", "not assigned"]
+    },
+    {
+      "name": "gives a concrete fix",
+      "any": ["collapsable={false}", "collapsable", "give the view", "restructure"]
+    },
+    {
+      "name": "notes that it fails silently",
+      "any": ["silent", "no error", "does not throw", "no warning", "compiles"]
+    }
+  ],
+
+  "expectSeverity": [{ "atLeast": "P1" }],
+
+  "forbid": [
+    {
+      "name": "diagnoses it as a React state or re-render timing problem",
+      "any": ["stale closure", "state update", "re-render timing", "useEffect instead"],
+      "unless": ["not the cause", "this is not", "unlikely", "rather than"]
+    },
+    {
+      "name": "recommends a setTimeout to wait for layout",
+      "pattern": "setTimeout",
+      "unless": ["not the fix", "do not", "avoid", "workaround that hides"]
+    },
+    {
+      "name": "invents a measured impact",
+      "pattern": "\\b\\d+\\s?(ms|fps|%)\\b.*(faster|slower|improvement)"
+    }
+  ]
+}

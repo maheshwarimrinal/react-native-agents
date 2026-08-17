@@ -1,0 +1,50 @@
+{
+  "agent": "rn-upgrade",
+  "title": "Upgrade lands on 0.87 with an unmigrated native library and a moved package",
+  "context": { "reactNative": "0.87", "upgradedFrom": "0.73", "language": "TypeScript" },
+
+  "notes": "Two problems that both survive a green build. react-native-legacy-scanner has not migrated to TurboModules, so it runs through the interop layer — working, but forfeiting concurrent features and synchronous layout, and nobody will notice because nothing errors. @react-native-community/async-storage is the pre-scope-move package name and is long superseded; on 0.87 this either fails to resolve or resolves to an unmaintained version. The failure mode being tested is reporting only what the build would have caught. A good answer names the interop cost explicitly as a cost rather than a bug, and treats the scope move as an individual lookup rather than a mechanical rename.",
+
+  "expect": [
+    {
+      "name": "flags the unmigrated library as running through the interop layer",
+      "any": ["interop", "not migrated", "legacy module", "bridge module", "turbomodule"]
+    },
+    {
+      "name": "states what interop costs rather than calling it broken",
+      "any": ["concurrent", "synchronous layout", "forfeit", "silently", "still works", "cost"]
+    },
+    {
+      "name": "flags the outdated community-scoped async-storage package",
+      "any": ["async-storage", "@react-native-community", "moved", "renamed", "scope"]
+    },
+    {
+      "name": "gives the maintained replacement path",
+      "any": ["@react-native-async-storage/async-storage", "replace", "maintained", "successor"]
+    },
+    {
+      "name": "does not assume the scope move is a mechanical rename",
+      "any": ["look up", "individually", "no predictable pattern", "case by case", "each"]
+    }
+  ],
+
+  "expectSeverity": [{ "atLeast": "P2" }],
+
+  "forbid": [
+    {
+      "name": "claims an unmigrated library will crash outright",
+      "pattern": "(will|would)\\s+crash",
+      "unless": ["may", "if", "not necessarily", "does not"]
+    },
+    {
+      "name": "recommends --legacy-peer-deps or --force to resolve it",
+      "any": ["--legacy-peer-deps", "--force"],
+      "unless": ["do not", "avoid", "masks", "not recommended"]
+    },
+    {
+      "name": "recommends a blanket find-and-replace across scopes",
+      "pattern": "(find and replace|sed -i|search and replace)\\s+.*(scope|@react-native)",
+      "unless": ["do not", "avoid", "will map some"]
+    }
+  ]
+}

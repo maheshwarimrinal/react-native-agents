@@ -158,6 +158,21 @@ export const SIGNALS = {
     'index.ts',
     'index.tsx',
   ],
+  'rn-upgrade': [
+    // Native template + toolchain files. These change during an upgrade and
+    // almost never otherwise, which makes them a high-precision signal.
+    '**/gradle-wrapper.properties',
+    '**/gradle.properties',
+    '**/build.gradle',
+    '**/Podfile',
+    '**/Podfile.lock',
+    '**/react-native.config.js',
+    '**/metro.config.js',
+    '**/babel.config.js',
+    // A react-native or expo version change lives here. The diff keyword
+    // signals below carry the rest.
+    '**/package.json',
+  ],
   'rn-native-modules': [
     // Kotlin/Swift/ObjC++ are RN-specific enough to route on their own.
     '**/*.{kt,swift,mm}',

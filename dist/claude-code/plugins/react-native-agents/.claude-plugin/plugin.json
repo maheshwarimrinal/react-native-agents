@@ -1,7 +1,7 @@
 {
   "name": "react-native-agents",
   "description": "Six specialist React Native agents: performance, security, code quality, UI/accessibility, testing, and release.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "MIT",
   "keywords": [
     "react-native",
