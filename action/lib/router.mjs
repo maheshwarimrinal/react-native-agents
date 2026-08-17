@@ -109,7 +109,10 @@ export const SIGNALS = {
     '**/*.{tsx,jsx}',
     '**/theme/**',
     '**/styles/**',
-    '**/*{Button,button,Modal,modal,Form,form,Input,input}*',
+    // Requires a component file extension. Without it, the bare word `input`
+    // matched every file called `input.txt`, and the accessibility agent was
+    // handed a CocoaPods error log and a Gradle config to review.
+    '**/*{Button,button,Modal,modal,Form,form,Input,input,Field,field,Picker,Switch,Checkbox}*.{tsx,jsx}',
     '**/*{locale,Locale,i18n,translation}*',
   ],
   'rn-code-quality': ['**/*.{ts,tsx,js,jsx}'],
@@ -131,6 +134,29 @@ export const SIGNALS = {
     '**/Podfile*',
     '**/package.json',
     '.github/workflows/**',
+  ],
+  'rn-observability': [
+    '**/*{sentry,Sentry,crashlytics,Crashlytics,newrelic,NewRelic,bugsnag,Bugsnag}*',
+    '**/*{telemetry,Telemetry,analytics,Analytics,tracking,Tracking,monitor,Monitor}*',
+    // Directory layouts, not just filenames — `src/analytics/events.ts` is the
+    // common shape and matches none of the patterns above.
+    '**/analytics/**',
+    '**/telemetry/**',
+    '**/monitoring/**',
+    '**/observability/**',
+    '**/instrumentation/**',
+    '**/proguard-rules.pro',
+    '**/sentry.properties',
+    '**/.sentryclirc',
+    // Root entry files only. SDK init belongs here, and moving it after an
+    // `await` silently loses startup crashes.
+    //
+    // `**\/App.tsx` was deliberately removed: almost every UI change touches
+    // App.tsx, so it fired an observability call on unrelated work. Telemetry
+    // added elsewhere is still caught by the diff keyword signals below.
+    'index.js',
+    'index.ts',
+    'index.tsx',
   ],
   'rn-native-modules': [
     // Kotlin/Swift/ObjC++ are RN-specific enough to route on their own.
@@ -170,6 +196,16 @@ export function isReviewAgent(agent) {
 export const IGNORED = [
   '**/node_modules/**',
   '**/dist/**',
+  // Everything inside an eval case directory (evals/<agent>/<case>/) is fixture
+  // data: deliberately broken inputs and their expectation files. Routing them
+  // produces findings that are accurate about the file and meaningless as
+  // review, which is what drowned the real findings on PR #11.
+  //
+  // Scoped to the case directory rather than all of evals/ so the harness
+  // itself (evals/run.mjs) is still reviewed like any other source file.
+  '**/evals/*/*/**',
+  '**/__fixtures__/**',
+  '**/fixtures/**',
   '**/build/**',
   '**/coverage/**',
   // Every lockfile, consistently. Previously only `*.lock` was excluded, so

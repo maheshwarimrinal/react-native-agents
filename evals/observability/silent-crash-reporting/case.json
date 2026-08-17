@@ -1,0 +1,59 @@
+{
+  "agent": "rn-observability",
+  "title": "Crash reporting that is disabled in release, initialised too late, and leaking PII",
+  "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
+
+  "notes": "Four defects stacked, and the ordering is what is being tested. The P0 is the inverted `if (__DEV__)` guard: crash reporting runs only in development, so production reports nothing while the dashboard looks healthy — indistinguishable from a stable app. An agent that leads with the PII issue or with tracesSampleRate has mis-prioritised. Second: init is inside an async bootstrap behind an await on AsyncStorage, so even in dev, startup crashes are missed. Third: sendDefaultPii plus setUser with email and username ships personal data to a third party. Fourth: no release/dist, so nothing can be attributed to a build and source maps can never match.",
+
+  "expect": [
+    {
+      "name": "identifies that crash reporting is disabled in release builds",
+      "any": ["__dev__", "development only", "only in dev", "disabled in production", "never runs in production", "release build"]
+    },
+    {
+      "name": "states the consequence — production reports nothing while looking healthy",
+      "any": ["no crashes", "nothing is reported", "silently", "blind", "looks healthy", "not captured", "will not report"]
+    },
+    {
+      "name": "flags that init happens after an await, missing startup crashes",
+      "any": ["await", "asyncstorage", "too late", "before", "startup", "module scope", "entry"]
+    },
+    {
+      "name": "flags PII being sent to the crash reporter",
+      "any": ["senddefaultpii", "pii", "email", "personal", "username", "setuser"]
+    },
+    {
+      "name": "flags the missing release and dist identity",
+      "any": ["release", "dist", "version", "attribut", "source map"]
+    },
+    {
+      "name": "recommends verifying end to end rather than trusting the config",
+      "any": ["verify", "test crash", "release build", "confirm", "symbolicat", "dashboard"]
+    }
+  ],
+
+  "expectSeverity": ["P0", "P1"],
+
+  "forbid": [
+    {
+      "name": "treats the setup as basically working",
+      "pattern": "(crash reporting|sentry)\\s+(is\\s+)?(correctly|properly|well)\\s+(configured|set up|initialised|initialized)"
+    },
+    {
+      "name": "leads with tracesSampleRate as the main issue",
+      "pattern": "^[\\s\\S]{0,400}tracessamplerate"
+    },
+    {
+      "name": "claims a debug build is sufficient verification",
+      "pattern": "(test|verify|check)\\s+\\w*\\s*in\\s+(a\\s+)?(debug|development)\\s+build"
+    },
+    {
+      "name": "invents a Sentry option that does not exist",
+      "any": ["enableProductionMode", "Sentry.enableRelease", "captureAllErrors:", "autoEnable:"]
+    },
+    {
+      "name": "invents a measurement of how many crashes were missed",
+      "pattern": "\\b\\d+%?\\s*(of\\s+)?(crashes|errors|events)\\s+(were|are|have been)\\s+(missed|lost|dropped)"
+    }
+  ]
+}

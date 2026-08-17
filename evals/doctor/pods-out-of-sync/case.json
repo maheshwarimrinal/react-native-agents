@@ -1,0 +1,50 @@
+{
+  "agent": "rn-doctor",
+  "title": "Pods out of sync after a merge that added a native dependency",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "The single most common iOS failure after `git pull`, and the evidence is complete: the error names the cause, the diff shows package.json and Podfile.lock changed, Android is unaffected (JS-only install is enough there), and a colleague on the same commit succeeds because they ran pod install. The correct answer is one command. The failure mode being tested is over-diagnosis — an agent that proposes DerivedData wipes, a full reinstall, or Ruby/architecture debugging has ignored an error message that states the cause outright.",
+
+  "expect": [
+    {
+      "name": "identifies that pod install was not run after the dependency change",
+      "any": ["pod install", "podfile.lock", "not run", "out of sync", "native dependency"]
+    },
+    {
+      "name": "gives the actual fix",
+      "any": ["cd ios", "pod install", "npx pod-install", "bundle exec pod install"]
+    },
+    {
+      "name": "connects it to the biometric dependency added in the merge",
+      "any": ["biometric", "new dependency", "added", "the merge", "package.json"]
+    },
+    {
+      "name": "explains why Android was unaffected",
+      "any": ["android", "autolink", "gradle", "only ios", "cocoapods"]
+    }
+  ],
+
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "recommends wiping DerivedData for a self-explanatory error",
+      "all": ["deriveddata"],
+      "unless": ["if that fails", "only if", "last resort", "not needed", "unnecessary"]
+    },
+    {
+      "name": "recommends deleting node_modules",
+      "pattern": "(rm -rf|delete|remove)\\s+node_modules",
+      "unless": ["not needed", "unnecessary", "if that fails", "last resort"]
+    },
+    {
+      "name": "sends the developer down an architecture or Ruby rabbit hole",
+      "any": ["arch -x86_64", "rosetta", "rbenv", "gem install ffi"],
+      "unless": ["not the cause", "unlikely", "if that fails"]
+    },
+    {
+      "name": "blames a stale cache when the error names the cause",
+      "pattern": "(stale|clear the)\\s+cache\\s+(is|as)\\s+the\\s+(cause|problem)"
+    }
+  ]
+}

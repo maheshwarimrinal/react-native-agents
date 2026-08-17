@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
-const { globToRegExp, matchesGlob, isIgnored, route, addedLines } = await import('./lib/router.mjs');
+const { globToRegExp, matchesGlob, isIgnored, route, addedLines, SIGNALS } = await import('./lib/router.mjs');
 const { parseDiff, renderForPrompt, findPosition, nearestChangedLine, changedFilePaths } =
   await import('./lib/diff.mjs');
 const { LLM, estimateTokens, estimateCost, BudgetExceededError } = await import('./lib/llm.mjs');
@@ -73,6 +73,45 @@ test('glob: brace alternation', () => {
   assert(matchesGlob('a/b.ts', '**/*.{ts,tsx}'));
   assert(matchesGlob('a/b.tsx', '**/*.{ts,tsx}'));
   assert(!matchesGlob('a/b.js', '**/*.{ts,tsx}'));
+
+// --- PR #11 regressions -------------------------------------------------
+
+test('eval fixtures are never routed for review', () => {
+  // They are deliberately broken — that is their purpose. Reviewing them
+  // produces findings that are accurate about the file and useless as review.
+  // On PR #11 they generated 6 of 15 findings and buried the real ones.
+  for (const f of [
+    'evals/doctor/pods-out-of-sync/input.txt',
+    'evals/observability/proguard-strips-sdk/input.txt',
+    'evals/observability/silent-crash-reporting/input.tsx',
+    'evals/performance/clean-list/input.tsx',
+    // Expectation files too — ignoring only `input.*` left these leaking, and
+    // rn-observability reviewed two of them on PR #11.
+    'evals/observability/proguard-strips-sdk/case.json',
+    'evals/observability/silent-crash-reporting/case.json',
+    'evals/code-quality/clean-hook/case.json',
+  ]) {
+    assert(isIgnored(f), `${f} should be ignored`);
+  }
+
+  // The harness is real source and stays reviewable.
+  assert(!isIgnored('evals/run.mjs'), 'the eval runner should still be reviewed');
+});
+
+test('a11y signal does not match a file merely named "input"', () => {
+  // `**/*{...,Input,input}*` had no extension constraint, so `input.txt` matched
+  // and the accessibility agent was handed a CocoaPods error log to review.
+  const sig = SIGNALS['rn-ui-accessibility'];
+  const inputGlob = sig.find((g) => g.includes('Input'));
+
+  assert(!matchesGlob('some/dir/input.txt', inputGlob), 'input.txt must not match');
+  assert(!matchesGlob('android/proguard-rules.pro', inputGlob));
+
+  // ...while real component files still do.
+  assert(matchesGlob('src/components/TextInput.tsx', inputGlob));
+  assert(matchesGlob('src/ui/LoginForm.tsx', inputGlob));
+  assert(matchesGlob('src/components/button.jsx', inputGlob));
+});
 });
 
 test('glob: dots are literal, not wildcards', () => {
@@ -254,6 +293,51 @@ test('review-mode agents are unaffected by the mode filter', () => {
     const a = agents.find((x) => x.id === id);
     assert(isReviewAgent(a), `${id} should be reviewable (mode=${a.mode})`);
   }
+});
+
+test('observability routes on directory layouts, not just filenames', () => {
+  // `src/analytics/events.ts` is the common shape and matches no filename
+  // pattern — it routed only to code-quality before directory globs were added.
+  for (const f of [
+    'src/analytics/events.ts',
+    'src/telemetry/index.ts',
+    'src/monitoring/alerts.ts',
+    'src/observability/tracing.ts',
+    'src/instrumentation/network.ts',
+  ]) {
+    const ids = route([f], agents).selected.map((a) => a.id);
+    assert(ids.includes('rn-observability'), `${f} should route to observability; got ${ids}`);
+  }
+});
+
+test('observability routes on vendor files and entry points', () => {
+  for (const f of [
+    'src/lib/sentry.ts',
+    'android/app/proguard-rules.pro',
+    'ios/sentry.properties',
+    'index.js',
+  ]) {
+    const ids = route([f], agents).selected.map((a) => a.id);
+    assert(ids.includes('rn-observability'), `${f} should route to observability; got ${ids}`);
+  }
+});
+
+test('observability does NOT route on every App.tsx change', () => {
+  // Almost every UI change touches App.tsx. Routing it here spent an
+  // observability model call on unrelated work; telemetry added elsewhere is
+  // still caught by the diff keyword signals.
+  const ids = route(['App.tsx'], agents).selected.map((a) => a.id);
+  assert(!ids.includes('rn-observability'), `App.tsx should not route to observability; got ${ids}`);
+  assert(ids.includes('rn-ui-accessibility'), 'but it should still route to the UI agent');
+});
+
+test('observability is picked up when a diff actually adds telemetry', () => {
+  const diff = '+++ b/src/App.tsx\n+Sentry.init({ dsn, tracesSampleRate: 0.1 }); // crash reporting\n';
+  const { reasons } = route(['src/App.tsx'], agents, { diffText: diff });
+  assert(
+    JSON.stringify(reasons['rn-observability'] ?? []).includes('diff mentions'),
+    `expected keyword evidence, got ${JSON.stringify(reasons['rn-observability'])}`,
+  );
 });
 
 test('native code routes to the native-modules agent', () => {

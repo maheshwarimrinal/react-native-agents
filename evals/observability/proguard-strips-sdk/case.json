@@ -1,0 +1,57 @@
+{
+  "agent": "rn-observability",
+  "title": "Android crashes never reported because ProGuard rules omit the SDK",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "The defining case for this agent. Every signal points one way: R8 is on, there are no keep rules for com.newrelic.**, no SourceFile/LineNumberTable attributes, crashes are Android-only, sessions and network data arrive fine (those are runtime calls that survive obfuscation), and Play Console independently confirms users are crashing. The team believed they had crash reporting for four months. An agent that treats an empty crash list as good news, or that starts by suggesting more instrumentation, has missed the entire point.",
+
+  "expect": [
+    {
+      "name": "identifies missing ProGuard keep rules for the crash reporter",
+      "any": ["proguard", "keep rule", "r8", "com.newrelic", "stripped", "obfuscat"]
+    },
+    {
+      "name": "gives the actual keep rules to add",
+      "any": ["-keep class com.newrelic", "-dontwarn", "-keepattributes"]
+    },
+    {
+      "name": "flags the missing SourceFile and LineNumberTable attributes",
+      "any": ["sourcefile", "linenumbertable", "line number"]
+    },
+    {
+      "name": "explains why sessions and network data still arrived",
+      "any": ["session", "network", "runtime", "still work", "not stripped", "different"]
+    },
+    {
+      "name": "treats the empty crash list as evidence of breakage, not health",
+      "any": ["not working", "silently", "blind", "believe", "misleading", "empty crash list", "no crashes"]
+    },
+    {
+      "name": "requires end-to-end verification in a release build",
+      "any": ["release build", "test crash", "crashnow", "verify", "confirm"]
+    }
+  ],
+
+  "expectSeverity": ["P0", "P1"],
+
+  "forbid": [
+    {
+      "name": "reads the empty crash list as a healthy app",
+      "pattern": "(no crashes|crash[- ]free|empty crash list)\\s+\\w*\\s*(is|means|suggests)\\s+\\w*\\s*(good|healthy|stable|fine)"
+    },
+    {
+      "name": "recommends adding more instrumentation before fixing the pipeline",
+      "pattern": "^[\\s\\S]{0,500}(add|record)\\s+(more\\s+)?(custom events|breadcrumbs|metrics)"
+    },
+    {
+      "name": "suggests disabling minification as the fix",
+      "pattern": "(disable|turn off|set)\\s+minifyenabled\\s*(to\\s*)?false",
+      "unless": ["not recommended", "avoid", "rather than", "instead"]
+    },
+    {
+      "name": "blames the iOS side when the failure is Android-only",
+      "pattern": "dsym|ios (crash|symbolicat)",
+      "unless": ["ios is fine", "not the issue", "already working", "unaffected", "by contrast"]
+    }
+  ]
+}

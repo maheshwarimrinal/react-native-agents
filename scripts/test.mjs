@@ -4,7 +4,7 @@
  *
  *   node scripts/test.mjs
  */
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -404,6 +404,29 @@ test('files allowlist covers everything the bins need at runtime', () => {
   }
 });
 
+test('the published tarball contains no filesystem residue', () => {
+  // npm ships everything under an allowlisted directory and does NOT consult
+  // .gitignore for it. Editor swap files, FUSE residue, and stray tarballs will
+  // ship to every consumer unless the allowlist excludes them explicitly.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  for (const neg of ['!**/.fuse_hidden*', '!**/*.tgz', '!**/.DS_Store']) {
+    assert(pkg.files?.includes(neg), `"files" should exclude ${neg}`);
+  }
+
+  const out = execFileSync('npm', ['pack', '--dry-run', '--json'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  const parsed = JSON.parse(out);
+  const entry = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+  const junk = entry.files
+    .map((f) => f.path)
+    .filter((p) => /\.fuse_hidden|\.DS_Store|\.tgz$|~$|\.orig$|\.rej$|\.swp$/.test(p));
+  assert(junk.length === 0, `tarball contains residue: ${junk.slice(0, 5).join(', ')}`);
+});
+
 await testAsync('CLI `mcp` subcommand starts the MCP server', async () => {
   // This is the entry point every MCP client config uses — it must route to the
   // server, not fall through to the unknown-command branch.
@@ -584,6 +607,33 @@ test('routing: semantic phrasing with no jargon still routes', () => {
   eq(ranked[0].confidence, 'high', `confidence was ${ranked[0].confidence}`);
 });
 
+test('routing: crash-reporting language beats release, not ties with it', () => {
+  // rn-release carried 'sentry'/'crash'/'monitoring' in its medium list, which
+  // tied with rn-observability on "Sentry shows no production crashes".
+  for (const task of [
+    'Sentry shows no production crashes',
+    'crashes are not showing up in the dashboard',
+    'our stack traces are unreadable',
+  ]) {
+    const ranked = scoreAgents(task, agents);
+    eq(ranked[0]?.id, 'rn-observability', `"${task}" ranked: ${ranked.slice(0, 2).map((r) => `${r.id}(${r.score})`).join(', ')}`);
+    assert(
+      ranked.length < 2 || ranked[0].score > ranked[1].score,
+      `tie on "${task}": ${ranked.slice(0, 2).map((r) => `${r.id}(${r.score})`).join(' vs ')}`,
+    );
+  }
+});
+
+test('routing: release still wins its own vocabulary', () => {
+  for (const [task, expected] of [
+    ['the store rejected my build', 'rn-release'],
+    ['plan the OTA rollback', 'rn-release'],
+    ['code signing certificate expired', 'rn-release'],
+  ]) {
+    eq(scoreAgents(task, agents)[0]?.id, expected, task);
+  }
+});
+
 test('routing: unrelated text matches nothing rather than guessing', () => {
   eq(scoreAgents('how do I make a burrito', agents).length, 0);
 });
@@ -608,8 +658,49 @@ test('eval cases reference real agents and have assertions', () => {
   const ids = new Set(agents.map((a) => a.id));
   for (const c of evalCases) {
     assert(ids.has(c.def.agent), `${c.id}: unknown agent ${c.def.agent}`);
-    assert(c.def.expect?.length > 0, `${c.id}: no expectations`);
+    // A clean case has no `expect` entries by design — its entire assertion is
+    // that the agent reported (almost) nothing.
+    const asserts = c.def.expect?.length > 0 || c.def.expectMaxFindings !== undefined;
+    assert(asserts, `${c.id}: no expectations`);
     assert(c.input.trim().length > 50, `${c.id}: fixture too small to be meaningful`);
+  }
+});
+
+test('every agent has a clean case or more than one case', () => {
+  // One case per agent is where silent quality regressions hide. This asserts
+  // what its name says: either the agent is measured for noise (a clean case),
+  // or it has at least two failure cases covering different modes.
+  const byAgent = {};
+  for (const c of evalCases) (byAgent[c.def.agent] ??= []).push(c);
+
+  const thin = [];
+  for (const a of agents) {
+    const cases = byAgent[a.id] ?? [];
+    assert(cases.length >= 1, `${a.id} has no eval case`);
+    const hasClean = cases.some((c) => c.def.expectMaxFindings !== undefined);
+    if (!hasClean && cases.length < 2) thin.push(a.id);
+  }
+  assert(
+    thin.length === 0,
+    `these agents need a clean case or a second case: ${thin.join(', ')}`,
+  );
+});
+
+test('enough clean cases exist to measure noise across the collection', () => {
+  const clean = evalCases.filter((c) => c.def.expectMaxFindings !== undefined);
+  assert(
+    clean.length >= 6,
+    `only ${clean.length} clean (noise) case(s) — these are what catch false positives`,
+  );
+});
+
+test('clean cases forbid the findings they are designed to catch', () => {
+  for (const c of evalCases.filter((x) => x.def.expectMaxFindings !== undefined)) {
+    assert(
+      (c.def.forbid ?? []).length >= 3,
+      `${c.id}: a clean case needs forbid rules naming the likely false positives`,
+    );
+    assert(c.def.expectMaxFindings <= 2, `${c.id}: a clean case with a loose cap tests nothing`);
   }
 });
 
