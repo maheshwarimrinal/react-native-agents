@@ -138,6 +138,131 @@ test('ignores build output, lockfiles, and binaries', () => {
 
 const agents = loadAgents();
 
+test('new review agents: positive routing', () => {
+  // Every review agent added in 1.2.0 had signals but no tests. These assert
+  // the shapes each one is meant to catch.
+  const cases = [
+    ['src/navigation/RootNavigator.tsx', 'rn-navigation'],
+    ['src/app/_layout.tsx', 'rn-navigation'],
+    ['public/.well-known/assetlinks.json', 'rn-navigation'],
+    ['src/offline/storage.ts', 'rn-offline'],
+    ['src/offline/mutationQueue.ts', 'rn-offline'],
+    ['src/sync/flush.ts', 'rn-offline'],
+    ['src/permissions/ensure.ts', 'rn-permissions'],
+    ['src/hooks/useCameraPermission.ts', 'rn-permissions'],
+    ['ios/Acme/Info.plist', 'rn-permissions'],
+    ['src/components/LoginModal.tsx', 'rn-platform-parity'],
+    ['src/ui/Picker.android.tsx', 'rn-platform-parity'],
+    ['src/push/notificationHandler.ts', 'rn-push'],
+    ['android/app/google-services.json', 'rn-push'],
+    ['src/stores/cartStore.ts', 'rn-state'],
+    ['src/features/cart/cartSlice.ts', 'rn-state'],
+    ['android/gradle.properties', 'rn-upgrade'],
+    ['ios/Podfile', 'rn-upgrade'],
+  ];
+
+  for (const [file, expected] of cases) {
+    const ids = route([file], agents).selected.map((a) => a.id);
+    assert(ids.includes(expected), `${file} should route to ${expected}, got: ${ids.join(', ')}`);
+  }
+});
+
+test('new review agents: negative routing', () => {
+  // Several of these patterns are broad, and three of them over-matched in
+  // review. Each entry is a file that must NOT reach that agent.
+  const cases = [
+    // "Store" as a prefix is not a state module.
+    ['src/StorefrontScreen.tsx', 'rn-state'],
+    ['src/components/Storybook.tsx', 'rn-state'],
+    // A component that displays a photo does not handle a permission.
+    ['src/PhotoCard.tsx', 'rn-permissions'],
+    ['src/components/CameraIcon.tsx', 'rn-permissions'],
+    ['src/components/LocationPin.tsx', 'rn-permissions'],
+    // Plain UI is not a platform-divergence signal; that would duplicate
+    // rn-ui-accessibility on every .tsx in the repository.
+    ['src/components/Card.tsx', 'rn-platform-parity'],
+    // Not every screen is a navigator.
+    ['src/features/orders/OrderScreen.tsx', 'rn-navigation'],
+    // A cache utility is not offline sync on its own... but `cache` IS an
+    // offline signal, so use something genuinely unrelated.
+    ['src/utils/formatCurrency.ts', 'rn-offline'],
+    ['README.md', 'rn-upgrade'],
+  ];
+
+  for (const [file, forbidden] of cases) {
+    const ids = route([file], agents).selected.map((a) => a.id);
+    assert(!ids.includes(forbidden), `${file} should NOT route to ${forbidden}, got: ${ids.join(', ')}`);
+  }
+});
+
+test('package.json only signals an upgrade when a core version moves', () => {
+  // package.json changes on every dependency addition. Matching it
+  // unconditionally put rn-upgrade on every PR that added a library.
+  const header = 'diff --git a/package.json b/package.json\n+++ b/package.json\n';
+
+  const libraryOnly = header + '+    "react-native-svg": "^15.2.0",';
+  const idsLib = route(['package.json'], agents, { diffText: libraryOnly }).selected.map((a) => a.id);
+  assert(!idsLib.includes('rn-upgrade'), `library add should not route to upgrade: ${idsLib.join(', ')}`);
+
+  for (const line of [
+    '+    "react-native": "0.87.0",',
+    '+    "react": "19.2.0",',
+    '+    "expo": "~57.0.0",',
+    '+    "@react-native/babel-preset": "0.87.0",',
+  ]) {
+    const ids = route(['package.json'], agents, { diffText: header + line }).selected.map((a) => a.id);
+    assert(ids.includes('rn-upgrade'), `${line.trim()} should route to upgrade: ${ids.join(', ')}`);
+  }
+});
+
+test('no agent declares a signal that IGNORED unconditionally drops', () => {
+  // rn-upgrade declared '**/Podfile.lock' while IGNORED drops every *.lock,
+  // so the signal could never fire. A dead signal reads as coverage and is not.
+  // Both halves matter: ignored files to detect a dead signal, and live files
+  // of the same shapes so a legitimately broad signal is not mistaken for one.
+  const ignoredSamples = [
+    'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'ios/Podfile.lock',
+    'node_modules/x/index.js', 'dist/out.js', 'evals/perf/case/input.tsx',
+  ];
+  const liveSamples = [
+    'src/components/Card.tsx', 'src/utils/format.ts', 'index.js', 'src/a.jsx',
+    'ios/Podfile', 'android/build.gradle', 'android/gradle.properties',
+    'package.json', 'app.json', 'ios/Acme/Info.plist',
+    'android/app/src/main/AndroidManifest.xml', 'src/stores/cartStore.ts',
+    'src/offline/queue.ts', 'src/navigation/Root.tsx', 'metro.config.js',
+    '.github/workflows/ci.yml', 'src/Button.tsx', 'ios/Acme/Acme.entitlements',
+    'android/app/google-services.json', 'src/api/client.ts', 'src/theme/tokens.ts',
+    'android/app/proguard-rules.pro', 'src/ui/Picker.android.tsx',
+    'src/__tests__/a.test.ts', 'src/NativeFoo.ts', 'ios/Foo.podspec',
+    'public/.well-known/assetlinks.json', 'src/permissions/ensure.ts',
+    'src/push/handler.ts', 'src/app/_layout.tsx',
+  ];
+  const samples = [...ignoredSamples, ...liveSamples];
+  for (const [id, globs] of Object.entries(SIGNALS)) {
+    for (const g of globs) {
+      const dead = samples.filter((f) => matchesGlob(f, g) && isIgnored(f));
+      const live = samples.some((f) => matchesGlob(f, g) && !isIgnored(f));
+      assert(
+        dead.length === 0 || live,
+        `${id}: signal ${g} only ever matches ignored files (${dead.join(', ')})`,
+      );
+    }
+  }
+});
+
+test('refinements fail open when no diff body is available', () => {
+  // Suppressing a specialist because we could not read the diff is a worse
+  // failure than running it unnecessarily.
+  const ids = route(['package.json'], agents).selected.map((a) => a.id);
+  assert(ids.includes('rn-upgrade'), `should fail open, got: ${ids.join(', ')}`);
+});
+
+test('a diff that touches nothing relevant routes to nobody', () => {
+  const ids = route(['README.md', 'LICENSE', 'docs/guide.md'], agents).selected.map((a) => a.id);
+  assert(ids.length === 0, `expected no agents, got: ${ids.join(', ')}`);
+});
+
+
 test('routes eas.json to release, not accessibility', () => {
   const { selected } = route(['eas.json'], agents);
   const ids = selected.map((a) => a.id);

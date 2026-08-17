@@ -1,0 +1,35 @@
+{
+  "agent": "rn-permissions",
+  "title": "A permission resolver that handles every status",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Clean case. Every status is branched explicitly, LIMITED is correctly treated as a grant, UNAVAILABLE is distinguished from BLOCKED so the UI does not offer a useless Settings link, DENIED requests once and re-classifies the result, and a resume watcher re-checks status after the user may have changed it in Settings. The subscription is cleaned up. The failure mode being tested is manufacturing findings — most likely claiming BLOCKED is unhandled because openSettings is not called here (it is deliberately the caller's concern; this function returns a reason), or demanding request timing advice that does not apply to a resolver.",
+
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "claims blocked is not distinguished",
+      "pattern": "(does not|doesn't|fails to)\\s+distinguish.{0,25}block"
+    },
+    {
+      "name": "claims limited is mishandled",
+      "pattern": "limited.{0,40}(mishandl|incorrect|treated as|should be)"
+    },
+    {
+      "name": "claims there is no re-check after returning from Settings",
+      "pattern": "(missing|no|lacks?)\\s+.{0,25}(appstate|re-?check|resume)"
+    },
+    {
+      "name": "claims the listener is not cleaned up",
+      "pattern": "(not|never|fails? to)\\s+(remove|clean|unsubscrib)"
+    },
+    {
+      "name": "demands openSettings be called inside the resolver",
+      "pattern": "should\\s+call\\s+opensettings",
+      "unless": ["caller", "not", "correctly", "fine"]
+    }
+  ]
+}

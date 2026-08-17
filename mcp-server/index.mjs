@@ -104,7 +104,7 @@ const TOOLS = [
   {
     name: 'get_audit_plan',
     description:
-      'Return a structured, ordered plan for a full React Native audit across all six specialists, including the project-detection step and how to consolidate findings.',
+      'Return a structured, ordered plan for a full React Native audit across every review specialist, including the project-detection step and how to consolidate findings.',
     inputSchema: {
       type: 'object',
       properties: {

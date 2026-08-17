@@ -343,6 +343,60 @@
       ]
     },
     {
+      "id": "rn-navigation",
+      "name": "React Native Navigation Agent",
+      "title": "RN Navigation",
+      "description": "Use for React Native navigation architecture and routing — React Navigation and Expo Router structure, deep linking with Universal Links and App Links, authentication guards and post-login redirects, typed routes and params, nested navigators, modal presentation, and navigation state persistence. Covers the routing bugs that only appear on cold start or from an external link.",
+      "version": "1.0.0",
+      "emoji": "🧭",
+      "color": "emerald",
+      "command": "rn-nav",
+      "triggers": [
+        "navigation",
+        "navigator",
+        "deep link",
+        "deeplink",
+        "universal link",
+        "app link",
+        "expo router",
+        "react navigation",
+        "createstacknavigator",
+        "navigationcontainer",
+        "useroute",
+        "usenavigation",
+        "protected route",
+        "auth guard",
+        "redirect after login"
+      ],
+      "globs": [
+        "**/*.{ts,tsx}",
+        "**/AndroidManifest.xml",
+        "**/*.entitlements"
+      ],
+      "references": [
+        {
+          "slug": "auth-and-guards",
+          "title": "Auth Guards and Redirects"
+        },
+        {
+          "slug": "common-bugs",
+          "title": "Common Navigation Bugs"
+        },
+        {
+          "slug": "deep-linking",
+          "title": "Deep Linking"
+        },
+        {
+          "slug": "params-and-typing",
+          "title": "Params and Typing"
+        },
+        {
+          "slug": "structure",
+          "title": "Navigation Structure"
+        }
+      ]
+    },
+    {
       "id": "rn-observability",
       "name": "React Native Observability Agent",
       "title": "RN Observability",
@@ -404,6 +458,106 @@
         {
           "slug": "symbolication",
           "title": "Symbolication"
+        }
+      ]
+    },
+    {
+      "id": "rn-offline",
+      "name": "React Native Offline Agent",
+      "title": "RN Offline",
+      "description": "Use for offline-first behaviour in React Native — network state detection, cache and persistence strategy, mutation queues, retry and idempotency, optimistic updates and rollback, conflict resolution, and background sync. Covers the failures that only appear on a bad connection, which is the condition your users are in and your development machine never is.",
+      "version": "1.0.0",
+      "emoji": "📴",
+      "color": "slate",
+      "command": "rn-offline",
+      "triggers": [
+        "offline",
+        "offline-first",
+        "netinfo",
+        "network state",
+        "sync",
+        "background sync",
+        "mutation queue",
+        "optimistic update",
+        "conflict resolution",
+        "retry",
+        "idempotency",
+        "cache invalidation",
+        "persist",
+        "stale data"
+      ],
+      "globs": [
+        "**/*.{ts,tsx,js,jsx}"
+      ],
+      "references": [
+        {
+          "slug": "conflicts",
+          "title": "Conflicts"
+        },
+        {
+          "slug": "detection",
+          "title": "Network Detection"
+        },
+        {
+          "slug": "read-path",
+          "title": "The Read Path"
+        },
+        {
+          "slug": "ux-and-honesty",
+          "title": "Telling the User the Truth"
+        },
+        {
+          "slug": "write-path",
+          "title": "The Write Path"
+        }
+      ]
+    },
+    {
+      "id": "rn-onboard",
+      "name": "React Native Onboarding Agent",
+      "title": "RN Onboard",
+      "description": "Use when orienting in an unfamiliar React Native codebase — mapping the architecture, finding where things actually live, inferring the team's conventions, identifying the landmines and the load-bearing code, and working out what to read first and how to make a safe first change. For joining a project, inheriting a client app, or auditing before quoting work.",
+      "version": "1.0.0",
+      "emoji": "🗺️",
+      "color": "azure",
+      "command": "rn-onboard",
+      "triggers": [
+        "new codebase",
+        "inherited",
+        "unfamiliar",
+        "where is",
+        "how does this app",
+        "explain this project",
+        "onboarding",
+        "just joined",
+        "taking over",
+        "what does this do",
+        "code walkthrough",
+        "architecture overview"
+      ],
+      "globs": [
+        "**/*"
+      ],
+      "references": [
+        {
+          "slug": "conventions",
+          "title": "Inferring Conventions"
+        },
+        {
+          "slug": "first-change",
+          "title": "Making the First Change"
+        },
+        {
+          "slug": "landmines",
+          "title": "Landmines"
+        },
+        {
+          "slug": "method",
+          "title": "Orientation Method"
+        },
+        {
+          "slug": "the-map",
+          "title": "Building the Map"
         }
       ]
     },
@@ -471,6 +625,171 @@
         {
           "slug": "startup-and-bundle",
           "title": "Startup Time and Bundle Size"
+        }
+      ]
+    },
+    {
+      "id": "rn-permissions",
+      "name": "React Native Permissions Agent",
+      "title": "RN Permissions",
+      "description": "Use for runtime permission handling in React Native — camera, location, photos, microphone, notifications, contacts and Bluetooth. Covers the iOS/Android semantic differences, purpose strings and manifest declarations, rationale and denial flows, \"never ask again\", settings deep links, and the partial-grant states that code written for one platform silently mishandles.",
+      "version": "1.0.0",
+      "emoji": "🔐",
+      "color": "amber",
+      "command": "rn-permissions",
+      "triggers": [
+        "permission",
+        "permissions",
+        "requestpermission",
+        "camera access",
+        "location access",
+        "photo library",
+        "microphone",
+        "never ask again",
+        "nsusagedescription",
+        "usage description",
+        "rationale",
+        "blocked",
+        "denied",
+        "openSettings"
+      ],
+      "globs": [
+        "**/*.{ts,tsx,js,jsx}",
+        "**/AndroidManifest.xml",
+        "**/Info.plist",
+        "**/app.json",
+        "**/app.config.*"
+      ],
+      "references": [
+        {
+          "slug": "declarations",
+          "title": "Declarations"
+        },
+        {
+          "slug": "denial-and-recovery",
+          "title": "Denial and Recovery"
+        },
+        {
+          "slug": "per-permission-notes",
+          "title": "Per-Permission Notes"
+        },
+        {
+          "slug": "platform-semantics",
+          "title": "Platform Semantics"
+        },
+        {
+          "slug": "request-flows",
+          "title": "Request Flows"
+        }
+      ]
+    },
+    {
+      "id": "rn-platform-parity",
+      "name": "React Native Platform Parity Agent",
+      "title": "RN Platform Parity",
+      "description": "Use for behaviour that differs between iOS and Android — keyboard avoidance, safe areas and notches, the Android hardware back button, permission semantics, text rendering and truncation, shadows and elevation, scroll physics, date and time pickers, and status bar handling. Catches the divergences that render correctly on the platform the developer is looking at.",
+      "version": "1.0.0",
+      "emoji": "📱",
+      "color": "violet",
+      "command": "rn-parity",
+      "triggers": [
+        "platform.os",
+        "platform.select",
+        "only on android",
+        "only on ios",
+        "keyboardavoidingview",
+        "safeareaview",
+        "backhandler",
+        "hardware back",
+        "status bar",
+        "elevation",
+        "shadow",
+        "notch",
+        "safe area",
+        "date picker"
+      ],
+      "globs": [
+        "**/*.{tsx,jsx}",
+        "**/*.{ts,js}"
+      ],
+      "references": [
+        {
+          "slug": "detection-patterns",
+          "title": "Detection Patterns"
+        },
+        {
+          "slug": "keyboard-and-layout",
+          "title": "Keyboard and Layout"
+        },
+        {
+          "slug": "navigation-and-input",
+          "title": "Navigation and Input"
+        },
+        {
+          "slug": "styling-differences",
+          "title": "Styling Differences"
+        },
+        {
+          "slug": "the-divergences",
+          "title": "The Divergence Catalogue"
+        }
+      ]
+    },
+    {
+      "id": "rn-push",
+      "name": "React Native Push Notifications Agent",
+      "title": "RN Push",
+      "description": "Use for push notification setup and debugging in React Native — APNs keys and certificates, FCM configuration, token registration and refresh, foreground and background handlers, silent and data-only pushes, notification permissions, badge and channel management, and deep linking from a tapped notification. Specialises in pushes that are sent successfully and never arrive.",
+      "version": "1.0.0",
+      "emoji": "🔔",
+      "color": "rose",
+      "command": "rn-push",
+      "triggers": [
+        "push notification",
+        "notifications",
+        "apns",
+        "fcm",
+        "firebase messaging",
+        "device token",
+        "notification permission",
+        "silent push",
+        "data-only",
+        "background handler",
+        "notification channel",
+        "badge count",
+        "notifee",
+        "onmessage"
+      ],
+      "globs": [
+        "**/*.{ts,tsx,js,jsx}",
+        "**/AndroidManifest.xml",
+        "**/Info.plist",
+        "**/*.entitlements",
+        "**/google-services.json",
+        "**/GoogleService-Info.plist",
+        "**/app.json",
+        "**/app.config.*"
+      ],
+      "references": [
+        {
+          "slug": "deep-linking",
+          "title": "Deep Linking from a Notification"
+        },
+        {
+          "slug": "handlers-and-state",
+          "title": "Handlers and App State"
+        },
+        {
+          "slug": "permissions-and-opt-in",
+          "title": "Permissions and Opt-In"
+        },
+        {
+          "slug": "platform-setup",
+          "title": "Platform Setup"
+        },
+        {
+          "slug": "the-delivery-chain",
+          "title": "The Delivery Chain"
         }
       ]
     },
@@ -600,6 +919,116 @@
         {
           "slug": "webview-and-deeplinks",
           "title": "WebViews and Deep Links"
+        }
+      ]
+    },
+    {
+      "id": "rn-state",
+      "name": "React Native State Agent",
+      "title": "RN State",
+      "description": "Use for state management architecture in React Native — choosing between Zustand, Redux Toolkit, Jotai and Context, separating server state from client state, selector and re-render behaviour, persistence and hydration, and the state shape decisions that determine how the app performs and how easily it can be changed.",
+      "version": "1.0.0",
+      "emoji": "🗃️",
+      "color": "turquoise",
+      "command": "rn-state",
+      "triggers": [
+        "state management",
+        "zustand",
+        "redux",
+        "redux toolkit",
+        "jotai",
+        "recoil",
+        "mobx",
+        "context provider",
+        "usecontext",
+        "global state",
+        "store",
+        "selector",
+        "persist state",
+        "hydration",
+        "server state",
+        "react query",
+        "tanstack query"
+      ],
+      "globs": [
+        "**/*.{ts,tsx}"
+      ],
+      "references": [
+        {
+          "slug": "choosing",
+          "title": "Choosing a Library"
+        },
+        {
+          "slug": "persistence",
+          "title": "Persistence and Hydration"
+        },
+        {
+          "slug": "selectors-and-renders",
+          "title": "Selectors and Re-renders"
+        },
+        {
+          "slug": "server-vs-client",
+          "title": "Server State Is Not Client State"
+        },
+        {
+          "slug": "shape-and-normalisation",
+          "title": "State Shape"
+        }
+      ]
+    },
+    {
+      "id": "rn-store-submission",
+      "name": "React Native Store Submission Agent",
+      "title": "RN Store Submission",
+      "description": "Use when an app is being submitted to the App Store or Google Play, or has been rejected — reading a rejection notice and identifying the actual cause, privacy manifests and nutrition labels, Play Data Safety, App Tracking Transparency, permission purpose strings, target API deadlines, account deletion requirements, and preparing a resubmission that will not be rejected again.",
+      "version": "1.0.0",
+      "emoji": "🏪",
+      "color": "gold",
+      "command": "rn-submit",
+      "triggers": [
+        "app rejected",
+        "rejection",
+        "app review",
+        "app store review",
+        "guideline",
+        "resubmit",
+        "privacy manifest",
+        "nutrition label",
+        "data safety",
+        "app tracking transparency",
+        "att prompt",
+        "target api level",
+        "account deletion",
+        "metadata rejected"
+      ],
+      "globs": [
+        "**/Info.plist",
+        "**/*.entitlements",
+        "**/PrivacyInfo.xcprivacy",
+        "**/AndroidManifest.xml",
+        "**/app.json",
+        "**/app.config.*"
+      ],
+      "references": [
+        {
+          "slug": "apple-guidelines",
+          "title": "Apple: the Frequent Ones"
+        },
+        {
+          "slug": "play-policies",
+          "title": "Google Play"
+        },
+        {
+          "slug": "pre-submission",
+          "title": "Before You Submit"
+        },
+        {
+          "slug": "privacy-declarations",
+          "title": "Privacy Declarations"
+        },
+        {
+          "slug": "rejection-triage",
+          "title": "Reading a Rejection"
         }
       ]
     },

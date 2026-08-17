@@ -158,6 +158,70 @@ export const SIGNALS = {
     'index.ts',
     'index.tsx',
   ],
+  'rn-state': [
+    // Anchored to the END of the name. The previous infix pattern matched
+    // StorefrontScreen.tsx, Storybook files, and anything else beginning
+    // "Store". A state module is conventionally named `<thing>Store.ts`,
+    // `<thing>Slice.ts`, `<thing>Atom.ts` — the word is a suffix, not a prefix.
+    '**/*{Store,store,Slice,slice,Atom,atom,Reducer,reducer}.{ts,tsx}',
+    '**/use*{Store,State}.{ts,tsx}',
+    '**/*{Context,context,Provider,provider}.{ts,tsx}',
+    '**/{stores,store,state,slices,reducers,atoms}/**',
+  ],
+  'rn-offline': [
+    '**/*{offline,Offline,sync,Sync,queue,Queue,cache,Cache,netinfo,NetInfo}*',
+    '**/*{mutation,Mutation,optimistic,Optimistic,retry,Retry}*',
+    // `src/offline/storage.ts` matched none of the above: `*offline*` cannot
+    // cross a path separator, so a directory named offline/ was invisible.
+    '**/offline/**',
+    '**/sync/**',
+    '**/queue/**',
+  ],
+  'rn-permissions': [
+    // Bare capability nouns matched ordinary UI: PhotoCard.tsx, CameraIcon.tsx,
+    // LocationPin.tsx. A component that *displays* a photo does not handle a
+    // permission. Match permission vocabulary, or the hook/service/directory
+    // shapes where capability access actually lives.
+    '**/*{permission,Permission}*',
+    '**/use{Camera,Location,Microphone,Contacts,Photos,MediaLibrary}*.{ts,tsx}',
+    '**/{permissions,camera,location}/**',
+    '**/*{Camera,Location,Microphone,Contacts}{Service,Manager,Provider,Handler}.{ts,tsx}',
+    '**/Info.plist',
+    '**/AndroidManifest.xml',
+  ],
+  'rn-navigation': [
+    '**/navigation/**',
+    '**/*{Navigator,navigator,Router,router,Routes,routes}*.{ts,tsx,js,jsx}',
+    '**/*{Linking,linking,DeepLink,deeplink}*',
+    // Expo Router derives routes from the filesystem, so a layout file IS
+    // routing configuration even though nothing in it says so.
+    '**/_layout.{tsx,jsx}',
+    '**/apple-app-site-association',
+    '**/assetlinks.json',
+  ],
+  'rn-push': [
+    '**/*{notification,Notification,push,Push,messaging,Messaging,fcm,FCM,apns,APNs}*',
+    '**/google-services.json',
+    '**/GoogleService-Info.plist',
+    '**/*.entitlements',
+    // Root entry files: the background handler must be registered at module
+    // scope here, and registering it anywhere else is the most common
+    // structural bug in React Native push.
+    'index.js',
+    'index.ts',
+  ],
+  'rn-platform-parity': [
+    // Deliberately NOT '**/*.{tsx,jsx}'. That is rn-ui-accessibility's signal,
+    // and duplicating it would double-fire two agents on every UI file.
+    // Instead: files that are already platform-split, the components where
+    // divergence actually breaks flows, and the Android manifest. The `Platform.OS`
+    // / `Platform.select` triggers catch the rest from the diff body, where they
+    // score higher than a filename match anyway.
+    '**/*.{ios,android}.{ts,tsx,js,jsx}',
+    '**/*{Keyboard,keyboard,Modal,modal,Sheet,sheet,Picker,picker,DatePicker}*.{tsx,jsx}',
+    '**/*{StatusBar,SafeArea,safearea,BackHandler}*',
+    '**/AndroidManifest.xml',
+  ],
   'rn-upgrade': [
     // Native template + toolchain files. These change during an upgrade and
     // almost never otherwise, which makes them a high-precision signal.
@@ -165,7 +229,9 @@ export const SIGNALS = {
     '**/gradle.properties',
     '**/build.gradle',
     '**/Podfile',
-    '**/Podfile.lock',
+    // NOT Podfile.lock — IGNORED drops every *.lock, so declaring it here was a
+    // signal that could never fire. The Podfile itself carries the platform
+    // version and the pod list, which is the part worth reviewing anyway.
     '**/react-native.config.js',
     '**/metro.config.js',
     '**/babel.config.js',
@@ -257,6 +323,30 @@ export function isIgnored(file) {
  * @param {string}   [opts.diffText]  full diff, used for keyword signals
  * @returns {{ selected: object[], skipped: object[], files: string[], reasons: Record<string,string[]> }}
  */
+/**
+ * Per-agent refinements applied after glob matching.
+ *
+ * Some files are a strong signal for an agent only under a condition a glob
+ * cannot express. `package.json` changes on every dependency addition, but it
+ * only indicates an *upgrade* when a version that constrains the toolchain
+ * actually moved — so matching it unconditionally put rn-upgrade on every PR
+ * that added a library.
+ *
+ * A refinement returns false to drop a file from that agent's matches. It fails
+ * OPEN: with no diff body available it returns true, because silently skipping
+ * a specialist is a worse failure than running it unnecessarily.
+ */
+const CORE_VERSION_KEYS =
+  /["'](react-native|react|react-dom|expo|@react-native\/[\w.-]+|@react-native-community\/cli[\w.-]*|metro[\w.-]*|@expo\/[\w.-]+)["']\s*:/;
+
+export const REFINEMENTS = {
+  'rn-upgrade': (file, diffText) => {
+    if (!/(^|\/)package\.json$/.test(file)) return true;
+    if (!diffText) return true; // fail open
+    return CORE_VERSION_KEYS.test(addedLines(diffText).join('\n'));
+  },
+};
+
 export function route(changedFiles, agents, opts = {}) {
   const files = changedFiles.filter((f) => !isIgnored(f));
   const reasons = {};
@@ -293,7 +383,10 @@ export function route(changedFiles, agents, opts = {}) {
   const scored = reviewable.map((agent) => {
     const why = [];
     const signals = SIGNALS[agent.id] ?? agent.globs ?? [];
-    const hits = files.filter((f) => signals.some((g) => matchesGlob(f, g)));
+    const refine = REFINEMENTS[agent.id];
+    const hits = files
+      .filter((f) => signals.some((g) => matchesGlob(f, g)))
+      .filter((f) => (refine ? refine(f, opts.diffText) : true));
     matchedFiles[agent.id] = hits;
 
     if (hits.length) {

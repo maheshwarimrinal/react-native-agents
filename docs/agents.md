@@ -2,7 +2,9 @@
 
 Each specialist has a compact playbook and an on-demand reference library. The shared context first identifies React Native version, Expo workflow, TypeScript, router, state library, and native architecture.
 
-Agents fall into two groups. **Interactive** agents need something brought to them — an error log, a request — so they are never selected for pull-request review. **Review** agents work from a diff and run in the GitHub Action.
+Agents fall into two groups. **Interactive** agents need something brought to them — an error log, a question, a rejection notice — so they are never selected for pull-request review. **Review** agents work from a diff and run in the GitHub Action.
+
+There are 21 agents: 6 interactive and 15 review. Routing is narrow by design, so a typical pull request reaches about three of them rather than all fifteen.
 
 ## Doctor — `rn-doctor` (interactive)
 
@@ -19,6 +21,38 @@ Use when writing new code: screens, components, forms, lists, navigation, data f
 The other agents review code after it exists; this one exists so there is less for them to find. Output handles safe-area insets, accessibility roles and labels, loading/empty/error states, keyboard behaviour, theme tokens, text scaling, and stable list callbacks by default. It reads the project's conventions first and uses the libraries already installed.
 
 Command: `/rn-new`
+
+## Debug — `rn-debug` (interactive)
+
+Use when the app builds and runs but behaves wrong: an infinite render loop, state that will not update, a network call that silently fails, a layout that differs by device, or a bug that only appears in release.
+
+Flipper and the Chrome remote debugger are both gone, so a large share of the debugging advice online describes tools that no longer exist. The agent covers React Native DevTools, the Hermes debugger, and the states that hide bugs — but its main discipline is refusing to propose a cause before there is a reliable reproduction, because forming a hypothesis in the first minute and spending a day confirming it is the most expensive habit in debugging.
+
+Command: `/rn-debug`
+
+## Dependencies — `rn-dependencies` (interactive)
+
+Use when choosing, auditing, or removing a library: New Architecture support, maintenance health, native build cost, transitive weight, and whether a core API already covers the need.
+
+Deliberately not a review agent. By the time a dependency reaches a pull request the decision is made, and supply chain, bundle weight and compatibility are already covered by Security, Performance and Upgrade. Its value is earlier — the question is "what does this commit us to, and what is the exit if it stops being maintained?"
+
+Command: `/rn-deps`
+
+## Onboard — `rn-onboard` (interactive)
+
+Use when orienting in an unfamiliar codebase: joining a team, inheriting a client app, or auditing before quoting work. Produces an architecture map, the team's inferred conventions, and a reading order.
+
+Its most valuable output is the landmines — patched dependencies, an unversioned persisted store, a custom native module nobody maintains, a library blocking upgrades, a bus factor of one on the payment flow. These are what nobody tells a newcomer and what they otherwise discover painfully.
+
+Command: `/rn-onboard`
+
+## Store submission — `rn-store-submission` (interactive)
+
+Use when submitting to the App Store or Google Play, or when an app has been rejected: reading a rejection notice and identifying the actual trigger, privacy manifests and nutrition labels, Play Data Safety, App Tracking Transparency, target API deadlines, and account deletion requirements.
+
+Rejection notices are written to be defensible rather than diagnostic — the guideline cited is a category, not a diagnosis. The agent's first job is deciding which artefact is at fault, because submitting a new build for a metadata rejection wastes a review cycle, and near a launch date that is the expensive part.
+
+Command: `/rn-submit`
 
 ## Performance — `rn-performance`
 
@@ -83,6 +117,62 @@ Use for EAS, Fastlane, signing, versioning, OTA updates, store submission, stage
 The agent treats native/OTA compatibility, signing keys, source maps, crash thresholds, and rollback practice as release requirements.
 
 Command: `/rn-release`
+
+## Upgrade — `rn-upgrade`
+
+Use for React Native and Expo version upgrades and New Architecture migration: planning the path, the RN/React/Expo/Gradle/Kotlin/JDK matrix, Fabric and TurboModule migration, the interop layer, Codegen specs, package scope moves, and breaking changes.
+
+The premise is that **the upgrade that builds is not the upgrade that works**. The failure teams expect is a red build; the one that costs them is an upgrade that compiles cleanly and changes behaviour — a ref silently `null` because Fabric flattened the view, a library quietly running through the interop layer without concurrent features. It weights behavioural changes that compile cleanly as P0 or P1.
+
+Command: `/rn-upgrade`
+
+## Navigation — `rn-navigation`
+
+Use for navigation architecture and routing: React Navigation and Expo Router structure, deep linking with Universal Links and App Links, auth guards and post-login redirects, typed routes and params, nested navigators, and navigation state persistence.
+
+Its premise is that **a route that works from inside the app tells you nothing about the same route from outside it**. A deep-link bug reproduces only when the app is killed — the state nobody tests and the one most users are in when they tap a link in an email — so it weights anything that breaks on cold start as P0 or P1.
+
+Command: `/rn-nav`
+
+## Push notifications — `rn-push`
+
+Use for push setup and debugging: APNs keys and certificates, FCM configuration, token registration and refresh, foreground and background handlers, silent pushes, notification channels, badge management, and deep linking from a tapped notification.
+
+A push that was sent successfully and never arrived produces no error anywhere — the backend gets a 200, the device is online, nothing is logged. The agent therefore treats push as a ten-link chain and locates the last link that can be proven to work, rather than reading the JavaScript first.
+
+Command: `/rn-push`
+
+## Permissions — `rn-permissions`
+
+Use for runtime permission handling: camera, location, photos, microphone, notifications, contacts and Bluetooth — the iOS/Android semantic differences, purpose strings and manifest declarations, rationale and denial flows, "never ask again", settings deep links, and partial grants.
+
+"Denied" is not one state and not the same state on both platforms. iOS asks once; Android permits re-prompting and has a rationale step. A missing iOS usage description is P0 because it terminates the app at the moment of request, and collapsing `blocked` into `denied` produces a retry button that silently does nothing forever.
+
+Command: `/rn-permissions`
+
+## Platform parity — `rn-platform-parity`
+
+Use for behaviour that differs between iOS and Android: keyboard avoidance, safe areas and notches, the Android hardware back button, permission semantics, text rendering, shadows and elevation, scroll physics, date pickers, and status bar handling.
+
+This is the class of bug a general-purpose reviewer is worst at, because finding it requires knowing which specific APIs diverge — and the code is correct on the platform the author was looking at, so there is no error, no warning, and no failing test. Severity follows what the divergence does to the user flow, not how visually different it looks.
+
+Command: `/rn-parity`
+
+## Offline — `rn-offline`
+
+Use for offline-first behaviour: network state detection, cache and persistence strategy, mutation queues, retry and idempotency, optimistic updates and rollback, conflict resolution, and background sync.
+
+Developers work on fast, stable wifi, so the entire offline surface is invisible during development and discovered by users on a train. Reads and writes are separated deliberately: a failed read shows stale data, while a failed write can lose something the user created — so anything that can lose or duplicate user data is weighted P0.
+
+Command: `/rn-offline`
+
+## State — `rn-state`
+
+Use for state architecture: choosing between Zustand, Redux Toolkit, Jotai and Context, separating server state from client state, selector and re-render behaviour, persistence and hydration, and state shape.
+
+Its premise is that **most "state management problems" are server state kept in a client state library** — caching, refetching, loading flags and retry hand-rolled badly. The library choice matters far less than that split. Persistence bugs are weighted high because an unversioned schema change crashes on launch for existing users only, passing every fresh-install test.
+
+Command: `/rn-state`
 
 ## Full audit
 

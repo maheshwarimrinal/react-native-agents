@@ -1,0 +1,36 @@
+{
+  "agent": "rn-push",
+  "title": "Correct module-scope push bootstrap",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Clean case. The background handler is at module scope in the entry file, before registerComponent, so it exists when the app is killed. Its body is wrapped so a throw inside it is reported rather than swallowed. The Android channel is created at startup before anything can post to it, and its failure path is handled. Nothing here is a finding. The failure mode being tested is manufacturing work: objecting to the fire-and-forget createChannel (deliberate — it must not block registration), demanding the handler be moved into a component (which would break it), or padding with generic push advice about permissions and tokens that belongs in files this one does not contain.",
+
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "claims the background handler is in the wrong place",
+      "pattern": "(should|must|needs? to)\\s+be\\s+(moved|registered)\\s+(in|inside|into)\\s+.{0,20}(component|useEffect|App)"
+    },
+    {
+      "name": "claims the handler is missing or unregistered",
+      "pattern": "(missing|no|lacks?)\\s+.{0,25}background\\s+(message\\s+)?handler"
+    },
+    {
+      "name": "claims the notification channel is missing",
+      "pattern": "(missing|no|lacks?|without)\\s+.{0,20}channel"
+    },
+    {
+      "name": "objects to createChannel not being awaited at module scope",
+      "pattern": "(should|must)\\s+await\\s+.{0,20}createchannel",
+      "unless": ["not", "correct", "fine", "deliberate"]
+    },
+    {
+      "name": "invents findings about token or permission code not present in this file",
+      "pattern": "(missing|no)\\s+(token refresh|ontokenrefresh|permission request)",
+      "unless": ["elsewhere", "not in this file", "if", "verify"]
+    }
+  ]
+}

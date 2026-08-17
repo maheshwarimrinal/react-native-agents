@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { loadAgents, loadSharedContext, parseFrontmatter, serializeFrontmatter, KNOWLEDGE, VERSION, knowledgeAgeDays } =
   await import(path.join(ROOT, 'scripts/lib/source.mjs'));
 const { plan, apply, isUserOwned, summarise } = await import(path.join(ROOT, 'scripts/lib/install.mjs'));
-const { scoreAgents, explainRouting } = await import(path.join(ROOT, 'mcp-server/routing.mjs'));
+const { scoreAgents, explainRouting, SIGNALS } = await import(path.join(ROOT, 'mcp-server/routing.mjs'));
 const { loadCases, scoreOutput } = await import(path.join(ROOT, 'evals/run.mjs'));
 const os = await import('node:os');
 
@@ -150,8 +150,16 @@ for (const a of agents) {
   test(`${a.id}: no unresolved authoring placeholders`, () => {
     // Note: `{{count}}` style braces are legitimate here (i18n interpolation
     // examples), so only genuine authoring markers are flagged.
+    //
+    // Code samples are stripped before matching. These tokens are legitimate
+    // *content* in a shell or JS example — `test.todo` is a real Jest API, and
+    // a grep pattern that searches for FIXME is not itself a FIXME. Checking
+    // prose only keeps the guard meaningful without punishing accurate code.
     const all = [a.body, ...a.references.map((r) => r.content)].join('\n');
-    const m = all.match(/\b(TODO|FIXME|XXX|TBD)\b|<placeholder>/i);
+    const prose = all
+      .replace(/```[\s\S]*?```/g, '')  // fenced blocks
+      .replace(/`[^`\n]*`/g, '');       // inline code
+    const m = prose.match(/\b(TODO|FIXME|XXX|TBD)\b|<placeholder>/i);
     assert(!m, `contains: ${m?.[0]}`);
   });
 
@@ -163,9 +171,83 @@ for (const a of agents) {
   });
 }
 
+test('README documents every agent and states the right counts', () => {
+  // The README said "Ten expert AI agents" and "57 reference documents" while
+  // the collection was 21 and 113. Docs drift silently; this makes it fail loudly.
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+
+  const undocumented = agents.filter((a) => !readme.includes(`\`/${a.command}\``)).map((a) => a.id);
+  assert(undocumented.length === 0, `not in the README table: ${undocumented.join(', ')}`);
+
+  const refCount = agents.reduce((n, a) => n + a.references.length, 0);
+  assert(
+    readme.includes(`${agents.length} playbooks`),
+    `README should say "${agents.length} playbooks"`,
+  );
+  assert(
+    readme.includes(`${refCount} reference documents`),
+    `README should say "${refCount} reference documents"`,
+  );
+});
+
+test('README lists exactly the agents excluded from PR routing', () => {
+  // The claim "Doctor and Build are excluded" stayed in the README after four
+  // more interactive agents were added.
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const interactive = agents.filter((a) => a.mode === 'interactive');
+
+  for (const a of interactive) {
+    const title = a.title.replace(/^RN /, '');
+    assert(
+      new RegExp(`\\*\\*[^*]*\\b${title}\\b[^*]*\\*\\*`, 'i').test(readme),
+      `${a.id} is interactive but not named in the README's excluded list`,
+    );
+  }
+});
+
+test('docs pin the action to the floating major tag, not a stale version', () => {
+  // Four places pinned @v1.1.0 and were still pinned there at 1.2.0. A hard
+  // version in docs goes stale on every release; @v1 does not.
+  for (const rel of ['README.md', 'docs/github-action.md']) {
+    const full = path.join(ROOT, rel);
+    if (!fs.existsSync(full)) continue;
+    const stale = fs.readFileSync(full, 'utf8').match(/react-native-agents@v\d+\.\d+\.\d+/g);
+    assert(!stale, `${rel} pins a stale version: ${stale?.join(', ')}`);
+  }
+});
+
+test('docs/agents.md documents every agent', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'docs/agents.md'), 'utf8');
+  const missing = agents.filter((a) => !doc.includes(`\`${a.id}\``)).map((a) => a.id);
+  assert(missing.length === 0, `undocumented in docs/agents.md: ${missing.join(', ')}`);
+});
+
 test('agent ids are unique', () => {
   const ids = agents.map((a) => a.id);
   assert(new Set(ids).size === ids.length, 'duplicate ids');
+});
+
+test('agent colors are unique', () => {
+  // Cosmetic, but a collision means two agents are visually indistinguishable
+  // in every target's UI. Four collided when the collection grew from 10 to 21,
+  // and nothing caught it.
+  const seen = new Map();
+  for (const a of agents) {
+    if (seen.has(a.color)) {
+      assert(false, `${a.color}: ${seen.get(a.color)} and ${a.id}`);
+    }
+    seen.set(a.color, a.id);
+  }
+});
+
+test('agent emoji are unique', () => {
+  const seen = new Map();
+  for (const a of agents) {
+    if (seen.has(a.emoji)) {
+      assert(false, `${a.emoji}: ${seen.get(a.emoji)} and ${a.id}`);
+    }
+    seen.set(a.emoji, a.id);
+  }
 });
 
 test('slash commands are unique', () => {
@@ -587,7 +669,9 @@ const routeCases = [
   ['My large product catalogue is stuttering', 'rn-performance'],
   ['the app freezes when I open the inbox', 'rn-performance'],
   ['is it safe to keep the JWT where I am keeping it', 'rn-security'],
-  ['the store rejected my build again', 'rn-release'],
+  // Was rn-release before rn-store-submission existed. A store rejection is
+  // now a review-triage question, not a build-and-ship one.
+  ['the store rejected my build again', 'rn-store-submission'],
   ['screen reader users cannot use the cart', 'rn-ui-accessibility'],
   ['my tests keep failing randomly', 'rn-testing'],
   ['can you refactor this messy component', 'rn-code-quality'],
@@ -625,13 +709,59 @@ test('routing: crash-reporting language beats release, not ties with it', () => 
 });
 
 test('routing: release still wins its own vocabulary', () => {
+  // rn-release ends at a signed, shipped artefact. Rejection triage moved to
+  // rn-store-submission, so 'rejected' is deliberately no longer a release term.
   for (const [task, expected] of [
-    ['the store rejected my build', 'rn-release'],
     ['plan the OTA rollback', 'rn-release'],
     ['code signing certificate expired', 'rn-release'],
+    ['eas build then eas submit', 'rn-release'],
+    ['staged rollout percentage', 'rn-release'],
   ]) {
     eq(scoreAgents(task, agents)[0]?.id, expected, task);
   }
+});
+
+test('routing: every one of the 21 agents is reachable from a plausible query', () => {
+  // The 11 agents added in 1.2.0 had no MCP signals at all, so automatic
+  // selection could never reach them — users would be silently routed to a
+  // near-neighbour at low confidence. This asserts each one is the top match
+  // for a query a real person would type.
+  for (const [task, expected] of [
+    ['debug an infinite render loop', 'rn-debug'],
+    ['should I add react-native-mmkv', 'rn-dependencies'],
+    ['upgrade React Native from 0.81 to 0.87', 'rn-upgrade'],
+    ['App Store rejected the privacy manifest', 'rn-store-submission'],
+    ['deep link opens the wrong nested screen', 'rn-navigation'],
+    ['push notifications never arrive when the app is killed', 'rn-push'],
+    ['the keyboard covers the submit button only on android', 'rn-platform-parity'],
+    ['camera permission denied and the allow button does nothing', 'rn-permissions'],
+    ['changes are lost when the user has no connection', 'rn-offline'],
+    ['should we use zustand or redux toolkit', 'rn-state'],
+    ['we inherited this codebase with no documentation', 'rn-onboard'],
+  ]) {
+    eq(scoreAgents(task, agents)[0]?.id, expected, task);
+  }
+});
+
+test('routing: new-agent queries resolve above low confidence', () => {
+  // A correct top match at 'low' confidence still prints a hedge telling the
+  // user it is a guess, which defeats the point.
+  for (const task of [
+    'debug an infinite render loop',
+    'upgrade React Native from 0.81 to 0.87',
+    'deep link opens the wrong nested screen',
+    'App Store rejected the privacy manifest',
+  ]) {
+    const top = scoreAgents(task, agents)[0];
+    assert(top && top.confidence !== 'low', `${task}: ${top?.id} at ${top?.confidence}`);
+  }
+});
+
+test('routing: every agent has an MCP signal block', () => {
+  // Without one an agent can only be reached by its own trigger words, which
+  // scores 2 and reads as a coin flip.
+  const missing = agents.map((a) => a.id).filter((id) => !SIGNALS[id]);
+  assert(missing.length === 0, `no MCP signals for: ${missing.join(', ')}`);
 });
 
 test('routing: unrelated text matches nothing rather than guessing', () => {

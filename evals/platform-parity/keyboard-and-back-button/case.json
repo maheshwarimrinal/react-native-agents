@@ -1,0 +1,54 @@
+{
+  "agent": "rn-platform-parity",
+  "title": "Checkout form written against iOS — four divergences, ranked by flow impact",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Four real divergences at deliberately different severities, testing whether the agent ranks by user impact rather than by how visible the code difference is. (1) BackHandler returns true unconditionally, so on Android the user is trapped on the checkout screen even with no unsaved changes — the worst bug here and the least obvious, since the code looks like it handles the case. (2) KeyboardAvoidingView has no behavior prop, so on iOS the keyboard covers the Pay button. (3) autoCapitalize='sentences' on an email field capitalises the address on Android. (4) shadow* with no elevation renders the card flat on Android — cosmetic. The failure mode being tested is leading with the shadow because it is the most recognisable pattern.",
+
+  "expect": [
+    {
+      "name": "flags that returning true unconditionally traps the Android user",
+      "any": ["always returns true", "unconditional", "trapped", "cannot go back", "return false"]
+    },
+    {
+      "name": "flags the missing behavior prop on KeyboardAvoidingView",
+      "any": ["behavior", "padding", "keyboardavoidingview"]
+    },
+    {
+      "name": "flags autoCapitalize on the email field",
+      "any": ["autocapitalize", "capitalis", "capitaliz", "email"]
+    },
+    {
+      "name": "flags shadow without elevation as an Android issue",
+      "any": ["elevation", "flat", "no shadow on android"]
+    },
+    {
+      "name": "names which platform each issue affects",
+      "any": ["on android", "on ios", "android only", "ios only"]
+    }
+  ],
+
+  "expectSeverity": [{ "atLeast": "P1" }],
+
+  "forbid": [
+    {
+      "name": "leads with the cosmetic shadow issue ahead of the trapped-user bug",
+      "pattern": "^[\\s\\S]{0,350}(elevation|shadow)",
+      "unless": ["backhandler", "trapped", "back button"]
+    },
+    {
+      "name": "asserts a visual appearance it cannot have observed",
+      "pattern": "(looks|appears)\\s+(noticeably|significantly|much)\\s+(worse|different)"
+    },
+    {
+      "name": "invents a measured difference",
+      "pattern": "\\b\\d+\\s?(px|pt|dp|ms)\\b.*(difference|off by|taller|shorter)",
+      "unless": ["for example", "e.g.", "such as"]
+    },
+    {
+      "name": "recommends removing the back handler entirely",
+      "pattern": "(remove|delete)\\s+the\\s+backhandler",
+      "unless": ["do not", "instead", "rather than"]
+    }
+  ]
+}

@@ -147,15 +147,181 @@ export const SIGNALS = {
     weak: ['visibility', 'insight', 'report', 'track'],
   },
 
+  'rn-upgrade': {
+    strong: [
+      'upgrade', 'upgrading', 'migrate to', 'migration', 'new architecture', 'newarch',
+      'fabric', 'turbomodule', 'turbo module', 'bridgeless', 'interop layer', 'codegen',
+      'upgrade helper', 'version bump', 'bump react native', 'expo sdk', 'sdk upgrade',
+      'breaking change', 'view flattening', 'react native version',
+    ],
+    medium: [
+      'deprecated', 'no longer works', 'after upgrading', 'since upgrading', 'older version',
+      'latest version', 'compatib', 'peer dependency', 'scope move', 'renamed package',
+      'gradle version', 'kotlin version', 'ref is null',
+    ],
+    weak: ['0.7', '0.8', 'behind', 'outdated', 'legacy', 'modernis', 'moderniz'],
+  },
+
+  'rn-dependencies': {
+    strong: [
+      'should i use', 'should i add', 'which library', 'which package', 'alternative to',
+      'instead of', 'replace this library', 'unmaintained', 'abandoned', 'is it maintained',
+      'do we need a library', 'worth adding', 'library health', 'add a dependency',
+      'remove a dependency', 'drop the dependency',
+    ],
+    medium: [
+      'dependency', 'dependencies', 'package', 'npm', 'yarn', 'library', 'third party',
+      'bundle cost', 'weekly downloads', 'last published', 'fork', 'patch-package',
+      'transitive', 'native dependency',
+    ],
+    weak: ['compare', 'versus', ' vs ', 'options', 'recommend', 'popular'],
+  },
+
+  'rn-debug': {
+    strong: [
+      'infinite loop', 'infinite render', 'render loop', 'not updating', 'state not updating',
+      'cannot reproduce', "can't reproduce", 'only in release', 'only in production',
+      'works in debug', 'silently fails', 'nothing happens', 'no error', 'blank screen',
+      'white screen', 'debugger', 'devtools', 'flipper', 'breakpoint', 'stale closure',
+    ],
+    medium: [
+      'debug', 'debugging', 'why does', 'why is', 'not working', 'unexpected', 'weird',
+      'strange', 'inconsistent', 'intermittent', 'sometimes', 'console.log', 'logging',
+      'stuck', 'behaves differently',
+    ],
+    weak: ['investigate', 'track down', 'figure out', 'diagnose', 'root cause'],
+  },
+
+  'rn-navigation': {
+    strong: [
+      'deep link', 'deeplink', 'universal link', 'app link', 'navigation', 'navigator',
+      'react navigation', 'expo router', 'wrong screen', 'nested screen', 'nested navigator',
+      'back button goes', 'auth guard', 'protected route', 'redirect after login',
+      'opens the home screen', 'route params', 'linking config',
+    ],
+    medium: [
+      'screen', 'route', 'routing', 'stack', 'tab', 'modal', 'navigate', 'goback',
+      'go back', 'cold start', 'assetlinks', 'apple-app-site-association', 'push a screen',
+    ],
+    weak: ['flow', 'journey', 'transition', 'header', 'params'],
+  },
+
+  'rn-push': {
+    strong: [
+      'push notification', 'notifications not', 'notification not', 'apns', 'fcm',
+      'firebase messaging', 'device token', 'silent push', 'data-only', 'background handler',
+      'notification channel', 'badge count', 'notifee', 'onmessage', 'getinitialnotification',
+      'setbackgroundmessagehandler', 'not receiving notifications',
+    ],
+    medium: [
+      'notification', 'notify', 'alert the user', 'token refresh', 'registration',
+      'app is closed', 'app is killed', 'foreground', 'background', 'tapped',
+      'post_notifications', 'provisional',
+    ],
+    weak: ['badge', 'sound', 'banner', 'remind'],
+  },
+
+  'rn-platform-parity': {
+    strong: [
+      'only on android', 'only on ios', 'works on ios but', 'works on android but',
+      'different on android', 'different on ios', 'platform.select', 'platform.os',
+      'keyboardavoidingview', 'keyboard covers', 'safe area', 'notch', 'hardware back',
+      'back button exits', 'elevation', 'shadow not showing', 'status bar',
+    ],
+    medium: [
+      'android', 'ios', 'platform', 'both platforms', 'cross platform', 'divergence',
+      'inconsistent between', 'keyboard', 'insets', 'scroll physics', 'date picker',
+    ],
+    weak: ['device', 'simulator', 'emulator', 'looks wrong', 'layout'],
+  },
+
+  'rn-permissions': {
+    strong: [
+      'permission denied', 'permission blocked', 'never ask again', 'requestpermission',
+      'usage description', 'nsusagedescription', 'purpose string', 'opensettings',
+      'permission rationale', 'camera access', 'location access', 'photo library access',
+      'microphone access', 'permission prompt', 'allow button does nothing',
+    ],
+    medium: [
+      'permission', 'permissions', 'grant', 'granted', 'denied', 'blocked', 'limited',
+      'settings', 'prompt', 'ask the user', 'camera', 'location', 'microphone', 'contacts',
+    ],
+    weak: ['access', 'allow', 'privacy', 'request'],
+  },
+
+  'rn-offline': {
+    strong: [
+      'offline', 'offline-first', 'no connection', 'bad connection', 'poor network',
+      'netinfo', 'mutation queue', 'sync queue', 'background sync', 'optimistic update',
+      'conflict resolution', 'idempotency', 'data disappears', 'changes are lost',
+      'did not save', "didn't save", 'retry storm', 'stale cache',
+    ],
+    medium: [
+      'sync', 'syncing', 'queue', 'retry', 'backoff', 'cache', 'cached', 'persist',
+      'network error', 'timeout', 'reconnect', 'flaky network', 'airplane mode',
+    ],
+    weak: ['train', 'tunnel', 'signal', 'connectivity', 'unreliable'],
+  },
+
+  'rn-state': {
+    strong: [
+      'state management', 'zustand', 'redux', 'redux toolkit', 'jotai', 'recoil', 'mobx',
+      'global state', 'server state', 'react query', 'tanstack query', 'selector',
+      'store re-render', 'hydration', 'persist the store', 'context re-render',
+      'which state library', 'normalise state', 'normalize state',
+    ],
+    medium: [
+      'store', 'state', 'context', 'provider', 'usecontext', 'slice', 'reducer', 'atom',
+      'derived state', 'single source of truth', 'persisted', 'rehydrate', 'boilerplate',
+    ],
+    weak: ['shape', 'structure', 'architecture', 'organise', 'organize'],
+  },
+
+  'rn-store-submission': {
+    strong: [
+      'rejected', 'rejection', 'app review', 'app store review', 'guideline', 'resubmit',
+      'privacy manifest', 'nutrition label', 'data safety', 'app tracking transparency',
+      'att prompt', 'target api level', 'account deletion', 'metadata rejected',
+      'privacyinfo', 'review team', 'appeal', 'binary rejected',
+    ],
+    medium: [
+      'app store', 'play store', 'google play', 'submission', 'submit', 'reviewer',
+      'store listing', 'screenshots', 'age rating', 'demo account', 'testflight',
+      'compliance', 'policy',
+    ],
+    weak: ['approval', 'publish', 'launch', 'live'],
+  },
+
+  'rn-onboard': {
+    strong: [
+      'new codebase', 'unfamiliar codebase', 'inherited', 'taking over', 'took over',
+      'just joined', 'onboarding', 'no documentation', 'no handover', 'where do i start',
+      'explain this project', 'explain this codebase', 'architecture overview',
+      'code walkthrough', 'quote', 'scoping', 'audit before',
+    ],
+    medium: [
+      'where is', 'how does this app', 'what does this do', 'understand the', 'get up to speed',
+      'previous developer', 'previous agency', 'legacy project', 'client app', 'map the',
+    ],
+    weak: ['overview', 'tour', 'orient', 'first day', 'unfamiliar'],
+  },
+
   'rn-release': {
     strong: [
-      'app store', 'play store', 'rejected', 'rejection', 'code signing', 'provisioning',
+      // 'app store', 'play store', 'rejected' and 'rejection' moved to
+      // rn-store-submission, which owns review triage. rn-release ends at a
+      // signed artefact; what a reviewer then says about it is a different job,
+      // and leaving them here produced an exact score tie on
+      // "App Store rejected the privacy manifest".
+      'code signing', 'provisioning',
       'keystore', 'certificate expired', 'eas build', 'eas submit', 'fastlane', 'ota',
       'over the air', 'expo-updates', 'codepush', 'rollout', 'rollback', 'crash on launch',
       'testflight', 'versioning', 'build number', 'runtime version',
     ],
     medium: [
-      'release', 'deploy', 'publish', 'build', 'ship', 'submission', 'store', 'signing',
+      // 'store' and 'submission' are too generic now that rn-store-submission
+      // and rn-state exist — 'store' fired on both "App Store" and "the store".
+      'release', 'deploy', 'publish', 'build', 'ship', 'signing',
       'staged',
       // 'sentry', 'crash', 'monitoring', and 'source map' moved to
       // rn-observability, which owns diagnosis. Release keeps the rollout-specific
@@ -236,7 +402,7 @@ export function explainRouting(task, agents) {
         'No specialist clearly matches that description.',
         '',
         'Either call `list_react_native_agents` and choose directly, or use `get_audit_plan`',
-        'if you want a broad review across all six.',
+        'if you want a broad review across every review specialist.',
       ].join('\n'),
     };
   }

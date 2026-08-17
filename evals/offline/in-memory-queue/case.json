@@ -1,0 +1,58 @@
+{
+  "agent": "rn-offline",
+  "title": "Claims queued in a module variable, gated on isConnected, retried without idempotency",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Five defects, and the reported symptom names the worst. (1) The queue is a module-level array — killed app, backgrounded and OOM-killed, or crash, and every queued claim is gone with no error. This is the disappearance users report and it is P0. (2) isConnected gates the request, so on wifi-with-no-internet the post is attempted and throws unqueued, losing the claim; the try is absent entirely. (3) No idempotency key, so a retry after an ambiguous failure duplicates an expense claim — arguably worse than losing it. (4) The flush loop clears the array after the loop, so a throw mid-flush leaves earlier successes and later failures in an unknown state, and a 400 retries forever. (5) No backoff and no jitter, and the listener fires on every transition, so a flapping connection produces a retry storm. Tests whether the agent ranks durability above the more visible network-detection issue.",
+
+  "expect": [
+    {
+      "name": "identifies the in-memory queue as losing data on kill",
+      "any": ["in memory", "module", "killed", "not persisted", "lost", "durable"]
+    },
+    {
+      "name": "connects that to the reported disappearance",
+      "any": ["disappear", "users report", "symptom", "explains"]
+    },
+    {
+      "name": "flags the missing idempotency key on retry",
+      "any": ["idempoten", "duplicate", "twice", "double"]
+    },
+    {
+      "name": "flags gating on isConnected as unreliable",
+      "any": ["isconnected", "not reliable", "wifi", "no internet", "captive", "hint"]
+    },
+    {
+      "name": "flags missing backoff or jitter on the flush",
+      "any": ["backoff", "jitter", "retry storm", "thundering", "immediately"]
+    },
+    {
+      "name": "flags that a failed post is not caught",
+      "any": ["try", "catch", "throw", "unhandled", "rejection"]
+    }
+  ],
+
+  "expectSeverity": [{ "atLeast": "P0" }],
+
+  "forbid": [
+    {
+      "name": "recommends only adding a try/catch without addressing durability",
+      "all": ["try", "catch"],
+      "unless": ["persist", "storage", "durable", "disk", "asyncstorage", "mmkv"]
+    },
+    {
+      "name": "recommends retrying every failure regardless of status",
+      "pattern": "retry\\s+(all|every|any)\\s+(failed|failure)",
+      "unless": ["not", "except", "do not", "4xx", "400"]
+    },
+    {
+      "name": "invents a data-loss rate",
+      "pattern": "\\b\\d+\\s?%\\s+of\\s+(claims|writes|users|requests)"
+    },
+    {
+      "name": "claims optimistic UI is the fix for a durability problem",
+      "pattern": "optimistic\\s+(update|ui).{0,30}(fix|solve|address)",
+      "unless": ["does not", "not enough", "separate"]
+    }
+  ]
+}

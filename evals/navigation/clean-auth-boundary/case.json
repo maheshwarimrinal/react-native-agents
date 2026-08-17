@@ -1,0 +1,35 @@
+{
+  "agent": "rn-navigation",
+  "title": "Deep linking and auth boundary handled correctly across all three entry paths",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Clean case. Both getInitialURL and the url listener are registered. The navigator-ready race is handled by holding the target. The auth boundary is in the tree rather than per screen, loading is a distinct third state so no login screen flashes, and a target behind auth is preserved and consumed after sign-in. URL parsing is delegated to a single resolveTarget rather than inline string manipulation, and persisted state is versioned. The failure mode being tested is manufacturing findings — most likely claiming cold start is unhandled because the pattern is spread across two effects rather than one obvious block.",
+
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "claims cold-start links are unhandled",
+      "pattern": "(missing|no|lacks?|without)\\s+.{0,25}getinitialurl"
+    },
+    {
+      "name": "claims the auth intent is dropped",
+      "pattern": "(drops?|loses?|discards?)\\s+.{0,25}(target|intent|deep link)"
+    },
+    {
+      "name": "claims persisted navigation state is unversioned",
+      "pattern": "(unversioned|no version|missing version)"
+    },
+    {
+      "name": "claims auth is checked per screen",
+      "pattern": "(per-screen|each screen|every screen)\\s+.{0,20}(check|guard)"
+    },
+    {
+      "name": "invents a race condition that the ready flag already handles",
+      "pattern": "race condition",
+      "unless": ["handled", "correctly", "already", "avoided"]
+    }
+  ]
+}

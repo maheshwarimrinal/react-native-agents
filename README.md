@@ -2,7 +2,7 @@
 
 # React Native Agents
 
-**Ten expert AI agents for React Native — build failures, implementation, performance, security, code quality, accessibility, testing, native modules, observability, and release.**
+**21 expert AI agents for React Native — upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, and store submission.**
 
 Works with Claude Code, Cursor, Windsurf, GitHub Copilot, Codex, Zed, Aider, MCP clients, and GitHub Actions.
 
@@ -31,13 +31,20 @@ npx @maheshwarimrinal/react-native-agents install --tool claude-code
 npx @maheshwarimrinal/react-native-agents install --tool windsurf
 ```
 
-Then ask your assistant a normal React Native question:
+Then ask your assistant a normal React Native question. You do not name the agent — the right specialist is selected from how you describe the problem:
 
 ```text
-The catalogue stutters when I scroll on Android. Find the likely causes and show me how to measure them.
+The catalogue stutters when I scroll on Android.        → Performance
+Deep links open the home screen when the app is killed. → Navigation
+Push works when the app is open but not when it's shut. → Push
+The Allow Camera button does nothing.                   → Permissions
+App Store rejected us for the privacy manifest.         → Store Submission
+Should we use Zustand or Redux Toolkit?                 → State
+Upgrade us from 0.81 to 0.87.                           → Upgrade
+We inherited this codebase and there are no docs.       → Onboard
 ```
 
-The right specialist is selected automatically, or you can invoke one directly using the tool's supported command or chat mode.
+Or invoke one directly with the tool's supported command or chat mode — `/rn-perf`, `/rn-nav`, `/rn-debug`, and so on. The full list is in [the agents guide](docs/agents.md).
 
 ## Automate pull-request reviews
 
@@ -45,7 +52,7 @@ The GitHub Action reviews changed files using the relevant specialists and posts
 
 ```yaml
 - name: React Native audit
-  uses: maheshwarimrinal/react-native-agents@v1.1.0
+  uses: maheshwarimrinal/react-native-agents@v1
   with:
     provider: anthropic
     model: claude-sonnet-5
@@ -58,12 +65,14 @@ OpenAI is also supported:
 
 ```yaml
 - name: React Native audit
-  uses: maheshwarimrinal/react-native-agents@v1.1.0
+  uses: maheshwarimrinal/react-native-agents@v1
   with:
     provider: openai
     model: gpt-5
     api-key: ${{ secrets.OPENAI_API_KEY }}
 ```
+
+`@v1` tracks the latest v1 release. To pin exactly, use a full tag (`@v1.2.0`) or a commit SHA — the SHA is the strictest option and what supply-chain-sensitive setups should prefer.
 
 Store API keys as GitHub Actions repository secrets. Do not commit them to workflow files.
 
@@ -80,6 +89,10 @@ would rather accept partial coverage.
 |---|---|---|
 | 🩺 Doctor | Gradle, CocoaPods, Metro, Xcode, and environment failures — diagnosed from your actual error output | `/rn-doctor` |
 | 🏗️ Build | New screens, components, forms, and lists that already handle safe areas, accessibility, states, and keyboard | `/rn-new` |
+| 🔍 Debug | Builds fine but behaves wrong — render loops, state that will not update, release-only bugs, post-Flipper tooling | `/rn-debug` |
+| 📦 Dependencies | Should we add this library — New Arch support, maintenance, native cost, lighter alternatives | `/rn-deps` |
+| 🗺️ Onboard | Orienting in an inherited codebase — architecture map, conventions, landmines, what to read first | `/rn-onboard` |
+| 🏪 Store Submission | Rejection triage, privacy manifests, Data Safety, ATT, target API deadlines | `/rn-submit` |
 
 **Review** — these run on a diff, and on pull requests:
 
@@ -93,11 +106,20 @@ would rather accept partial coverage.
 | 🔧 Native Modules | TurboModules, Fabric, JSI, codegen, Swift/Kotlin, packaging, bridge migration | `/rn-native` |
 | 🔭 Observability | Crash reporting that silently doesn't work, symbolication, breadcrumbs, tracing, PII in telemetry | `/rn-observe` |
 | 🚀 Release | EAS, signing, OTA, stores, rollout, rollback | `/rn-release` |
+| ⬆️ Upgrade | Version matrix, New Architecture migration, scope moves, and the regressions that compile cleanly | `/rn-upgrade` |
+| 🧭 Navigation | Deep links, cold-start routing, auth guards, nested navigators, typed params | `/rn-nav` |
+| 🔔 Push | APNs and FCM setup, token lifecycle, background handlers, tap routing | `/rn-push` |
+| 🔐 Permissions | Denial and blocked states, purpose strings, rationale flows, partial grants | `/rn-permissions` |
+| 📱 Platform Parity | iOS/Android divergence — keyboard, safe areas, hardware back, shadows, pickers | `/rn-parity` |
+| 📴 Offline | Durable mutation queues, idempotency, optimistic rollback, conflicts, sync | `/rn-offline` |
+| 🗃️ State | Server vs client state, selectors and re-renders, persistence and hydration | `/rn-state` |
 | 🔎 Audit | Runs and consolidates every review specialist | `/rn-audit` |
 
-Doctor and Build are deliberately excluded from pull-request routing — they need something brought to them, so firing them at a diff would spend tokens to say nothing.
+Six agents are deliberately excluded from pull-request routing — **Doctor, Build, Debug, Dependencies, Onboard, and Store Submission**. They need something brought to them: an error log, a question, a rejection notice. Firing them at a diff would spend tokens to say nothing.
 
-10 playbooks and 57 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
+Routing is narrow on purpose. A typical UI change reaches about three agents, not twenty-one — signals are scoped so that adding specialists does not raise the cost of an ordinary pull request.
+
+21 playbooks and 113 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
 
 ## Bundle size, measured
 

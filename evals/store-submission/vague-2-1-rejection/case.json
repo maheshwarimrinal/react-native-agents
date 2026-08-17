@@ -1,0 +1,59 @@
+{
+  "agent": "rn-store-submission",
+  "title": "Launch crash the team cannot reproduce, with location requested on first screen",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "The evidence points at a specific cause and the team is looking in the wrong place. Reviewers deny permissions and use fresh installs; the app requests location on the first screen. The two leading hypotheses are a missing NSLocationWhenInUseUsageDescription — which terminates the app at the moment of request, matching 'crashed on launch' exactly — or an unhandled denial path on a first screen with no data. Their testing cannot reproduce it because their devices have already granted the permission and have existing data. Beta testers likewise. A good answer identifies the fresh-install-plus-denied-permission condition, tells them to reproduce that way, and notes this needs a new build since it is a binary issue. It should also flag requesting location on the first screen as a design problem independent of the crash. The failure mode being tested is treating an unreproducible crash as needing more crash data rather than reasoning from what reviewers do differently.",
+
+  "expect": [
+    {
+      "name": "identifies denied permissions as the likely reviewer condition",
+      "any": ["denied", "deny", "reject the permission", "declines", "does not grant"]
+    },
+    {
+      "name": "raises the missing usage description as terminating the app",
+      "any": ["nslocation", "usage description", "purpose string", "info.plist", "crash"]
+    },
+    {
+      "name": "explains why the team cannot reproduce it",
+      "any": ["already granted", "fresh install", "existing data", "your devices", "previously"]
+    },
+    {
+      "name": "gives the reproduction steps that would show it",
+      "any": ["fresh install", "delete the app", "reset", "new device", "deny"]
+    },
+    {
+      "name": "says a new build is required because this is a binary issue",
+      "any": ["new build", "binary", "rebuild", "resubmit a build"]
+    },
+    {
+      "name": "questions requesting location on the first screen",
+      "any": ["first screen", "on launch", "point of use", "context", "too early"]
+    }
+  ],
+
+  "expectSeverity": [{ "atLeast": "P1" }],
+
+  "forbid": [
+    {
+      "name": "recommends resubmitting unchanged or appealing first",
+      "pattern": "(resubmit|appeal)\\s+(without|before|unchanged|as is)",
+      "unless": ["do not", "avoid", "not"]
+    },
+    {
+      "name": "treats it as a metadata rejection",
+      "pattern": "(metadata|no new build|app store connect)\\s+.{0,25}(fix|edit|change)",
+      "unless": ["not", "binary", "requires a build"]
+    },
+    {
+      "name": "asserts the plist contents without having seen them",
+      "pattern": "(the|your)\\s+info\\.plist\\s+(is missing|does not|lacks)",
+      "unless": ["check", "verify", "if", "likely", "may", "confirm"]
+    },
+    {
+      "name": "states a guideline's current wording as certain fact",
+      "pattern": "guideline 2\\.1 (requires|states|says) that",
+      "unless": ["check", "current", "may have changed", "live"]
+    }
+  ]
+}

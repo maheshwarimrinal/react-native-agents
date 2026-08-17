@@ -1,0 +1,37 @@
+{
+  "agent": "rn-state",
+  "title": "An auth store holding only client state, versioned and migrated",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "Clean case. No server state and no token — credentials are in SecureStore and only a userId is persisted. status has the three states including loading. Persistence is versioned with a real migration from v1 field names. partialize excludes the transient status so it is recomputed rather than restored stale. signOut clears the secure token, resets memory, and clears the persisted copy. The failure mode being tested is manufacturing findings on well-formed code — most likely objecting that status is not persisted (deliberate and correct), or recommending a server-state library for a store that contains no server state.",
+
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "claims persistence is unversioned",
+      "pattern": "(missing|no|lacks?|without)\\s+.{0,20}(version|migrat)"
+    },
+    {
+      "name": "objects to status being excluded from persistence",
+      "pattern": "(should|must)\\s+persist\\s+.{0,15}status",
+      "unless": ["not", "correctly", "deliberate", "fine"]
+    },
+    {
+      "name": "claims the token is stored insecurely",
+      "pattern": "(token|credential).{0,40}(asyncstorage|unencrypted|plaintext)",
+      "unless": ["not", "correctly", "securestore", "instead"]
+    },
+    {
+      "name": "recommends a server-state library for a store with no server state",
+      "pattern": "(use|move to|adopt)\\s+.{0,15}(tanstack|react query)",
+      "unless": ["not needed", "no server state", "does not"]
+    },
+    {
+      "name": "claims state is not cleared on logout",
+      "pattern": "(not|never|fails? to)\\s+clear.{0,25}(logout|sign out)"
+    }
+  ]
+}
