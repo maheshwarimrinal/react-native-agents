@@ -150,13 +150,13 @@ crashes.
 
 ```bash
 # Is it initialised, and where?
-rg -n "Sentry\.init|startAgent|Bugsnag\.start|crashlytics\(\)" --type ts -B3 -A12
+rg -n "Sentry\.init|startAgent|Bugsnag\.start|crashlytics\(\)" --glob "**/*.{js,jsx,ts,tsx}" -B3 -A12
 
 # Release identity
-rg -n "release:|dist:|setJSAppVersion|environment:" --type ts
+rg -n "release:|dist:|setJSAppVersion|environment:" --glob "**/*.{js,jsx,ts,tsx}"
 
 # Native + session flags
-rg -n "enableNative|autoSessionTracking|nativeCrashReporting|enableNdk" --type ts
+rg -n "enableNative|autoSessionTracking|nativeCrashReporting|enableNdk" --glob "**/*.{js,jsx,ts,tsx}"
 
 # Symbolication pipeline
 rg -n "sentry-cli|upload-sourcemaps|uploadSourceMaps|run-symbol-tool|firebase-crashlytics" \
@@ -164,8 +164,8 @@ rg -n "sentry-cli|upload-sourcemaps|uploadSourceMaps|run-symbol-tool|firebase-cr
 rg -n "newrelic|sentry|crashlytics" android/app/proguard-rules.pro 2>/dev/null
 
 # PII
-rg -n "beforeSend|beforeBreadcrumb|sendDefaultPii|setUser" --type ts
+rg -n "beforeSend|beforeBreadcrumb|sendDefaultPii|setUser" --glob "**/*.{js,jsx,ts,tsx}"
 
 # Is it disabled somewhere?
-rg -n "enabled:\s*(false|__DEV__)|if \(__DEV__\)" --type ts -A3 | rg -i "sentry|crash|newrelic"
+rg -n "enabled:\s*(false|__DEV__)|if \(__DEV__\)" --glob "**/*.{js,jsx,ts,tsx}" -A3 | rg -i "sentry|crash|newrelic"
 ```

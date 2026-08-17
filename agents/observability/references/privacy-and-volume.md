@@ -131,11 +131,11 @@ deliberately rather than accepting the default.
 ## Audit sweep
 
 ```bash
-rg -n "sendDefaultPii|beforeSend|beforeBreadcrumb" --type ts
-rg -n "setUser\(" --type ts -A4 | rg -i "email|name|phone"
-rg -n "httpResponseBodyCaptureEnabled|maskAllText|replaysSessionSampleRate" --type ts
-rg -n "tracesSampleRate|profilesSampleRate" --type ts
-rg -n "console\.(log|warn|info)" --type ts -l | wc -l   # console breadcrumb exposure
+rg -n "sendDefaultPii|beforeSend|beforeBreadcrumb" --glob "**/*.{js,jsx,ts,tsx}"
+rg -n "setUser\(" --glob "**/*.{js,jsx,ts,tsx}" -A4 | rg -i "email|name|phone"
+rg -n "httpResponseBodyCaptureEnabled|maskAllText|replaysSessionSampleRate" --glob "**/*.{js,jsx,ts,tsx}"
+rg -n "tracesSampleRate|profilesSampleRate" --glob "**/*.{js,jsx,ts,tsx}"
+rg -n "console\.(log|warn|info)" --glob "**/*.{js,jsx,ts,tsx}" -l | wc -l   # console breadcrumb exposure
 find ios -name 'PrivacyInfo.xcprivacy'
-rg -ni "consent|gdpr|cmp" --type ts -l
+rg -ni "consent|gdpr|cmp" --glob "**/*.{js,jsx,ts,tsx}" -l
 ```

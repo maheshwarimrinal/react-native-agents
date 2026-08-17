@@ -51,8 +51,8 @@ These are the ones that matter, because none of them produce an error at build t
 README.
 
 ```bash
-rg -n "Sentry\.init|firebase/crashlytics|NewRelic\.startAgent|Bugsnag\.start" --type ts
-rg -n "release:|dist:|environment:|enableNative|autoSessionTracking" --type ts
+rg -n "Sentry\.init|firebase/crashlytics|NewRelic\.startAgent|Bugsnag\.start" --glob "**/*.{js,jsx,ts,tsx}"
+rg -n "release:|dist:|environment:|enableNative|autoSessionTracking" --glob "**/*.{js,jsx,ts,tsx}"
 rg -n "sentry|crashlytics|newrelic" android/app/build.gradle ios/Podfile app.json app.config.*
 ```
 

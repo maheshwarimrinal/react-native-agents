@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
-const { globToRegExp, matchesGlob, isIgnored, route, addedLines } = await import('./lib/router.mjs');
+const { globToRegExp, matchesGlob, isIgnored, route, addedLines, SIGNALS } = await import('./lib/router.mjs');
 const { parseDiff, renderForPrompt, findPosition, nearestChangedLine, changedFilePaths } =
   await import('./lib/diff.mjs');
 const { LLM, estimateTokens, estimateCost, BudgetExceededError } = await import('./lib/llm.mjs');
@@ -73,6 +73,37 @@ test('glob: brace alternation', () => {
   assert(matchesGlob('a/b.ts', '**/*.{ts,tsx}'));
   assert(matchesGlob('a/b.tsx', '**/*.{ts,tsx}'));
   assert(!matchesGlob('a/b.js', '**/*.{ts,tsx}'));
+
+// --- PR #11 regressions -------------------------------------------------
+
+test('eval fixtures are never routed for review', () => {
+  // They are deliberately broken — that is their purpose. Reviewing them
+  // produces findings that are accurate about the file and useless as review.
+  // On PR #11 they generated 6 of 15 findings and buried the real ones.
+  for (const f of [
+    'evals/doctor/pods-out-of-sync/input.txt',
+    'evals/observability/proguard-strips-sdk/input.txt',
+    'evals/observability/silent-crash-reporting/input.tsx',
+    'evals/performance/clean-list/input.tsx',
+  ]) {
+    assert(isIgnored(f), `${f} should be ignored`);
+  }
+});
+
+test('a11y signal does not match a file merely named "input"', () => {
+  // `**/*{...,Input,input}*` had no extension constraint, so `input.txt` matched
+  // and the accessibility agent was handed a CocoaPods error log to review.
+  const sig = SIGNALS['rn-ui-accessibility'];
+  const inputGlob = sig.find((g) => g.includes('Input'));
+
+  assert(!matchesGlob('some/dir/input.txt', inputGlob), 'input.txt must not match');
+  assert(!matchesGlob('android/proguard-rules.pro', inputGlob));
+
+  // ...while real component files still do.
+  assert(matchesGlob('src/components/TextInput.tsx', inputGlob));
+  assert(matchesGlob('src/ui/LoginForm.tsx', inputGlob));
+  assert(matchesGlob('src/components/button.jsx', inputGlob));
+});
 });
 
 test('glob: dots are literal, not wildcards', () => {

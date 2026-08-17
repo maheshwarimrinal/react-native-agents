@@ -28,6 +28,13 @@ export function ProductList({
 
   const visible = useMemo(() => products.filter((p) => p.isAvailable), [products]);
 
+  // Memoised: an inline object literal here is a new reference on every render,
+  // which defeats the list's own prop comparison.
+  const contentContainerStyle = useMemo(
+    () => ({ paddingBottom: insets.bottom + spacing.xl }),
+    [insets.bottom],
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: Product }) => <ProductRow product={item} onPress={onOpen} />,
     [onOpen],
@@ -39,7 +46,7 @@ export function ProductList({
       renderItem={renderItem}
       keyExtractor={keyExtractor}
       getItemType={getItemType}
-      contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+      contentContainerStyle={contentContainerStyle}
     />
   );
 }

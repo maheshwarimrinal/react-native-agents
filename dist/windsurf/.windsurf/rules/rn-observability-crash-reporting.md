@@ -52,30 +52,51 @@ remote-config fetch. Startup crashes — the most user-visible kind — then go 
 environment variable that is populated locally and empty in CI. Read the condition literally
 rather than assuming intent.
 
-## Catch what the SDK doesn't
+## Check what the SDK already covers before adding handlers
 
-Even with the SDK installed, three sources need explicit wiring:
+A modern crash SDK installs its own global error handler and its own unhandled-rejection tracking.
+**Adding your own on top usually makes things worse.** You get duplicate events, or the SDK
+replaces your wrapper and yours silently stops running — and which happens depends on whether your
+code ran before or after `init`.
 
 ```ts
-// 1. Uncaught JS errors outside React
+// ✗ Sentry already owns the global handler. Wrapping it double-reports every
+//   fatal — once from captureException, once from Sentry's own handler.
 const defaultHandler = ErrorUtils.getGlobalHandler();
-ErrorUtils.setGlobalHandler((error, isFatal) => {
-  Sentry.captureException(error, { level: isFatal ? 'fatal' : 'error' });
-  defaultHandler(error, isFatal);   // keep the default behaviour; do not swallow
+ErrorUtils.setGlobalHandler((e, isFatal) => {
+  Sentry.captureException(e);
+  defaultHandler(e, isFatal);
 });
 
-// 2. Unhandled promise rejections — a large share of real production errors
-require('promise/setimmediate/rejection-tracking').enable({
-  allRejections: true,
-  onUnhandled: (id, error) => Sentry.captureException(error),
-});
-
-// 3. React render errors, per screen, so one broken screen is not a white app
-<Sentry.ErrorBoundary fallback={ScreenError} onError={(e, info) => Sentry.captureException(e, { extra: info })}>
+// ✗ The `promise` polyfill is not guaranteed to be resolvable on Hermes, so this
+//   can throw at startup — inside the code meant to make startup observable.
+require('promise/setimmediate/rejection-tracking').enable({ ... });
 ```
 
-Without an error boundary a render error unmounts the whole tree — the user sees a white screen
-with no way back, and depending on setup you may not even get a report.
+Who actually owns each source:
+
+| Source | Owner |
+|---|---|
+| Uncaught JS errors | The SDK's global handler — verify with a test throw, don't wrap |
+| Unhandled promise rejections | Sentry and Crashlytics both capture these; verify rather than polyfill |
+| React render errors | **Yours** — the SDK cannot catch these |
+| Native crashes | The SDK, provided native reporting is enabled |
+
+So only the error boundary is genuinely your job:
+
+```tsx
+<Sentry.ErrorBoundary
+  fallback={ScreenError}
+  onError={(e, info) => Sentry.captureException(e, { extra: info })}
+>
+```
+
+Without one, a render error unmounts the whole tree — the user sees a white screen with no way
+back.
+
+If you are on an SDK that genuinely does not cover global errors, install your handler **before**
+`init` so the SDK can chain onto yours, then verify the count: trigger one fatal and confirm
+exactly one symbolicated event arrives, not two.
 
 ## Vendor comparison
 

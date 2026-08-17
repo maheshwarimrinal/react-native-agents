@@ -109,7 +109,10 @@ export const SIGNALS = {
     '**/*.{tsx,jsx}',
     '**/theme/**',
     '**/styles/**',
-    '**/*{Button,button,Modal,modal,Form,form,Input,input}*',
+    // Requires a component file extension. Without it, the bare word `input`
+    // matched every file called `input.txt`, and the accessibility agent was
+    // handed a CocoaPods error log and a Gradle config to review.
+    '**/*{Button,button,Modal,modal,Form,form,Input,input,Field,field,Picker,Switch,Checkbox}*.{tsx,jsx}',
     '**/*{locale,Locale,i18n,translation}*',
   ],
   'rn-code-quality': ['**/*.{ts,tsx,js,jsx}'],
@@ -193,6 +196,12 @@ export function isReviewAgent(agent) {
 export const IGNORED = [
   '**/node_modules/**',
   '**/dist/**',
+  // Eval fixtures are deliberately broken by design — that is their purpose.
+  // Routing them produces findings that are accurate about the file and
+  // meaningless as review, and they drowned the real findings on PR #11.
+  '**/evals/**/input.*',
+  '**/__fixtures__/**',
+  '**/fixtures/**',
   '**/build/**',
   '**/coverage/**',
   // Every lockfile, consistently. Previously only `*.lock` was excluded, so

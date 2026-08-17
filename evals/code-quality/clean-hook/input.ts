@@ -41,8 +41,6 @@ export function useElapsedSession(startedAt: Date, { intervalMs = 1000, enabled 
   return { elapsedMs, label, events, append };
 }
 
-const durationFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -53,5 +51,3 @@ function formatDuration(ms: number): string {
 declare const sessionEvents: {
   subscribe(cb: (e: string) => void): { remove(): void };
 };
-
-void durationFormatter;
