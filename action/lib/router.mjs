@@ -196,10 +196,14 @@ export function isReviewAgent(agent) {
 export const IGNORED = [
   '**/node_modules/**',
   '**/dist/**',
-  // Eval fixtures are deliberately broken by design — that is their purpose.
-  // Routing them produces findings that are accurate about the file and
-  // meaningless as review, and they drowned the real findings on PR #11.
-  '**/evals/**/input.*',
+  // Everything inside an eval case directory (evals/<agent>/<case>/) is fixture
+  // data: deliberately broken inputs and their expectation files. Routing them
+  // produces findings that are accurate about the file and meaningless as
+  // review, which is what drowned the real findings on PR #11.
+  //
+  // Scoped to the case directory rather than all of evals/ so the harness
+  // itself (evals/run.mjs) is still reviewed like any other source file.
+  '**/evals/*/*/**',
   '**/__fixtures__/**',
   '**/fixtures/**',
   '**/build/**',

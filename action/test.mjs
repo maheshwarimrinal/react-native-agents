@@ -85,9 +85,17 @@ test('eval fixtures are never routed for review', () => {
     'evals/observability/proguard-strips-sdk/input.txt',
     'evals/observability/silent-crash-reporting/input.tsx',
     'evals/performance/clean-list/input.tsx',
+    // Expectation files too — ignoring only `input.*` left these leaking, and
+    // rn-observability reviewed two of them on PR #11.
+    'evals/observability/proguard-strips-sdk/case.json',
+    'evals/observability/silent-crash-reporting/case.json',
+    'evals/code-quality/clean-hook/case.json',
   ]) {
     assert(isIgnored(f), `${f} should be ignored`);
   }
+
+  // The harness is real source and stays reviewable.
+  assert(!isIgnored('evals/run.mjs'), 'the eval runner should still be reviewed');
 });
 
 test('a11y signal does not match a file merely named "input"', () => {
