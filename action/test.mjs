@@ -216,6 +216,53 @@ test('package.json only signals an upgrade when a core version moves', () => {
   }
 });
 
+test('filename-keyword globs carry a code-extension filter', () => {
+  // Three review rounds found the same class: an extension-less keyword glob
+  // over-firing on non-code. `{Store,...}` matched StorefrontScreen,
+  // `{Photo,...}` matched PhotoCard, `{StatusBar,SafeArea}` matched
+  // res/drawable/safearea_bg.xml, `{Linking,DeepLink}` matched
+  // docs/DeepLinking.md. Fixing instances did not stop it; this stops the class.
+  const offenders = [];
+
+  for (const [id, globs] of Object.entries(SIGNALS)) {
+    for (const g of globs) {
+      const isFilenameKeyword = /^\*\*\/\*\{[A-Za-z,]+\}\*/.test(g);
+      if (!isFilenameKeyword) continue;                 // directory globs are fine
+      const hasExtension = /\.\{[a-z,]+\}$|\.[a-z]+$/.test(g);
+      if (!hasExtension) offenders.push(`${id}: ${g}`);
+    }
+  }
+
+  assert(offenders.length === 0, `keyword globs without an extension filter:\n  ${offenders.join('\n  ')}`);
+});
+
+test('non-code files with agent-keyword names do not route', () => {
+  // The concrete regressions, kept as cases so the rule above has teeth.
+  const shouldNotRoute = [
+    'docs/DeepLinking.md',
+    'docs/authentication.md',
+    'docs/performance-list-guide.md',
+    'android/app/src/main/res/drawable/safearea_bg.xml',
+    'android/app/src/main/res/layout/notification_small.xml',
+    'android/app/src/main/res/values/status_bar_colors.xml',
+    'CHANGELOG.md',
+  ];
+
+  for (const file of shouldNotRoute) {
+    const ids = route([file], agents).selected.map((a) => a.id);
+    assert(ids.length === 0, `${file} should route to nobody, got: ${ids.join(', ')}`);
+  }
+});
+
+test('rn-push covers every common root entry filename', () => {
+  // The background handler must be registered at module scope in the entry
+  // file. index.tsx was missing, so TS projects using it were never routed.
+  for (const entry of ['index.js', 'index.ts', 'index.tsx']) {
+    const ids = route([entry], agents).selected.map((a) => a.id);
+    assert(ids.includes('rn-push'), `${entry} should route to rn-push, got: ${ids.join(', ')}`);
+  }
+});
+
 test('no agent declares a signal that IGNORED unconditionally drops', () => {
   // rn-upgrade declared '**/Podfile.lock' while IGNORED drops every *.lock,
   // so the signal could never fire. A dead signal reads as coverage and is not.

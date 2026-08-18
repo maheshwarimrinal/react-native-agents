@@ -80,6 +80,20 @@ export function matchesGlob(file, glob) {
  * pattern does not drag those back in.
  * ------------------------------------------------------------------ */
 
+/**
+ * Filename-keyword globs MUST carry a code-extension filter.
+ *
+ * `**\/*{StatusBar,SafeArea}*` with no extension matched
+ * `res/drawable/safearea_bg.xml`; `**\/*{Linking,DeepLink}*` matched
+ * `docs/DeepLinking.md` and routed two agents at a markdown file. Images are
+ * already in IGNORED, but XML, Markdown and JSON are not — and Android
+ * resource directories are full of the former.
+ *
+ * Non-code files that genuinely matter (AndroidManifest.xml, Info.plist,
+ * google-services.json) are declared explicitly as their own entries, which is
+ * the right place for them. `no-extension-less keyword globs` is enforced by a
+ * test in action/test.mjs.
+ */
 export const SIGNALS = {
   'rn-security': [
     '**/*.{env,pem,key}',
@@ -92,17 +106,17 @@ export const SIGNALS = {
     // A dependency change is the supply-chain signal worth reviewing. The
     // lockfiles themselves are thousands of lines of hashes — see IGNORED.
     '**/package.json',
-    '**/*{auth,Auth,login,Login,token,Token,crypto,Crypto,secure,Secure,session,Session}*',
-    '**/*{webview,WebView,deeplink,DeepLink,linking,Linking}*',
-    '**/*{api,Api,API,fetch,client,Client,http,Http}*',
+    '**/*{auth,Auth,login,Login,token,Token,crypto,Crypto,secure,Secure,session,Session}*.{ts,tsx,js,jsx}',
+    '**/*{webview,WebView,deeplink,DeepLink,linking,Linking}*.{ts,tsx,js,jsx}',
+    '**/*{api,Api,API,fetch,client,Client,http,Http}*.{ts,tsx,js,jsx}',
   ],
   'rn-performance': [
-    '**/*{List,list,Feed,feed,Scroll,scroll,Grid,grid}*',
-    '**/*{Animated,animation,Animation,gesture,Gesture,Reanimated}*',
-    '**/*{Image,image,Video,video,Media,media}*',
+    '**/*{List,list,Feed,feed,Scroll,scroll,Grid,grid}*.{ts,tsx,js,jsx}',
+    '**/*{Animated,animation,Animation,gesture,Gesture,Reanimated}*.{ts,tsx,js,jsx}',
+    '**/*{Image,image,Video,video,Media,media}*.{ts,tsx,js,jsx}',
     '**/metro.config.js',
     '**/babel.config.js',
-    '**/*{Screen,screen,Page,page}*',
+    '**/*{Screen,screen,Page,page}*.{ts,tsx,js,jsx}',
     '**/package.json',
   ],
   'rn-ui-accessibility': [
@@ -136,8 +150,8 @@ export const SIGNALS = {
     '.github/workflows/**',
   ],
   'rn-observability': [
-    '**/*{sentry,Sentry,crashlytics,Crashlytics,newrelic,NewRelic,bugsnag,Bugsnag}*',
-    '**/*{telemetry,Telemetry,analytics,Analytics,tracking,Tracking,monitor,Monitor}*',
+    '**/*{sentry,Sentry,crashlytics,Crashlytics,newrelic,NewRelic,bugsnag,Bugsnag}*.{ts,tsx,js,jsx}',
+    '**/*{telemetry,Telemetry,analytics,Analytics,tracking,Tracking,monitor,Monitor}*.{ts,tsx,js,jsx}',
     // Directory layouts, not just filenames — `src/analytics/events.ts` is the
     // common shape and matches none of the patterns above.
     '**/analytics/**',
@@ -169,8 +183,8 @@ export const SIGNALS = {
     '**/{stores,store,state,slices,reducers,atoms}/**',
   ],
   'rn-offline': [
-    '**/*{offline,Offline,sync,Sync,queue,Queue,cache,Cache,netinfo,NetInfo}*',
-    '**/*{mutation,Mutation,optimistic,Optimistic,retry,Retry}*',
+    '**/*{offline,Offline,sync,Sync,queue,Queue,cache,Cache,netinfo,NetInfo}*.{ts,tsx,js,jsx}',
+    '**/*{mutation,Mutation,optimistic,Optimistic,retry,Retry}*.{ts,tsx,js,jsx}',
     // `src/offline/storage.ts` matched none of the above: `*offline*` cannot
     // cross a path separator, so a directory named offline/ was invisible.
     '**/offline/**',
@@ -182,7 +196,7 @@ export const SIGNALS = {
     // LocationPin.tsx. A component that *displays* a photo does not handle a
     // permission. Match permission vocabulary, or the hook/service/directory
     // shapes where capability access actually lives.
-    '**/*{permission,Permission}*',
+    '**/*{permission,Permission}*.{ts,tsx,js,jsx}',
     '**/use{Camera,Location,Microphone,Contacts,Photos,MediaLibrary}*.{ts,tsx}',
     '**/{permissions,camera,location}/**',
     '**/*{Camera,Location,Microphone,Contacts}{Service,Manager,Provider,Handler}.{ts,tsx}',
@@ -192,7 +206,7 @@ export const SIGNALS = {
   'rn-navigation': [
     '**/navigation/**',
     '**/*{Navigator,navigator,Router,router,Routes,routes}*.{ts,tsx,js,jsx}',
-    '**/*{Linking,linking,DeepLink,deeplink}*',
+    '**/*{Linking,linking,DeepLink,deeplink}*.{ts,tsx,js,jsx}',
     // Expo Router derives routes from the filesystem, so a layout file IS
     // routing configuration even though nothing in it says so.
     '**/_layout.{tsx,jsx}',
@@ -200,7 +214,7 @@ export const SIGNALS = {
     '**/assetlinks.json',
   ],
   'rn-push': [
-    '**/*{notification,Notification,push,Push,messaging,Messaging,fcm,FCM,apns,APNs}*',
+    '**/*{notification,Notification,push,Push,messaging,Messaging,fcm,FCM,apns,APNs}*.{ts,tsx,js,jsx}',
     '**/google-services.json',
     '**/GoogleService-Info.plist',
     '**/*.entitlements',
@@ -209,6 +223,7 @@ export const SIGNALS = {
     // structural bug in React Native push.
     'index.js',
     'index.ts',
+    'index.tsx',
   ],
   'rn-platform-parity': [
     // Deliberately NOT '**/*.{tsx,jsx}'. That is rn-ui-accessibility's signal,
@@ -219,7 +234,7 @@ export const SIGNALS = {
     // score higher than a filename match anyway.
     '**/*.{ios,android}.{ts,tsx,js,jsx}',
     '**/*{Keyboard,keyboard,Modal,modal,Sheet,sheet,Picker,picker,DatePicker}*.{tsx,jsx}',
-    '**/*{StatusBar,SafeArea,safearea,BackHandler}*',
+    '**/*{StatusBar,SafeArea,safearea,BackHandler}*.{ts,tsx,js,jsx}',
     '**/AndroidManifest.xml',
   ],
   'rn-upgrade': [
