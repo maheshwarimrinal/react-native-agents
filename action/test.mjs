@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
-const { globToRegExp, matchesGlob, isIgnored, route, addedLines, SIGNALS } = await import('./lib/router.mjs');
+const { globToRegExp, matchesGlob, isIgnored, route, addedLines, addedLinesForFile, SIGNALS } =
+  await import('./lib/router.mjs');
 const { parseDiff, renderForPrompt, findPosition, nearestChangedLine, changedFilePaths } =
   await import('./lib/diff.mjs');
 const { LLM, estimateTokens, estimateCost, BudgetExceededError } = await import('./lib/llm.mjs');
@@ -248,6 +249,65 @@ test('no agent declares a signal that IGNORED unconditionally drops', () => {
       );
     }
   }
+});
+
+test('upgrade refinement reads only the relevant file hunk', () => {
+  // addedLines() flattens the whole diff, so "did react-native change?" was
+  // answered by any added line anywhere — a README documenting a version was
+  // enough to route rn-upgrade on a PR whose package.json only added lodash.
+  const hunk = (file, line) => `diff --git a/${file} b/${file}\n+++ b/${file}\n+${line}`;
+
+  const readmeMentionsVersion = [
+    hunk('README.md', 'Requires "react-native": "0.87.0" or newer.'),
+    hunk('package.json', '    "lodash": "^4.17.21",'),
+  ].join('\n');
+
+  const ids = route(['README.md', 'package.json'], agents, { diffText: readmeMentionsVersion })
+    .selected.map((a) => a.id);
+  assert(!ids.includes('rn-upgrade'), `README version mention should not route: ${ids.join(', ')}`);
+
+  const real = hunk('package.json', '    "react-native": "0.87.0",');
+  const ids2 = route(['package.json'], agents, { diffText: real }).selected.map((a) => a.id);
+  assert(ids2.includes('rn-upgrade'), `a real bump should route: ${ids2.join(', ')}`);
+});
+
+test('upgrade refinement ignores routine Expo module adds', () => {
+  // '@expo/*' as a wildcard matched @expo/vector-icons and every other ordinary
+  // module. Only toolchain-constraining packages should count.
+  const hunk = (line) => `diff --git a/package.json b/package.json\n+++ b/package.json\n+${line}`;
+
+  for (const routine of [
+    '    "@expo/vector-icons": "^14.0.0",',
+    '    "expo-image": "~2.0.0",',
+    '    "react-native-svg": "^15.2.0",',
+  ]) {
+    const ids = route(['package.json'], agents, { diffText: hunk(routine) }).selected.map((a) => a.id);
+    assert(!ids.includes('rn-upgrade'), `${routine.trim()} should not route: ${ids.join(', ')}`);
+  }
+
+  for (const toolchain of [
+    '    "expo": "~57.0.0",',
+    '    "@expo/cli": "0.20.0",',
+    '    "@react-native/babel-preset": "0.87.0",',
+  ]) {
+    const ids = route(['package.json'], agents, { diffText: hunk(toolchain) }).selected.map((a) => a.id);
+    assert(ids.includes('rn-upgrade'), `${toolchain.trim()} should route: ${ids.join(', ')}`);
+  }
+});
+
+test('addedLinesForFile isolates one file from a multi-file diff', () => {
+  const diff = [
+    'diff --git a/a.json b/a.json',
+    '+++ b/a.json',
+    '+alpha',
+    'diff --git a/b.json b/b.json',
+    '+++ b/b.json',
+    '+beta',
+  ].join('\n');
+
+  assert(addedLinesForFile(diff, 'a.json').join() === 'alpha', 'a.json');
+  assert(addedLinesForFile(diff, 'b.json').join() === 'beta', 'b.json');
+  assert(addedLinesForFile(diff, 'c.json').length === 0, 'absent file yields nothing');
 });
 
 test('refinements fail open when no diff body is available', () => {

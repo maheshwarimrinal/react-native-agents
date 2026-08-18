@@ -43,7 +43,7 @@ So the question is:
 declaration crashes on iOS and fails silently on Android.
 
 ```bash
-rg -n "request|check" --glob "**/*.{ts,tsx}" | rg -i "permission|PERMISSIONS\."
+rg -n "request|check" --glob "**/*.{js,jsx,ts,tsx}" | rg -i "permission|PERMISSIONS\."
 rg -n "NS.*UsageDescription" ios/*/Info.plist
 rg -n "uses-permission" android/app/src/main/AndroidManifest.xml
 ```

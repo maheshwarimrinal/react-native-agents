@@ -175,8 +175,8 @@ If a project still depends on the legacy App Center CodePush service, that's a m
 rg 'runtimeVersion' app.json app.config.*                 # policy: fingerprint?
 rg 'codeSigningCertificate' app.json app.config.*         # signing on?
 rg 'fallbackToCacheTimeout|checkAutomatically' app.json
-rg 'reloadAsync' --type ts -B 5                            # guarded by a prompt?
-rg 'checkForUpdateAsync|fetchUpdateAsync' --type ts -A 5 | rg -c catch
+rg 'reloadAsync' --glob "**/*.{js,jsx,ts,tsx}" -B 5                            # guarded by a prompt?
+rg 'checkForUpdateAsync|fetchUpdateAsync' --glob "**/*.{js,jsx,ts,tsx}" -A 5 | rg -c catch
 rg 'channel' eas.json
 eas channel:list && eas branch:list
 ```

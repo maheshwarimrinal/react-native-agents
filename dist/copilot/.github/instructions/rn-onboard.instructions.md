@@ -120,16 +120,16 @@ For anything not enforced, the convention is whatever the codebase does most.
 
 ```bash
 # Component style
-rg -c "^export function [A-Z]" --glob "**/*.tsx"
-rg -c "^export const [A-Z]\w* = \(" --glob "**/*.tsx"
+rg -c "^export function [A-Z]" --glob "**/*.{jsx,tsx}"
+rg -c "^export const [A-Z]\w* = \(" --glob "**/*.{jsx,tsx}"
 
 # Styling approach
-rg -c "StyleSheet.create" --glob "**/*.tsx"
-rg -c "styled\.|tw\`|className=" --glob "**/*.tsx"
+rg -c "StyleSheet.create" --glob "**/*.{jsx,tsx}"
+rg -c "styled\.|tw\`|className=" --glob "**/*.{jsx,tsx}"
 
 # Imports: aliases or relative
-rg -c "from '@/" --glob "**/*.{ts,tsx}"
-rg -c "from '\.\./\.\./" --glob "**/*.{ts,tsx}"
+rg -c "from '@/" --glob "**/*.{js,jsx,ts,tsx}"
+rg -c "from '\.\./\.\./" --glob "**/*.{js,jsx,ts,tsx}"
 
 # File naming
 fd -e tsx . src | xargs -n1 basename | rg -c '^[A-Z]'
@@ -164,7 +164,7 @@ that signals attention.
 How a team handles failure varies more than anything else and is rarely documented.
 
 ```bash
-rg -n "catch\s*\(" --glob "**/*.{ts,tsx}" -A3 | head -40
+rg -n "catch\s*\(" --glob "**/*.{js,jsx,ts,tsx}" -A3 | head -40
 ```
 
 Look for whether errors are logged, reported to a crash service, shown to the user, or swallowed;
@@ -289,7 +289,7 @@ it is a gamble.
 ## Persisted state without versioning
 
 ```bash
-rg -n "persist\(|AsyncStorage.setItem|MMKV" --glob "**/*.{ts,tsx}" -A5 | rg -B3 -v "version|migrate"
+rg -n "persist\(|AsyncStorage.setItem|MMKV" --glob "**/*.{js,jsx,ts,tsx}" -A5 | rg -B3 -v "version|migrate"
 ```
 
 A persisted store with no version means the next shape change breaks **existing users only** — it
@@ -327,9 +327,9 @@ Two libraries doing the same job means code written both ways, and a newcomer ca
 pattern to follow.
 
 ```bash
-rg -c "from 'redux|from 'zustand|from 'jotai" --glob "**/*.{ts,tsx}" 2>/dev/null
-rg -c "axios|fetch\(" --glob "**/*.{ts,tsx}" 2>/dev/null
-rg -c "moment|date-fns|dayjs" --glob "**/*.{ts,tsx}" 2>/dev/null
+rg -c "from 'redux|from 'zustand|from 'jotai" --glob "**/*.{js,jsx,ts,tsx}" 2>/dev/null
+rg -c "axios|fetch\(" --glob "**/*.{js,jsx,ts,tsx}" 2>/dev/null
+rg -c "moment|date-fns|dayjs" --glob "**/*.{js,jsx,ts,tsx}" 2>/dev/null
 ```
 
 Ask which direction the migration was going. If nobody knows, that is itself the finding.
@@ -338,8 +338,8 @@ Ask which direction the migration was going. If nobody knows, that is itself the
 
 ```bash
 fd -e test.ts -e test.tsx -e spec.ts . | wc -l
-rg -c "expect\(" --glob "**/*.{test,spec}.{ts,tsx}" 2>/dev/null | head
-rg -l "it\.skip|describe\.skip|xit\(|test\.todo" --glob "**/*.{test,spec}.{ts,tsx}"
+rg -c "expect\(" --glob "**/*.{test,spec}.{js,jsx,ts,tsx}" 2>/dev/null | head
+rg -l "it\.skip|describe\.skip|xit\(|test\.todo" --glob "**/*.{test,spec}.{js,jsx,ts,tsx}"
 ```
 
 A high file count with few assertions, or a wall of skipped tests, means the safety net is
@@ -359,7 +359,7 @@ commit is still in history and still compromised.
 ## Commented-out code and `@ts-ignore` clusters
 
 ```bash
-rg -c "@ts-ignore|@ts-expect-error|eslint-disable" --glob "**/*.{ts,tsx}" | sort -t: -k2 -rn | head
+rg -c "@ts-ignore|@ts-expect-error|eslint-disable" --glob "**/*.{js,jsx,ts,tsx}" | sort -t: -k2 -rn | head
 ```
 
 Not automatically bad, and a cluster in one file usually marks a place where the types and reality
@@ -427,7 +427,7 @@ not finished, and there is now code written both ways.
 
 ```bash
 cat index.js 2>/dev/null || cat index.ts
-rg -l "NavigationContainer|createNativeStackNavigator|expo-router" --glob "**/*.tsx" | head
+rg -l "NavigationContainer|createNativeStackNavigator|expo-router" --glob "**/*.{jsx,tsx}" | head
 ```
 
 `index.js` shows what is registered before the app mounts — crash reporting, background handlers,
@@ -500,16 +500,16 @@ Not the biggest files — the most **depended-upon** ones.
 
 ```bash
 # Most imported modules
-rg -o "from '(\.\./|@/)[^']+'" --glob "**/*.{ts,tsx}" -N | sort | uniq -c | sort -rn | head -20
+rg -o "from '(\.\./|@/)[^']+'" --glob "**/*.{js,jsx,ts,tsx}" -N | sort | uniq -c | sort -rn | head -20
 
 # The network layer
-rg -l "fetch\(|axios|createApi" --glob "**/*.{ts,tsx}" | head
+rg -l "fetch\(|axios|createApi" --glob "**/*.{js,jsx,ts,tsx}" | head
 
 # Auth
-rg -l "token|signIn|login|authenticate" --glob "**/*.{ts,tsx}" -i | head
+rg -l "token|signIn|login|authenticate" --glob "**/*.{js,jsx,ts,tsx}" -i | head
 
 # Storage
-rg -n "AsyncStorage|MMKV|SecureStore|Keychain" --glob "**/*.{ts,tsx}" -l
+rg -n "AsyncStorage|MMKV|SecureStore|Keychain" --glob "**/*.{js,jsx,ts,tsx}" -l
 ```
 
 A module imported in eighty places is one you must understand and must be careful changing. These
@@ -518,7 +518,7 @@ are usually the API client, the theme, the auth store, and a few shared componen
 ## The navigation tree is the app's table of contents
 
 ```bash
-rg -n "name=\"[A-Za-z]+\"" --glob "**/*.tsx" -o | sed 's/.*name="//;s/"//' | sort -u
+rg -n "name=\"[A-Za-z]+\"" --glob "**/*.{jsx,tsx}" -o | sed 's/.*name="//;s/"//' | sort -u
 ```
 
 Every screen the app has. Reading the navigator files gives you the whole feature surface in a few

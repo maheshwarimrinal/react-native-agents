@@ -36,10 +36,29 @@ the first migration has no idea what it is migrating from.
 // ✗ this reads defaults before hydration finishes
 const theme = useSettings((s) => s.theme);
 
-// ✓ know when the store is real
+// ✗ hasHydrated() is a plain method call, not a subscription. If it returns
+//   false on first render, nothing re-renders when hydration completes and the
+//   splash screen stays up forever.
 const hydrated = useSettings.persist?.hasHydrated();
-if (!hydrated) return <SplashScreen />;
+
+// ✓ subscribe, and seed with the current value in case hydration already finished
+function useHydrated() {
+  const [hydrated, setHydrated] = useState(() => useSettings.persist.hasHydrated());
+
+  useEffect(() => {
+    const unsubFinish = useSettings.persist.onFinishHydration(() => setHydrated(true));
+    setHydrated(useSettings.persist.hasHydrated());   // covers the race before subscribing
+    return unsubFinish;
+  }, []);
+
+  return hydrated;
+}
+
+if (!useHydrated()) return <SplashScreen />;
 ```
+
+The seeding matters as much as the subscription: hydration can finish before the effect runs, and a
+listener registered afterwards never fires.
 
 The window is short and consequential. Code reading the store during it sees defaults — a signed-out
 user who is signed in, a light theme for someone who chose dark, an onboarding flow for someone who
@@ -82,8 +101,11 @@ shows up as slow startup. Persist what is needed to restore the user's context; 
 ## Clear on logout, including disk
 
 ```ts
-await useSettings.persist?.clearStorage();
+// Both halves. Clearing storage alone leaves the current process holding the
+// previous user's data until the app is relaunched.
+useSettings.getState().reset();               // in memory, now
+await useSettings.persist?.clearStorage();    // on disk, for the next launch
 ```
 
-In-memory reset is not enough — the persisted copy outlives it and the next launch restores the
+In-memory reset is not enough on its own — the persisted copy outlives it and the next launch restores the
 previous user's data.

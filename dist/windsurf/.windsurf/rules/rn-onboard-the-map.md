@@ -32,16 +32,16 @@ Not the biggest files — the most **depended-upon** ones.
 
 ```bash
 # Most imported modules
-rg -o "from '(\.\./|@/)[^']+'" --glob "**/*.{ts,tsx}" -N | sort | uniq -c | sort -rn | head -20
+rg -o "from '(\.\./|@/)[^']+'" --glob "**/*.{js,jsx,ts,tsx}" -N | sort | uniq -c | sort -rn | head -20
 
 # The network layer
-rg -l "fetch\(|axios|createApi" --glob "**/*.{ts,tsx}" | head
+rg -l "fetch\(|axios|createApi" --glob "**/*.{js,jsx,ts,tsx}" | head
 
 # Auth
-rg -l "token|signIn|login|authenticate" --glob "**/*.{ts,tsx}" -i | head
+rg -l "token|signIn|login|authenticate" --glob "**/*.{js,jsx,ts,tsx}" -i | head
 
 # Storage
-rg -n "AsyncStorage|MMKV|SecureStore|Keychain" --glob "**/*.{ts,tsx}" -l
+rg -n "AsyncStorage|MMKV|SecureStore|Keychain" --glob "**/*.{js,jsx,ts,tsx}" -l
 ```
 
 A module imported in eighty places is one you must understand and must be careful changing. These
@@ -50,7 +50,7 @@ are usually the API client, the theme, the auth store, and a few shared componen
 ## The navigation tree is the app's table of contents
 
 ```bash
-rg -n "name=\"[A-Za-z]+\"" --glob "**/*.tsx" -o | sed 's/.*name="//;s/"//' | sort -u
+rg -n "name=\"[A-Za-z]+\"" --glob "**/*.{jsx,tsx}" -o | sed 's/.*name="//;s/"//' | sort -u
 ```
 
 Every screen the app has. Reading the navigator files gives you the whole feature surface in a few

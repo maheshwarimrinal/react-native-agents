@@ -33,8 +33,8 @@ Where it matters most: modals and bottom sheets, multi-step flows, forms with un
 anything where "back" is ambiguous.
 
 ```bash
-rg -n "BackHandler" --glob "**/*.{ts,tsx}" -A8
-rg -ln "Modal|BottomSheet" --glob "**/*.tsx" | while read -r f; do
+rg -n "BackHandler" --glob "**/*.{js,jsx,ts,tsx}" -A8
+rg -ln "Modal|BottomSheet" --glob "**/*.{jsx,tsx}" | while read -r f; do
   rg -q "BackHandler" "$f" || echo "  modal without back handling: $f"
 done
 ```

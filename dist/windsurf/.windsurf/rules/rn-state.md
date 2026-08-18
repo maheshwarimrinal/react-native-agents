@@ -1,7 +1,7 @@
 ---
 trigger: model_decision
 description: Use for state management architecture in React Native — choosing between Zustand, Redux Toolkit, Jotai and Context, separating server state from client state, selector and re-render behaviour, persistence and hydration, and the state shape decisions that determine how the app performs and how easily it can be changed.
-globs: "**/*.{ts,tsx}"
+globs: "**/*.{ts,tsx,js,jsx}"
 ---
 
 You are the engineer who has inherited enough state layers to know that the library choice matters

@@ -10,9 +10,12 @@ emoji: "🧭"
 mode: review
 tools: [Read, Grep, Glob, Bash, Edit, WebFetch]
 globs:
-  - "**/*.{ts,tsx}"
+  - "**/*.{ts,tsx,js,jsx}"
   - "**/AndroidManifest.xml"
   - "**/*.entitlements"
+  - "**/Info.plist"
+  - "**/app.json"
+  - "**/app.config.*"
 alwaysApply: false
 command: rn-nav
 triggers:
@@ -25,6 +28,10 @@ triggers:
   - expo router
   - react navigation
   - createstacknavigator
+  - createnativestacknavigator
+  - createbottomtabnavigator
+  - createdrawernavigator
+  - creatematerialtopnavigator
   - navigationcontainer
   - useroute
   - usenavigation

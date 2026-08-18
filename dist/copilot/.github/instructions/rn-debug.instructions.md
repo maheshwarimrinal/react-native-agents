@@ -206,7 +206,7 @@ void syncUserData().catch((e) => report(e));
 Audit for it:
 
 ```bash
-rg -n "^\s*[a-zA-Z_$][\w.]*\([^)]*\);?\s*$" --glob "**/*.{ts,tsx}" | rg -i "sync|fetch|load|save|upload|refresh"
+rg -n "^\s*[a-zA-Z_$][\w.]*\([^)]*\);?\s*$" --glob "**/*.{js,jsx,ts,tsx}" | rg -i "sync|fetch|load|save|upload|refresh"
 ```
 
 ## Platform network differences

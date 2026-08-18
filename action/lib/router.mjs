@@ -336,14 +336,21 @@ export function isIgnored(file) {
  * OPEN: with no diff body available it returns true, because silently skipping
  * a specialist is a worse failure than running it unnecessarily.
  */
+// Deliberately narrow. '@expo/*' as a wildcard matched @expo/vector-icons and
+// every other routine Expo module, which is a dependency add and not an upgrade.
+// Only packages that actually constrain the toolchain belong here.
 const CORE_VERSION_KEYS =
-  /["'](react-native|react|react-dom|expo|@react-native\/[\w.-]+|@react-native-community\/cli[\w.-]*|metro[\w.-]*|@expo\/[\w.-]+)["']\s*:/;
+  /["'](react-native|react|react-dom|expo|@react-native\/[\w.-]+|@react-native-community\/cli[\w.-]*|metro|metro-config|metro-react-native-babel-preset|@expo\/cli|@expo\/config|@expo\/metro-config|expo-modules-(core|autolinking))["']\s*:/;
 
 export const REFINEMENTS = {
   'rn-upgrade': (file, diffText) => {
     if (!/(^|\/)package\.json$/.test(file)) return true;
     if (!diffText) return true; // fail open
-    return CORE_VERSION_KEYS.test(addedLines(diffText).join('\n'));
+    // Scoped to this file's hunk. Reading the whole diff meant a version string
+    // in a README or a JSON snippet counted as a dependency change.
+    const added = addedLinesForFile(diffText, file);
+    if (added.length === 0) return true; // hunk not found — fail open
+    return CORE_VERSION_KEYS.test(added.join('\n'));
   },
 };
 
@@ -430,6 +437,32 @@ export function route(changedFiles, agents, opts = {}) {
 }
 
 /** Added lines from a unified diff, without the leading `+`. */
+/**
+ * The added lines belonging to a single file's hunk.
+ *
+ * `addedLines` flattens the entire diff, so a refinement asking "did react-native
+ * change?" was answered by any added line anywhere — a README documenting a
+ * version string was enough to route rn-upgrade on a pull request whose
+ * package.json only added lodash.
+ */
+export function addedLinesForFile(diffText, filePath) {
+  const out = [];
+  let inFile = false;
+
+  for (const line of diffText.split('\n')) {
+    if (line.startsWith('diff --git')) {
+      // `diff --git a/<path> b/<path>` — match the b-side, which is the
+      // post-change path and the one the router is reasoning about.
+      inFile = new RegExp(`\\sb/${filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).test(line);
+      continue;
+    }
+    if (!inFile) continue;
+    if (line.startsWith('+++') || line.startsWith('---')) continue;
+    if (line.startsWith('+')) out.push(line.slice(1));
+  }
+  return out;
+}
+
 export function addedLines(diffText) {
   return diffText
     .split('\n')

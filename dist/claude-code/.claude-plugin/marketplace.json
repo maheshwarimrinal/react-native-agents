@@ -4,23 +4,41 @@
     "name": "React Native Agents contributors"
   },
   "metadata": {
-    "description": "Expert React Native agents for performance, security, quality, a11y, testing, and release.",
+    "description": "21 specialist React Native agents (15 review, 6 interactive) covering upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, and store submission.",
     "version": "1.2.0"
   },
   "plugins": [
     {
       "name": "react-native-agents",
       "source": "./plugins/react-native-agents",
-      "description": "Six specialist React Native agents: performance, security, code quality, UI/accessibility, testing, and release.",
+      "description": "21 specialist React Native agents (15 review, 6 interactive) covering upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, and store submission.",
       "version": "1.2.0",
       "category": "development",
       "keywords": [
         "react-native",
         "expo",
         "mobile",
+        "build",
+        "code-quality",
+        "debug",
+        "dependencies",
+        "doctor",
+        "native-modules",
+        "navigation",
+        "observability",
+        "offline",
+        "onboard",
         "performance",
+        "permissions",
+        "platform-parity",
+        "push",
+        "release",
         "security",
-        "accessibility"
+        "state",
+        "store-submission",
+        "testing",
+        "ui-accessibility",
+        "upgrade"
       ]
     }
   ]

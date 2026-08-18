@@ -498,6 +498,9 @@ double charge.
 ```ts
 const delay = Math.min(MAX_DELAY, BASE * 2 ** attempt);
 const jittered = delay * (0.5 + Math.random() * 0.5);   // 50–100% of the delay
+
+await sleep(jittered);            // use the jittered value, not `delay`
+return attempt + 1;
 ```
 
 Exponential backoff stops one device hammering a server. **Jitter** stops every device retrying in

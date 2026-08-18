@@ -45,8 +45,7 @@
         "how do i build"
       ],
       "globs": [
-        "**/*.tsx",
-        "**/*.ts"
+        "**/*.{ts,tsx,js,jsx}"
       ],
       "references": [
         {
@@ -361,6 +360,10 @@
         "expo router",
         "react navigation",
         "createstacknavigator",
+        "createnativestacknavigator",
+        "createbottomtabnavigator",
+        "createdrawernavigator",
+        "creatematerialtopnavigator",
         "navigationcontainer",
         "useroute",
         "usenavigation",
@@ -369,9 +372,12 @@
         "redirect after login"
       ],
       "globs": [
-        "**/*.{ts,tsx}",
+        "**/*.{ts,tsx,js,jsx}",
         "**/AndroidManifest.xml",
-        "**/*.entitlements"
+        "**/*.entitlements",
+        "**/Info.plist",
+        "**/app.json",
+        "**/app.config.*"
       ],
       "references": [
         {
@@ -951,7 +957,7 @@
         "tanstack query"
       ],
       "globs": [
-        "**/*.{ts,tsx}"
+        "**/*.{ts,tsx,js,jsx}"
       ],
       "references": [
         {

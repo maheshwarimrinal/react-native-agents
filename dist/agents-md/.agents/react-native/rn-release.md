@@ -424,12 +424,12 @@ Crash-free rate can look perfect while the app is broken. Also monitor:
 ## Audit
 
 ```bash
-rg 'Sentry\.init|crashlytics|Bugsnag' --type ts -A 12
-rg 'release:|dist:|environment:' --type ts
+rg 'Sentry\.init|crashlytics|Bugsnag' --glob "**/*.{js,jsx,ts,tsx}" -A 12
+rg 'release:|dist:|environment:' --glob "**/*.{js,jsx,ts,tsx}"
 rg 'sentry|sourcemap' .github/workflows/ eas.json fastlane/ 2>/dev/null
-rg 'enableAutoSessionTracking' --type ts
-rg 'addBreadcrumb' --type ts -c
-rg -i 'featureFlag|remoteConfig|launchDarkly|statsig' --type ts -l
+rg 'enableAutoSessionTracking' --glob "**/*.{js,jsx,ts,tsx}"
+rg 'addBreadcrumb' --glob "**/*.{js,jsx,ts,tsx}" -c
+rg -i 'featureFlag|remoteConfig|launchDarkly|statsig' --glob "**/*.{js,jsx,ts,tsx}" -l
 ```
 
 ---
@@ -608,8 +608,8 @@ If a project still depends on the legacy App Center CodePush service, that's a m
 rg 'runtimeVersion' app.json app.config.*                 # policy: fingerprint?
 rg 'codeSigningCertificate' app.json app.config.*         # signing on?
 rg 'fallbackToCacheTimeout|checkAutomatically' app.json
-rg 'reloadAsync' --type ts -B 5                            # guarded by a prompt?
-rg 'checkForUpdateAsync|fetchUpdateAsync' --type ts -A 5 | rg -c catch
+rg 'reloadAsync' --glob "**/*.{js,jsx,ts,tsx}" -B 5                            # guarded by a prompt?
+rg 'checkForUpdateAsync|fetchUpdateAsync' --glob "**/*.{js,jsx,ts,tsx}" -A 5 | rg -c catch
 rg 'channel' eas.json
 eas channel:list && eas branch:list
 ```
@@ -752,7 +752,7 @@ find ios -name 'PrivacyInfo.xcprivacy'
 rg 'ITSAppUsesNonExemptEncryption|NS.*UsageDescription' ios/*/Info.plist
 rg 'targetSdkVersion|compileSdkVersion' android/build.gradle android/app/build.gradle
 rg 'uses-permission' android/app/src/main/AndroidManifest.xml
-rg -i 'deleteAccount|delete.*account' --type ts
+rg -i 'deleteAccount|delete.*account' --glob "**/*.{js,jsx,ts,tsx}"
 ```
 
 ---
@@ -894,6 +894,6 @@ rg '"version"|buildNumber|versionCode|versionName' app.json app.config.* android
 rg 'appVersionSource|autoIncrement' eas.json
 rg 'runtimeVersion' app.json app.config.*
 git tag --sort=-creatordate | head
-rg 'nativeApplicationVersion|nativeBuildVersion' --type ts   # shown in-app?
+rg 'nativeApplicationVersion|nativeBuildVersion' --glob "**/*.{js,jsx,ts,tsx}"   # shown in-app?
 ls CHANGELOG.md 2>/dev/null
 ```

@@ -157,7 +157,7 @@ ls jest.config.* jest.setup.* 2>/dev/null
 rg 'coverageThreshold' jest.config.js
 npx jest --listTests 2>/dev/null | wc -l
 rg '\.skip\(|xit\(|xdescribe\(' --type tsx               # skipped tests — why?
-rg 'retries|jest-retry|retryTimes' --type ts .github/    # hidden flake
+rg 'retries|jest-retry|retryTimes' --glob "**/*.{js,jsx,ts,tsx}" .github/    # hidden flake
 rg 'npm install' .github/workflows/                       # should be npm ci
 rg 'max-warnings|--ci' .github/workflows/
 ```

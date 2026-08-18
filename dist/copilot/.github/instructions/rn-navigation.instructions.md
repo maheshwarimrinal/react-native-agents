@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.{ts,tsx},**/AndroidManifest.xml,**/*.entitlements"
+applyTo: "**/*.{ts,tsx,js,jsx},**/AndroidManifest.xml,**/*.entitlements,**/Info.plist,**/app.json,**/app.config.*"
 description: Use for React Native navigation architecture and routing — React Navigation and Expo Router structure, deep linking with Universal Links and App Links, authentication guards and post-login redirects, typed routes and params, nested navigators, modal presentation, and navigation state persistence. Covers the routing bugs that only appear on cold start or from an external link.
 ---
 
@@ -212,15 +212,34 @@ Two taps before the transition starts push two copies of the screen. The user th
 twice, which reads as the app being broken.
 
 ```tsx
-// Guard on the navigation state rather than a local flag
-const navigation = useNavigation();
+// ✗ Not sufficient on its own. Focus does not change until the navigation state
+//   updates, so two taps in the same frame both see isFocused() === true and
+//   both dispatch.
+if (navigation.isFocused()) navigation.navigate('Order', { id });
+```
+
+The reliable guard is a lock that is set synchronously on the first tap and released when the
+screen is focused again:
+
+```tsx
+const locked = useRef(false);
+
+useFocusEffect(
+  useCallback(() => {
+    locked.current = false;        // released whenever we return to this screen
+  }, []),
+);
+
 const onPress = useCallback(() => {
-  if (navigation.isFocused()) navigation.navigate('Order', { id });
+  if (locked.current) return;
+  locked.current = true;
+  navigation.navigate('Order', { id });
 }, [navigation, id]);
 ```
 
-`isFocused()` is more reliable than a `useRef` debounce because it reflects what the navigator
-actually did, not what you assumed it did.
+Setting the ref before dispatching is what makes it work — the second tap is rejected in the same
+tick, before any navigation state has changed. `isFocused()` helps for slower repeat taps and is
+worth keeping as a secondary check, but it is not the mechanism that closes the same-frame case.
 
 ## Navigating during render
 
@@ -590,7 +609,7 @@ the tree changes.
 Namespace them: `OrderDetails`, `ProductDetails`. Boring and unambiguous.
 
 ```bash
-rg -o "name=\"[A-Za-z]+\"" --glob "**/*.tsx" | sed 's/.*name="//;s/"//' | sort | uniq -d
+rg -o "name=\"[A-Za-z]+\"" --glob "**/*.{jsx,tsx}" | sed 's/.*name="//;s/"//' | sort | uniq -d
 ```
 
 Any output from that is worth looking at.

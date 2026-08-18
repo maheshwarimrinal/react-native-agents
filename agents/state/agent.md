@@ -10,7 +10,7 @@ emoji: "🗃️"
 mode: review
 tools: [Read, Grep, Glob, Bash, Edit, WebFetch]
 globs:
-  - "**/*.{ts,tsx}"
+  - "**/*.{ts,tsx,js,jsx}"
 alwaysApply: false
 command: rn-state
 triggers:

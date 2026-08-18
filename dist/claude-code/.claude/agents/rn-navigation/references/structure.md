@@ -40,7 +40,7 @@ the tree changes.
 Namespace them: `OrderDetails`, `ProductDetails`. Boring and unambiguous.
 
 ```bash
-rg -o "name=\"[A-Za-z]+\"" --glob "**/*.tsx" | sed 's/.*name="//;s/"//' | sort | uniq -d
+rg -o "name=\"[A-Za-z]+\"" --glob "**/*.{jsx,tsx}" | sed 's/.*name="//;s/"//' | sort | uniq -d
 ```
 
 Any output from that is worth looking at.

@@ -61,9 +61,29 @@ to a delivery failure.
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 ```
 
-Declaring it is not enough; it must be requested at runtime. An app that only declares it displays
-nothing on Android 13+ while working fine on older devices — which is easily mistaken for a device
-problem.
+Declaring it is not enough; it must be requested at runtime:
+
+```ts
+import { PermissionsAndroid, Platform } from 'react-native';
+
+async function ensureNotificationPermission() {
+  if (Platform.OS !== 'android' || Number(Platform.Version) < 33) return true;
+
+  const already = await PermissionsAndroid.check(
+    PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+  );
+  if (already) return true;
+
+  const result = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+  );
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+}
+```
+
+Note the version guard: the constant does not exist below API 33, and requesting it there throws.
+An app that only declares the permission displays nothing on Android 13+ while working fine on older
+devices — which is easily mistaken for a device problem.
 
 **Battery optimisation** can delay or suppress delivery, and several manufacturers apply far more
 aggressive restrictions than stock Android. If reports of missing pushes cluster on particular

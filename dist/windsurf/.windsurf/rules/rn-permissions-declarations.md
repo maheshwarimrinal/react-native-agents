@@ -89,7 +89,7 @@ than two that can disagree.
 The failure worth catching is a permission requested in code with no declaration:
 
 ```bash
-rg -o "PERMISSIONS\.(IOS|ANDROID)\.[A-Z_]+" --glob "**/*.{ts,tsx}" | sort -u
+rg -o "PERMISSIONS\.(IOS|ANDROID)\.[A-Z_]+" --glob "**/*.{js,jsx,ts,tsx}" | sort -u
 rg -o "NS[A-Za-z]+UsageDescription" ios/*/Info.plist app.json app.config.* 2>/dev/null | sort -u
 rg -o 'android.permission.[A-Z_]+' android/app/src/main/AndroidManifest.xml | sort -u
 ```

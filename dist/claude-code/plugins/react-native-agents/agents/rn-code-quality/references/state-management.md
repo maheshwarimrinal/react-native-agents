@@ -161,7 +161,7 @@ a real bug on slow networks).
 rg 'createContext' --type tsx -A 15 | rg 'value=\{\{'         # unmemoised context
 rg 'useSelector\(\(.*\) => \(\{|useStore\(\(.*\) => \(\{'      # object-returning selectors
 rg 'useEffect' --type tsx -A 8 | rg 'fetch\(|axios'            # server state in effects
-rg 'persist|redux-persist' --type ts -A 6 | rg -i 'version|migrate'
-rg -i 'token|auth' --type ts | rg -i 'persist|AsyncStorage'
+rg 'persist|redux-persist' --glob "**/*.{js,jsx,ts,tsx}" -A 6 | rg -i 'version|migrate'
+rg -i 'token|auth' --glob "**/*.{js,jsx,ts,tsx}" | rg -i 'persist|AsyncStorage'
 rg 'useState' --type tsx -c | sort -t: -k2 -rn | head          # components with many useStates
 ```

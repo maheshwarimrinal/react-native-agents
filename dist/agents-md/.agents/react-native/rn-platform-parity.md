@@ -170,10 +170,10 @@ rg -n "Platform\.(OS|select|Version)" --glob "**/*.{ts,tsx,js,jsx}" -c | sort -t
 fd -e ios.tsx -e android.tsx -e ios.ts -e android.ts
 
 # Ternaries that assume two platforms
-rg -n "Platform\.OS\s*===\s*['\"](ios|android)['\"]\s*\?" --glob "**/*.{ts,tsx}"
+rg -n "Platform\.OS\s*===\s*['\"](ios|android)['\"]\s*\?" --glob "**/*.{js,jsx,ts,tsx}"
 
 # iOS version compared without parsing
-rg -n "Platform\.Version\s*[><=]" --glob "**/*.{ts,tsx}" -B2 | rg -i "ios"
+rg -n "Platform\.Version\s*[><=]" --glob "**/*.{js,jsx,ts,tsx}" -B2 | rg -i "ios"
 ```
 
 A file with many platform checks is a candidate for splitting into `.ios` / `.android` variants. A
@@ -304,8 +304,8 @@ Where it matters most: modals and bottom sheets, multi-step flows, forms with un
 anything where "back" is ambiguous.
 
 ```bash
-rg -n "BackHandler" --glob "**/*.{ts,tsx}" -A8
-rg -ln "Modal|BottomSheet" --glob "**/*.tsx" | while read -r f; do
+rg -n "BackHandler" --glob "**/*.{js,jsx,ts,tsx}" -A8
+rg -ln "Modal|BottomSheet" --glob "**/*.{jsx,tsx}" | while read -r f; do
   rg -q "BackHandler" "$f" || echo "  modal without back handling: $f"
 done
 ```
@@ -397,7 +397,7 @@ higher elevation can render above one with higher `zIndex`, which produces overl
 no sense if you are only thinking about `zIndex`.
 
 ```bash
-rg -n "shadowColor|shadowOffset|shadowRadius|shadowOpacity" --glob "**/*.{ts,tsx}" -A4 | rg -B4 -v "elevation"
+rg -n "shadowColor|shadowOffset|shadowRadius|shadowOpacity" --glob "**/*.{js,jsx,ts,tsx}" -A4 | rg -B4 -v "elevation"
 ```
 
 ## Text

@@ -23,7 +23,7 @@ piece of state. It is the most common state performance bug and it does not show
 is large enough that something changes often.
 
 ```bash
-rg -n "= use[A-Z]\w*Store\(\)" --glob "**/*.{ts,tsx}"
+rg -n "= use[A-Z]\w*Store\(\)" --glob "**/*.{js,jsx,ts,tsx}"
 ```
 
 ## Selectors that return a new reference every call

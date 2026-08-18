@@ -162,8 +162,8 @@ rg 'allowUniversalAccessFromFileURLs|allowFileAccess|mixedContentMode'
 rg 'injectedJavaScript' -A 5 --type tsx
 rg 'onMessage=' -A 10 --type tsx
 rg 'source=\{\{\s*html' --type tsx
-rg 'Linking\.openURL' -B 3 --type ts
-rg 'navigation\.navigate\((?!\x27)' --type ts       # dynamic route names
+rg 'Linking\.openURL' -B 3 --glob "**/*.{js,jsx,ts,tsx}"
+rg 'navigation\.navigate\((?!\x27)' --glob "**/*.{js,jsx,ts,tsx}"       # dynamic route names
 rg 'exported="true"' android/app/src/main/AndroidManifest.xml -B 2
 rg 'autoVerify' android/app/src/main/AndroidManifest.xml
 rg 'CFBundleURLSchemes' -A 5 ios/*/Info.plist

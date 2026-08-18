@@ -46,7 +46,7 @@ not finished, and there is now code written both ways.
 
 ```bash
 cat index.js 2>/dev/null || cat index.ts
-rg -l "NavigationContainer|createNativeStackNavigator|expo-router" --glob "**/*.tsx" | head
+rg -l "NavigationContainer|createNativeStackNavigator|expo-router" --glob "**/*.{jsx,tsx}" | head
 ```
 
 `index.js` shows what is registered before the app mounts — crash reporting, background handlers,

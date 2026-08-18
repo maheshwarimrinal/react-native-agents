@@ -205,6 +205,52 @@ test('README lists exactly the agents excluded from PR routing', () => {
   }
 });
 
+test('generated marketplace and plugin metadata state the real agent count', () => {
+  // These said "Six specialist React Native agents" at 21 agents, across three
+  // releases, because they were literals in the generator that nothing checked.
+  for (const rel of [
+    'dist/claude-code/.claude-plugin/marketplace.json',
+    'dist/claude-code/plugins/react-native-agents/.claude-plugin/plugin.json',
+  ]) {
+    const full = path.join(ROOT, rel);
+    if (!fs.existsSync(full)) continue;
+    const json = JSON.parse(fs.readFileSync(full, 'utf8'));
+    const descriptions = [json.description, json.metadata?.description, json.plugins?.[0]?.description]
+      .filter(Boolean);
+    assert(descriptions.length > 0, `${rel} has no description`);
+    for (const d of descriptions) {
+      assert(
+        new RegExp(`\\b${agents.length}\\b`).test(d),
+        `${rel} should state ${agents.length} agents: ${d.slice(0, 70)}...`,
+      );
+    }
+  }
+});
+
+test('package.json description states the real agent count', () => {
+  // The description claimed ten areas at 21 agents, and an earlier fix to it
+  // silently no-opped. A count in prose is exactly the thing that goes stale.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert(
+    new RegExp(`\\b${agents.length}\\b`).test(pkg.description),
+    `description should state ${agents.length} agents: ${pkg.description.slice(0, 80)}...`,
+  );
+});
+
+test('package.json keywords cover the agent domains', () => {
+  // npm discovery runs on keywords. An agent nobody can find is an agent
+  // nobody uses.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const haystack = `${pkg.description} ${pkg.keywords.join(' ')}`.toLowerCase();
+  const required = [
+    'upgrade', 'debug', 'dependenc', 'navigation', 'offline', 'push',
+    'permission', 'state', 'parity', 'onboarding', 'store',
+    'performance', 'security', 'accessibility', 'observability', 'release',
+  ];
+  const missing = required.filter((k) => !haystack.includes(k));
+  assert(missing.length === 0, `not discoverable: ${missing.join(', ')}`);
+});
+
 test('docs pin the action to the floating major tag, not a stale version', () => {
   // Four places pinned @v1.1.0 and were still pinned there at 1.2.0. A hard
   // version in docs goes stale on every release; @v1 does not.
@@ -221,6 +267,34 @@ test('docs/agents.md documents every agent', () => {
   const missing = agents.filter((a) => !doc.includes(`\`${a.id}\``)).map((a) => a.id);
   assert(missing.length === 0, `undocumented in docs/agents.md: ${missing.join(', ')}`);
 });
+
+// A large share of React Native projects are JavaScript, and an agent whose
+// globs or audit commands only reach TypeScript is invisible in them. This was
+// the single most common finding across two rounds of review.
+const TS_ONLY_BY_DESIGN = new Set([
+  // Codegen requires TypeScript spec files — `NativeFoo.ts`, `FooSpec.ts` —
+  // so these globs are correctly TypeScript-only.
+  'rn-native-modules',
+]);
+
+for (const a of agents) {
+  test(`${a.id}: globs reach JavaScript projects`, () => {
+    if (TS_ONLY_BY_DESIGN.has(a.id)) return;
+    const globs = (a.globs ?? []).join(' ');
+    const mentionsTs = /\bts\b|\.ts|tsx/.test(globs);
+    if (!mentionsTs) return; // native/config-only agents are fine
+    assert(
+      /\bjs\b|\.js|jsx/.test(globs),
+      `globs cover TypeScript but not JavaScript: ${(a.globs ?? []).join(', ')}`,
+    );
+  });
+
+  test(`${a.id}: audit commands do not exclude JavaScript`, () => {
+    const all = [a.body, ...a.references.map((r) => r.content)].join('\n');
+    const bad = all.match(/--glob ["'][^"']*\{ts,tsx\}["']|--type ts\b|--glob ["']\*\*\/\*\.tsx["']/g);
+    assert(!bad, `ripgrep examples exclude .js/.jsx: ${[...new Set(bad ?? [])].join(', ')}`);
+  });
+}
 
 test('agent ids are unique', () => {
   const ids = agents.map((a) => a.id);

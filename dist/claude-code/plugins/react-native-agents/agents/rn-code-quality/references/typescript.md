@@ -184,10 +184,10 @@ Each use should be adjacent to a runtime check or a comment explaining why it's 
 ## Audit
 
 ```bash
-rg ':\s*any\b|as any|<any>' --type ts | rg -v '\.d\.ts'
-rg '!\.' --type ts                              # non-null assertions
-rg 'declare module' --type ts
-rg '@ts-ignore|@ts-expect-error' --type ts      # expect-error is fine; ignore is not
+rg ':\s*any\b|as any|<any>' --glob "**/*.{js,jsx,ts,tsx}" | rg -v '\.d\.ts'
+rg '!\.' --glob "**/*.{js,jsx,ts,tsx}"                              # non-null assertions
+rg 'declare module' --glob "**/*.{js,jsx,ts,tsx}"
+rg '@ts-ignore|@ts-expect-error' --glob "**/*.{js,jsx,ts,tsx}"      # expect-error is fine; ignore is not
 rg '"strict"' tsconfig.json
 npx tsc --noEmit                                 # does it actually pass?
 ```

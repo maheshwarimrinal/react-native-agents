@@ -144,11 +144,11 @@ The strongest login is worthless if recovery is weak. Check:
 
 ```bash
 rg 'response_type=token|implicit'                       # deprecated flow
-rg 'client_secret' --type ts                            # must not exist on mobile
+rg 'client_secret' --glob "**/*.{js,jsx,ts,tsx}"                            # must not exist on mobile
 rg 'usePKCE|code_challenge'                             # should be present
-rg -i 'authenticateAsync' --type ts -A 6                # biometric theatre check
-rg 'AsyncStorage.*[Tt]oken|persist.*auth' --type ts     # tokens in insecure storage
-rg -i 'logout|signOut' --type ts -A 12                  # does it clear everything?
-rg 'jwtDecode|jwt_decode' --type ts -A 4                # decode used for authz decisions?
-rg 'state' --type ts -C 3 | rg -i 'oauth|authoriz'      # state validated?
+rg -i 'authenticateAsync' --glob "**/*.{js,jsx,ts,tsx}" -A 6                # biometric theatre check
+rg 'AsyncStorage.*[Tt]oken|persist.*auth' --glob "**/*.{js,jsx,ts,tsx}"     # tokens in insecure storage
+rg -i 'logout|signOut' --glob "**/*.{js,jsx,ts,tsx}" -A 12                  # does it clear everything?
+rg 'jwtDecode|jwt_decode' --glob "**/*.{js,jsx,ts,tsx}" -A 4                # decode used for authz decisions?
+rg 'state' --glob "**/*.{js,jsx,ts,tsx}" -C 3 | rg -i 'oauth|authoriz'      # state validated?
 ```

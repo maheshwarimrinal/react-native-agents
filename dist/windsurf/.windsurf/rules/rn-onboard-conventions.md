@@ -30,16 +30,16 @@ For anything not enforced, the convention is whatever the codebase does most.
 
 ```bash
 # Component style
-rg -c "^export function [A-Z]" --glob "**/*.tsx"
-rg -c "^export const [A-Z]\w* = \(" --glob "**/*.tsx"
+rg -c "^export function [A-Z]" --glob "**/*.{jsx,tsx}"
+rg -c "^export const [A-Z]\w* = \(" --glob "**/*.{jsx,tsx}"
 
 # Styling approach
-rg -c "StyleSheet.create" --glob "**/*.tsx"
-rg -c "styled\.|tw\`|className=" --glob "**/*.tsx"
+rg -c "StyleSheet.create" --glob "**/*.{jsx,tsx}"
+rg -c "styled\.|tw\`|className=" --glob "**/*.{jsx,tsx}"
 
 # Imports: aliases or relative
-rg -c "from '@/" --glob "**/*.{ts,tsx}"
-rg -c "from '\.\./\.\./" --glob "**/*.{ts,tsx}"
+rg -c "from '@/" --glob "**/*.{js,jsx,ts,tsx}"
+rg -c "from '\.\./\.\./" --glob "**/*.{js,jsx,ts,tsx}"
 
 # File naming
 fd -e tsx . src | xargs -n1 basename | rg -c '^[A-Z]'
@@ -74,7 +74,7 @@ that signals attention.
 How a team handles failure varies more than anything else and is rarely documented.
 
 ```bash
-rg -n "catch\s*\(" --glob "**/*.{ts,tsx}" -A3 | head -40
+rg -n "catch\s*\(" --glob "**/*.{js,jsx,ts,tsx}" -A3 | head -40
 ```
 
 Look for whether errors are logged, reported to a crash service, shown to the user, or swallowed;

@@ -141,10 +141,10 @@ Crash-free rate can look perfect while the app is broken. Also monitor:
 ## Audit
 
 ```bash
-rg 'Sentry\.init|crashlytics|Bugsnag' --type ts -A 12
-rg 'release:|dist:|environment:' --type ts
+rg 'Sentry\.init|crashlytics|Bugsnag' --glob "**/*.{js,jsx,ts,tsx}" -A 12
+rg 'release:|dist:|environment:' --glob "**/*.{js,jsx,ts,tsx}"
 rg 'sentry|sourcemap' .github/workflows/ eas.json fastlane/ 2>/dev/null
-rg 'enableAutoSessionTracking' --type ts
-rg 'addBreadcrumb' --type ts -c
-rg -i 'featureFlag|remoteConfig|launchDarkly|statsig' --type ts -l
+rg 'enableAutoSessionTracking' --glob "**/*.{js,jsx,ts,tsx}"
+rg 'addBreadcrumb' --glob "**/*.{js,jsx,ts,tsx}" -c
+rg -i 'featureFlag|remoteConfig|launchDarkly|statsig' --glob "**/*.{js,jsx,ts,tsx}" -l
 ```

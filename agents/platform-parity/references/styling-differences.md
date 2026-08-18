@@ -37,7 +37,7 @@ higher elevation can render above one with higher `zIndex`, which produces overl
 no sense if you are only thinking about `zIndex`.
 
 ```bash
-rg -n "shadowColor|shadowOffset|shadowRadius|shadowOpacity" --glob "**/*.{ts,tsx}" -A4 | rg -B4 -v "elevation"
+rg -n "shadowColor|shadowOffset|shadowRadius|shadowOpacity" --glob "**/*.{js,jsx,ts,tsx}" -A4 | rg -B4 -v "elevation"
 ```
 
 ## Text

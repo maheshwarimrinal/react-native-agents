@@ -77,10 +77,10 @@ rg -n "Platform\.(OS|select|Version)" --glob "**/*.{ts,tsx,js,jsx}" -c | sort -t
 fd -e ios.tsx -e android.tsx -e ios.ts -e android.ts
 
 # Ternaries that assume two platforms
-rg -n "Platform\.OS\s*===\s*['\"](ios|android)['\"]\s*\?" --glob "**/*.{ts,tsx}"
+rg -n "Platform\.OS\s*===\s*['\"](ios|android)['\"]\s*\?" --glob "**/*.{js,jsx,ts,tsx}"
 
 # iOS version compared without parsing
-rg -n "Platform\.Version\s*[><=]" --glob "**/*.{ts,tsx}" -B2 | rg -i "ios"
+rg -n "Platform\.Version\s*[><=]" --glob "**/*.{js,jsx,ts,tsx}" -B2 | rg -i "ios"
 ```
 
 A file with many platform checks is a candidate for splitting into `.ios` / `.android` variants. A

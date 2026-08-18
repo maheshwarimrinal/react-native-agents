@@ -679,7 +679,7 @@ export const makeUser = (o: Partial<User> = {}) => UserSchema.parse({ ...default
 ```bash
 rg 'jest\.mock\(' --type tsx -c | sort -t: -k2 -rn | head    # most-mocked files
 rg 'jest\.mock\(.\./' --type tsx                              # mocking local modules — suspicious
-rg 'msw|setupServer' --type ts -l
+rg 'msw|setupServer' --glob "**/*.{js,jsx,ts,tsx}" -l
 rg 'useFakeTimers' --type tsx -A 20 | rg -c useRealTimers     # timers restored?
 rg 'new Date\(\)' --type tsx --glob '*test*'                  # unfrozen time
 rg 'mockResolvedValue' --type tsx -c
@@ -843,7 +843,7 @@ ls jest.config.* jest.setup.* 2>/dev/null
 rg 'coverageThreshold' jest.config.js
 npx jest --listTests 2>/dev/null | wc -l
 rg '\.skip\(|xit\(|xdescribe\(' --type tsx               # skipped tests — why?
-rg 'retries|jest-retry|retryTimes' --type ts .github/    # hidden flake
+rg 'retries|jest-retry|retryTimes' --glob "**/*.{js,jsx,ts,tsx}" .github/    # hidden flake
 rg 'npm install' .github/workflows/                       # should be npm ci
 rg 'max-warnings|--ci' .github/workflows/
 ```

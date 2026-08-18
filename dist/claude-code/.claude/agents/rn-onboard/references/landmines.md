@@ -18,7 +18,7 @@ it is a gamble.
 ## Persisted state without versioning
 
 ```bash
-rg -n "persist\(|AsyncStorage.setItem|MMKV" --glob "**/*.{ts,tsx}" -A5 | rg -B3 -v "version|migrate"
+rg -n "persist\(|AsyncStorage.setItem|MMKV" --glob "**/*.{js,jsx,ts,tsx}" -A5 | rg -B3 -v "version|migrate"
 ```
 
 A persisted store with no version means the next shape change breaks **existing users only** — it
@@ -56,9 +56,9 @@ Two libraries doing the same job means code written both ways, and a newcomer ca
 pattern to follow.
 
 ```bash
-rg -c "from 'redux|from 'zustand|from 'jotai" --glob "**/*.{ts,tsx}" 2>/dev/null
-rg -c "axios|fetch\(" --glob "**/*.{ts,tsx}" 2>/dev/null
-rg -c "moment|date-fns|dayjs" --glob "**/*.{ts,tsx}" 2>/dev/null
+rg -c "from 'redux|from 'zustand|from 'jotai" --glob "**/*.{js,jsx,ts,tsx}" 2>/dev/null
+rg -c "axios|fetch\(" --glob "**/*.{js,jsx,ts,tsx}" 2>/dev/null
+rg -c "moment|date-fns|dayjs" --glob "**/*.{js,jsx,ts,tsx}" 2>/dev/null
 ```
 
 Ask which direction the migration was going. If nobody knows, that is itself the finding.
@@ -67,8 +67,8 @@ Ask which direction the migration was going. If nobody knows, that is itself the
 
 ```bash
 fd -e test.ts -e test.tsx -e spec.ts . | wc -l
-rg -c "expect\(" --glob "**/*.{test,spec}.{ts,tsx}" 2>/dev/null | head
-rg -l "it\.skip|describe\.skip|xit\(|test\.todo" --glob "**/*.{test,spec}.{ts,tsx}"
+rg -c "expect\(" --glob "**/*.{test,spec}.{js,jsx,ts,tsx}" 2>/dev/null | head
+rg -l "it\.skip|describe\.skip|xit\(|test\.todo" --glob "**/*.{test,spec}.{js,jsx,ts,tsx}"
 ```
 
 A high file count with few assertions, or a wall of skipped tests, means the safety net is
@@ -88,7 +88,7 @@ commit is still in history and still compromised.
 ## Commented-out code and `@ts-ignore` clusters
 
 ```bash
-rg -c "@ts-ignore|@ts-expect-error|eslint-disable" --glob "**/*.{ts,tsx}" | sort -t: -k2 -rn | head
+rg -c "@ts-ignore|@ts-expect-error|eslint-disable" --glob "**/*.{js,jsx,ts,tsx}" | sort -t: -k2 -rn | head
 ```
 
 Not automatically bad, and a cluster in one file usually marks a place where the types and reality

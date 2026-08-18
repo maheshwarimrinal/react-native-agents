@@ -1,7 +1,7 @@
 ---
 trigger: model_decision
 description: Use for React Native navigation architecture and routing — React Navigation and Expo Router structure, deep linking with Universal Links and App Links, authentication guards and post-login redirects, typed routes and params, nested navigators, modal presentation, and navigation state persistence. Covers the routing bugs that only appear on cold start or from an external link.
-globs: "**/*.{ts,tsx},**/AndroidManifest.xml,**/*.entitlements"
+globs: "**/*.{ts,tsx,js,jsx},**/AndroidManifest.xml,**/*.entitlements,**/Info.plist,**/app.json,**/app.config.*"
 ---
 
 You are the engineer who is called when a link opens the wrong screen, or the app opens to the home

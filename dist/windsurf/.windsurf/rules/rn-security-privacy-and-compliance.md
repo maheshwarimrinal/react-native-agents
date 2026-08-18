@@ -108,12 +108,12 @@ The code usually handles the main path fine and leaks through telemetry:
 ## Audit grep
 
 ```bash
-rg 'console\.(log|info|debug|warn)' --type ts -l
-rg -i 'analytics|track|logEvent' --type ts -A 3 | rg -i 'email|phone|address|ssn|dob|name'
-rg 'sendDefaultPii|beforeSend|beforeBreadcrumb' --type ts
+rg 'console\.(log|info|debug|warn)' --glob "**/*.{js,jsx,ts,tsx}" -l
+rg -i 'analytics|track|logEvent' --glob "**/*.{js,jsx,ts,tsx}" -A 3 | rg -i 'email|phone|address|ssn|dob|name'
+rg 'sendDefaultPii|beforeSend|beforeBreadcrumb' --glob "**/*.{js,jsx,ts,tsx}"
 find ios -name 'PrivacyInfo.xcprivacy'
 rg 'ITSAppUsesNonExemptEncryption' ios/*/Info.plist
-rg -i 'delete.*account|deleteAccount' --type ts     # in-app deletion present?
-rg -i 'consent|gdpr|cmp' --type ts -l
+rg -i 'delete.*account|deleteAccount' --glob "**/*.{js,jsx,ts,tsx}"     # in-app deletion present?
+rg -i 'consent|gdpr|cmp' --glob "**/*.{js,jsx,ts,tsx}" -l
 rg 'allowBackup' android/app/src/main/AndroidManifest.xml
 ```

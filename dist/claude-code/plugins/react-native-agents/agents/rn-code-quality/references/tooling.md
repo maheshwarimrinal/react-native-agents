@@ -152,8 +152,8 @@ Turning everything on at once produces 5,000 errors and gets reverted. Instead:
 
 ```bash
 ls eslint.config.* .eslintrc*                 # does config exist at all?
-rg 'eslint-disable' --type ts -c | sort -t: -k2 -rn | head   # where are the exceptions?
-rg '@ts-ignore' --type ts                      # prefer @ts-expect-error
+rg 'eslint-disable' --glob "**/*.{js,jsx,ts,tsx}" -c | sort -t: -k2 -rn | head   # where are the exceptions?
+rg '@ts-ignore' --glob "**/*.{js,jsx,ts,tsx}"                      # prefer @ts-expect-error
 rg '"strict"' tsconfig.json
 rg 'max-warnings' .github/workflows/ package.json
 npx tsc --noEmit 2>&1 | tail -5

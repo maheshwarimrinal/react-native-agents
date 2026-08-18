@@ -133,6 +133,6 @@ rg '"version"|buildNumber|versionCode|versionName' app.json app.config.* android
 rg 'appVersionSource|autoIncrement' eas.json
 rg 'runtimeVersion' app.json app.config.*
 git tag --sort=-creatordate | head
-rg 'nativeApplicationVersion|nativeBuildVersion' --type ts   # shown in-app?
+rg 'nativeApplicationVersion|nativeBuildVersion' --glob "**/*.{js,jsx,ts,tsx}"   # shown in-app?
 ls CHANGELOG.md 2>/dev/null
 ```
