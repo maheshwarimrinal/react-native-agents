@@ -15,6 +15,9 @@ const { loadAgents, loadSharedContext, parseFrontmatter, serializeFrontmatter, K
   await import(path.join(ROOT, 'scripts/lib/source.mjs'));
 const { plan, apply, isUserOwned, summarise } = await import(path.join(ROOT, 'scripts/lib/install.mjs'));
 const { scoreAgents, explainRouting, SIGNALS } = await import(path.join(ROOT, 'mcp-server/routing.mjs'));
+const { telemetryState, consentState, sanitise, capture, ALLOWED_PROPERTIES } = await import(
+  path.join(ROOT, 'scripts/lib/telemetry.mjs')
+);
 const { loadCases, scoreOutput } = await import(path.join(ROOT, 'evals/run.mjs'));
 const os = await import('node:os');
 
@@ -295,6 +298,114 @@ for (const a of agents) {
     assert(!bad, `ripgrep examples exclude .js/.jsx: ${[...new Set(bad ?? [])].join(', ')}`);
   });
 }
+
+/* ------------------------------------------------------------------ *
+ * Telemetry — the tests that matter are the ones proving it does nothing
+ * unless asked, and cannot carry personal data if it does.
+ * ------------------------------------------------------------------ */
+
+test('telemetry is off by default', () => {
+  // No config, no env vars — the state a first-time user is in.
+  // Asserted against consentState so it holds regardless of whether this
+  // build has a key configured.
+  const state = consentState({}, {});
+  assert(!state.enabled, `should be off by default, got: ${state.reason}`);
+  assert(!telemetryState({}, {}).enabled, 'and off end to end');
+});
+
+test('telemetry stays off when the user has not opted in', () => {
+  for (const config of [{}, { installId: 'x' }, { telemetryNoticeShown: true }]) {
+    assert(!consentState({}, config).enabled, JSON.stringify(config));
+  }
+});
+
+test('DO_NOT_TRACK overrides an explicit opt-in', () => {
+  // Any signal that says no wins. There must be no combination where a user
+  // who set DO_NOT_TRACK still gets tracked.
+  for (const env of [{ DO_NOT_TRACK: '1' }, { DO_NOT_TRACK: 'true' }]) {
+    // consentState, not telemetryState: with no key configured the latter
+    // short-circuits and would pass without testing the rule at all.
+    const state = consentState(env, { telemetry: true });
+    assert(!state.enabled, `DO_NOT_TRACK should win, got: ${state.reason}`);
+    assert(state.reason.includes('DO_NOT_TRACK'), `for the right reason, got: ${state.reason}`);
+  }
+});
+
+test('RN_AGENTS_TELEMETRY=0 overrides an opt-in config', () => {
+  const state = consentState({ RN_AGENTS_TELEMETRY: '0' }, { telemetry: true });
+  assert(!state.enabled, state.reason);
+  assert(state.reason.includes('RN_AGENTS_TELEMETRY'), `for the right reason, got: ${state.reason}`);
+});
+
+test('an explicit opt-in is actually honoured', () => {
+  // The mirror of the DO_NOT_TRACK test. Without this, "always returns false"
+  // would pass every consent test on this page.
+  assert(consentState({}, { telemetry: true }).enabled, 'config opt-in should enable');
+  assert(consentState({ RN_AGENTS_TELEMETRY: '1' }, {}).enabled, 'env opt-in should enable');
+});
+
+test('sanitise drops everything not on the allow-list', () => {
+  const dirty = {
+    surface: 'cli',
+    tool: 'cursor',
+    // None of these should survive.
+    projectName: 'acme-banking',
+    repo: 'acme/mobile',
+    cwd: '/Users/sam/code/acme',
+    email: 'sam@example.com',
+    errorMessage: 'ENOENT: no such file',
+    stack: 'at Object.<anonymous>',
+    userName: 'sam',
+  };
+  const clean = sanitise(dirty);
+
+  const kept = Object.keys(clean).sort().join(',');
+  assert(kept === 'surface,tool', `only surface,tool should survive — got: ${kept}`);
+});
+
+test('sanitise drops allow-listed keys whose value looks like a path or an email', () => {
+  // Second line of defence: even if a key is on the list, a value carrying a
+  // separator, a traversal, or a Windows drive letter never ships.
+  for (const value of ['/Users/sam/app', 'C:\\code\\app', '../secrets', 'sam@example.com', 'acme/mobile']) {
+    const clean = sanitise({ tool: value });
+    assert(clean.tool === undefined, `should have dropped: ${value}`);
+  }
+});
+
+test('sanitise accepts only primitives', () => {
+  const clean = sanitise({ agent_count: { nested: 'object' }, version: ['1.2.0'] });
+  assert(Object.keys(clean).length === 0, `expected nothing, got: ${JSON.stringify(clean)}`);
+});
+
+test('capture is a no-op when telemetry is disabled', async () => {
+  // If this ever performs a network call while disabled, it is a serious bug.
+  const sent = await capture('test_event', { surface: 'cli' }, { env: { RN_AGENTS_TELEMETRY: '0' } });
+  assert(sent === false, 'capture should not send while disabled');
+});
+
+test('the allow-list contains no field that could identify a person', () => {
+  // A tripwire on the list itself. Adding `repo`, `path`, `email` or similar
+  // fails here rather than in production.
+  const forbidden = /path|dir|repo|project|email|user|name|host|ip|url|file|message|stack|token|key/i;
+  const offenders = [...ALLOWED_PROPERTIES].filter(
+    (k) => forbidden.test(k) && !['agent_id', 'node_major'].includes(k),
+  );
+  assert(offenders.length === 0, `identifying-sounding fields on the allow-list: ${offenders.join(', ')}`);
+});
+
+test('telemetry is documented', () => {
+  const doc = path.join(ROOT, 'TELEMETRY.md');
+  assert(fs.existsSync(doc), 'TELEMETRY.md must exist');
+  const text = fs.readFileSync(doc, 'utf8');
+
+  // Every field that can ship must be named in the document.
+  for (const key of ALLOWED_PROPERTIES) {
+    assert(text.includes(key), `TELEMETRY.md does not document the field: ${key}`);
+  }
+  for (const phrase of ['DO_NOT_TRACK', 'RN_AGENTS_TELEMETRY', 'telemetry disable']) {
+    assert(text.includes(phrase), `TELEMETRY.md should mention ${phrase}`);
+  }
+});
 
 test('agent ids are unique', () => {
   const ids = agents.map((a) => a.id);

@@ -25,6 +25,7 @@
   },
   "files": [
     "agents",
+    "TELEMETRY.md",
     "shared",
     "scripts",
     "mcp-server",

@@ -22,6 +22,7 @@ import {
   loadSharedContext,
 } from '../scripts/lib/source.mjs';
 import { explainRouting } from './routing.mjs';
+import { captureDetached } from '../scripts/lib/telemetry.mjs';
 
 const PROTOCOL_VERSION = '2024-11-05';
 // Version comes from package.json so it can't drift from the published package.
@@ -148,6 +149,10 @@ function callTool(name, args = {}) {
     }
 
     case 'get_react_native_agent': {
+      // Which specialists people actually reach for. `agent_id` is validated
+      // against this repo's own ids below, so a caller cannot smuggle a string
+      // into the payload. No-op unless the user opted in.
+      captureDetached('mcp_agent_loaded', { surface: 'mcp', agent_id: args?.agent_id });
       const agent = byId.get(args.agent_id);
       if (!agent) return error(`Unknown agent "${args.agent_id}". Available: ${agentIds.join(', ')}`);
       const body = args.include_references

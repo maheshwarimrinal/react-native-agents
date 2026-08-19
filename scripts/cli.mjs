@@ -10,10 +10,19 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import https from 'node:https';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DIST_DIR, ROOT, loadAgents } from './lib/source.mjs';
 import { apply, isUserOwned, plan, previewDiff, summarise } from './lib/install.mjs';
+import {
+  CONFIG_FILE,
+  captureDetached,
+  readConfig,
+  setTelemetry,
+  telemetryState,
+  writeNoticeShown,
+} from './lib/telemetry.mjs';
 
 const c = {
   dim: (s) => `\x1b[2m${s}\x1b[0m`,
@@ -56,6 +65,99 @@ function resolveConflictMode(args) {
   return 'skip'; // safe default: never destroy anything the user wrote
 }
 
+/**
+ * Download counts from the public npm registry.
+ *
+ * This is the honest answer to "how many people use this". It is real reach
+ * rather than a sample of consenting users, it works for every release already
+ * published, and it requires collecting nothing from anybody.
+ */
+const PKG_NAME = '@maheshwarimrinal/react-native-agents';
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { timeout: 8000 }, (res) => {
+      if (res.statusCode === 404) {
+        res.resume();
+        resolve(null);
+        return;
+      }
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(data));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('timed out'));
+    });
+    req.on('error', reject);
+  });
+}
+
+async function printDownloadStats(pkg = PKG_NAME) {
+  const encoded = encodeURIComponent(pkg);
+  console.log(c.bold(`\n  ${pkg}\n`));
+
+  try {
+    const [week, month, range] = await Promise.all([
+      fetchJson(`https://api.npmjs.org/downloads/point/last-week/${encoded}`),
+      fetchJson(`https://api.npmjs.org/downloads/point/last-month/${encoded}`),
+      fetchJson(`https://api.npmjs.org/downloads/range/last-month/${encoded}`),
+    ]);
+
+    if (!week && !month) {
+      console.log(c.dim('  No download data yet — the registry needs a day or so after first publish.\n'));
+      return;
+    }
+
+    console.log(`  last 7 days    ${c.cyan(String(week?.downloads ?? 0))}`);
+    console.log(`  last 30 days   ${c.cyan(String(month?.downloads ?? 0))}`);
+
+    if (range?.downloads?.length) {
+      const days = range.downloads;
+      const peak = days.reduce((a, b) => (b.downloads > a.downloads ? b : a));
+      const active = days.filter((d) => d.downloads > 0).length;
+      console.log(`  busiest day    ${c.cyan(String(peak.downloads))} ${c.dim(`on ${peak.day}`)}`);
+      console.log(`  days with any  ${c.dim(`${active} of ${days.length}`)}`);
+    }
+
+    console.log(c.dim('\n  Source: the public npm registry. No telemetry, no consent needed,'));
+    console.log(c.dim('  and it counts everyone rather than only users who opted in.\n'));
+  } catch (error) {
+    console.log(c.red(`  Could not reach the npm registry: ${error.message}\n`));
+  }
+}
+
+/**
+ * A one-time, informational notice. Deliberately not a consent prompt: there is
+ * nothing to consent to, because telemetry is already off. It exists so people
+ * who *want* to help know the option is there.
+ */
+function maybeShowTelemetryNotice() {
+  try {
+    const config = readConfig();
+    if (config.telemetryNoticeShown || config.telemetry !== undefined) return;
+    if (process.env.CI) return; // nobody reads CI output for this
+
+    console.log(
+      c.dim('\n  Telemetry is off. If you would like to help by sharing anonymous') +
+        c.dim('\n  adoption data (version, OS, which tool — never paths or code):') +
+        `\n    ${c.cyan('npx @maheshwarimrinal/react-native-agents telemetry enable')}`,
+    );
+
+    writeNoticeShown(config);
+  } catch {
+    /* never let a notice break an install */
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cmd = args._[0] ?? 'install';
@@ -79,6 +181,56 @@ async function main() {
   if (cmd === 'audit') {
     process.argv = [process.argv[0], path.join(ROOT, 'action', 'index.mjs'), ...process.argv.slice(3)];
     await import(path.join(ROOT, 'action', 'index.mjs'));
+    return;
+  }
+
+  // Consent controls. Deliberately its own command rather than a flag, so
+  // `telemetry status` can state plainly what is on and why.
+  if (cmd === 'telemetry') {
+    const action = args._[1];
+    const state = telemetryState();
+
+    if (action === 'enable') {
+      const ok = setTelemetry(true);
+      console.log(
+        ok
+          ? c.green('\n  Telemetry enabled.') +
+              c.dim(`\n  Anonymous adoption events only. See TELEMETRY.md for the exact fields.\n  Config: ${CONFIG_FILE}\n`)
+          : c.red('\n  Could not write the config file. Telemetry stays off.\n'),
+      );
+      return;
+    }
+
+    if (action === 'disable') {
+      const ok = setTelemetry(false);
+      console.log(
+        ok
+          ? c.green('\n  Telemetry disabled.\n')
+          : c.red('\n  Could not write the config file.') +
+              c.dim('\n  Set RN_AGENTS_TELEMETRY=0 in your environment instead.\n'),
+      );
+      return;
+    }
+
+    console.log(c.bold('\n  Telemetry'));
+    console.log(`  status   ${state.enabled ? c.green('on') : c.dim('off')} ${c.dim(`(${state.reason})`)}`);
+    console.log(c.dim(`  config   ${CONFIG_FILE}`));
+    console.log(c.dim('\n  Off by default. Nothing is sent unless you turn it on.'));
+    console.log(c.dim('  When on, it sends anonymous adoption events only — package version,'));
+    console.log(c.dim('  Node major, OS, and which tool you installed for. Never paths, project'));
+    console.log(c.dim('  names, repository names, code, or IP address.\n'));
+    console.log(`  ${c.cyan('npx @maheshwarimrinal/react-native-agents telemetry enable')}`);
+    console.log(`  ${c.cyan('npx @maheshwarimrinal/react-native-agents telemetry disable')}`);
+    console.log(c.dim('\n  Also honoured: DO_NOT_TRACK=1, RN_AGENTS_TELEMETRY=0\n'));
+    console.log(c.dim('  Full field list: TELEMETRY.md\n'));
+    return;
+  }
+
+  // Public npm download counts. No telemetry involved — this reads the same
+  // registry API that npmjs.com uses, works retroactively, and collects
+  // nothing from anyone.
+  if (cmd === 'stats') {
+    await printDownloadStats(args._[1]);
     return;
   }
 
@@ -120,7 +272,7 @@ async function main() {
   }
 
   if (cmd !== 'install') {
-    console.error(c.red(`Unknown command: ${cmd}. Try \`install\`, \`list\`, \`size\`, \`audit\`, or \`mcp\`.`));
+    console.error(c.red(`Unknown command: ${cmd}. Try \`install\`, \`list\`, \`size\`, \`audit\`, \`mcp\`, \`stats\`, or \`telemetry\`.`));
     process.exit(1);
   }
 
@@ -229,6 +381,18 @@ async function main() {
         (r.overwritten ? c.yellow(` · ${r.overwritten} replaced`) : ''),
     );
   }
+
+  // Adoption event. `tool` is one of a fixed vocabulary defined in this repo —
+  // never a path, a project name, or anything the user typed. No-op unless the
+  // user has explicitly opted in.
+  for (const { tool } of plans) {
+    captureDetached('cli_install', { surface: 'cli', command: 'install', tool });
+  }
+
+  // First-run notice, shown once, only when telemetry is OFF and unconfigured.
+  // It tells people the feature exists rather than asking them to consent to
+  // something already happening.
+  maybeShowTelemetryNotice();
 
   console.log(c.dim(`\n  ${created} file(s) written to ${cwd}`));
   if (skipped) {

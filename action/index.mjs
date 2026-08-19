@@ -17,6 +17,7 @@ import { changedFilePaths, parseDiff } from './lib/diff.mjs';
 import { LLM } from './lib/llm.mjs';
 import { countBySeverity, gateFails, runAudit } from './lib/audit.mjs';
 import { GitHub, renderSummary } from './lib/github.mjs';
+import { captureDetached } from '../scripts/lib/telemetry.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -240,6 +241,11 @@ async function main() {
   setOutput('findings-json', JSON.stringify(result.findings));
 
   log(c.bold('\n  Result\n'));
+  // Adoption only: how many agents ran, package version, CI flag. No repository
+  // name, no file paths, no findings content. No-op unless opted in — and in CI
+  // that means an explicit RN_AGENTS_TELEMETRY=1 in the workflow.
+  captureDetached('action_run', { surface: 'action', agent_count: result.agents?.length ?? 0 });
+
   log(`  P0 ${counts.P0}  P1 ${counts.P1}  P2 ${counts.P2}  P3 ${counts.P3}  (${result.findings.length} total)`);
   log(`  ${result.usage.calls} call(s), ~$${result.usage.costUsd.toFixed(3)}`);
 

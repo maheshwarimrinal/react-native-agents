@@ -142,6 +142,32 @@ npx @maheshwarimrinal/react-native-agents size --base main --budget-delta 100kb
 
 Bytes are attributed per source-map segment, so a package's number is measured rather than estimated. Budgets accept `250kb`, `1.5mb`, or a raw byte count; an invalid value is an error rather than a silently skipped check.
 
+## Telemetry
+
+**Off by default.** Nothing is sent unless you turn it on.
+
+```bash
+npx @maheshwarimrinal/react-native-agents telemetry           # status
+npx @maheshwarimrinal/react-native-agents telemetry enable    # opt in
+npx @maheshwarimrinal/react-native-agents telemetry disable   # opt back out
+```
+
+When enabled it sends anonymous adoption data only — package version, Node major, OS, and which
+editor you installed for. Never paths, repository names, project names, code, findings, or IP
+address. `DO_NOT_TRACK=1` and `RN_AGENTS_TELEMETRY=0` are honoured and override an opt-in.
+
+Every field that can ever be transmitted is listed in [TELEMETRY.md](TELEMETRY.md), and a test
+fails the build if that document falls out of sync with the code.
+
+For download counts you do not need telemetry at all:
+
+```bash
+npx @maheshwarimrinal/react-native-agents stats
+```
+
+That reads the public npm registry — every download rather than a consenting sample, retroactive
+across every release, and it collects nothing from anyone.
+
 ## Documentation
 
 - [Project page](https://www.mrinalmaheshwari.com/projects/react-native-agents) — overview of the agents, the bundle-size analyzer, and the design decisions behind them
@@ -153,6 +179,7 @@ Bytes are attributed per source-map segment, so a package's number is measured r
 - [Architecture](docs/architecture.md) — source files, generator, generated targets, and design decisions
 - [Development guide](docs/development.md) — build, test, evals, freshness checks, and extending the project
 - [FAQ](docs/faq.md) — versions, Expo, API keys, customization, npm, and troubleshooting
+- [Telemetry](TELEMETRY.md) — every field collected, verbatim, and how to turn it off
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 
