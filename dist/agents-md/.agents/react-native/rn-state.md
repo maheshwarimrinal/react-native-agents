@@ -215,13 +215,17 @@ const hydrated = useSettings.persist?.hasHydrated();
 
 // ✓ subscribe, and seed with the current value in case hydration already finished
 function useHydrated() {
-  const [hydrated, setHydrated] = useState(() => useSettings.persist.hasHydrated());
+  // `persist` is absent on a store without the middleware, so every access is
+  // guarded — this hook gets copied into stores that are not persisted.
+  const api = useSettings.persist;
+  const [hydrated, setHydrated] = useState(() => api?.hasHydrated?.() ?? true);
 
   useEffect(() => {
-    const unsubFinish = useSettings.persist.onFinishHydration(() => setHydrated(true));
-    setHydrated(useSettings.persist.hasHydrated());   // covers the race before subscribing
-    return unsubFinish;
-  }, []);
+    if (!api) return;                                  // not a persisted store
+    const unsubFinish = api.onFinishHydration?.(() => setHydrated(true));
+    setHydrated(api.hasHydrated?.() ?? true);          // covers the race before subscribing
+    return () => unsubFinish?.();
+  }, [api]);
 
   return hydrated;
 }

@@ -367,9 +367,9 @@ The two platforms have different models. This is the root of nearly every permis
 
 | | iOS | Android |
 |---|---|---|
-| Prompts | Once, ever | Repeatable until refused twice |
+| Prompts | Once, ever | Repeatable until the user refuses persistently |
 | After denial | Settings only | Can re-ask, with rationale |
-| Permanent denial | Immediate, after one "Don't Allow" | After "Don't allow" twice |
+| Permanent denial | Immediate, after one "Don't Allow" | After repeated denials, or when "Don't ask again" is selected — the exact threshold varies by Android version and OEM |
 | Rationale step | No equivalent | `shouldShowRequestPermissionRationale` |
 | Declaration | `Info.plist` usage string | `AndroidManifest.xml` `uses-permission` |
 | Missing declaration | **App crashes** on request | Request silently fails |
@@ -415,11 +415,18 @@ The practical consequence is that **when** you ask matters more than how. See `r
 Android tells you when the user has refused before and an explanation is warranted:
 
 ```ts
-// react-native-permissions surfaces this in the status;
-// the platform API is shouldShowRequestPermissionRationale
-if (status === RESULTS.DENIED && hasAskedBefore) {
-  await showRationale();      // your UI, explaining why
+// react-native-permissions does NOT expose Android's rationale flag — its
+// statuses stop at DENIED / BLOCKED. Get it from React Native directly, or
+// track your own "have we asked before" flag.
+import { PermissionsAndroid, Platform } from 'react-native';
+
+if (Platform.OS === 'android') {
+  const shouldExplain = await PermissionsAndroid.shouldShowRequestPermissionRationale(
+    PermissionsAndroid.PERMISSIONS.CAMERA,
+  );
+  if (shouldExplain) await showRationale();   // your UI, explaining why
 }
+
 await request(PERMISSION);
 ```
 

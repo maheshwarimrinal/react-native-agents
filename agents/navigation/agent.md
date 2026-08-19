@@ -27,11 +27,14 @@ triggers:
   - app link
   - expo router
   - react navigation
+  - "@react-navigation"
+  - "expo-router"
   - createstacknavigator
   - createnativestacknavigator
   - createbottomtabnavigator
   - createdrawernavigator
-  - creatematerialtopnavigator
+  - creatematerialtoptabnavigator
+  - creatematerialbottomtabnavigator
   - navigationcontainer
   - useroute
   - usenavigation

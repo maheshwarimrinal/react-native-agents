@@ -407,6 +407,24 @@ test('telemetry is documented', () => {
   }
 });
 
+test('navigator factory triggers match real React Navigation APIs', () => {
+  // `creatematerialtopnavigator` shipped and could never match: the real API is
+  // createMaterialTopTabNavigator. A trigger with a typo is invisible — it
+  // simply never fires, and nothing fails.
+  const nav = agents.find((a) => a.id === 'rn-navigation');
+  const REAL = [
+    'createstacknavigator',
+    'createnativestacknavigator',
+    'createbottomtabnavigator',
+    'creatematerialtoptabnavigator',
+    'creatematerialbottomtabnavigator',
+    'createdrawernavigator',
+  ];
+  const factories = nav.triggers.filter((t) => t.startsWith('create'));
+  const bogus = factories.filter((t) => !REAL.includes(t));
+  assert(bogus.length === 0, `not real navigator factories: ${bogus.join(', ')}`);
+});
+
 test('agent ids are unique', () => {
   const ids = agents.map((a) => a.id);
   assert(new Set(ids).size === ids.length, 'duplicate ids');
