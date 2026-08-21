@@ -135,8 +135,8 @@ your app (see the security agent).
 ## Quick audit
 
 ```bash
-rg 'from .lodash.$' --type ts               # full lodash import
-rg 'from .moment.' --type ts
+rg 'from .lodash.$' --glob "**/*.{js,jsx,ts,tsx}"               # full lodash import
+rg 'from .moment.' --glob "**/*.{js,jsx,ts,tsx}"
 rg "require\('\./" index.js                  # eager side-effect imports
 rg 'inlineRequires' metro.config.js
 rg 'minifyEnabled|shrinkResources' android/app/build.gradle

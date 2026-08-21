@@ -150,11 +150,11 @@ It is fine for non-sensitive preferences. It is not a place for anything an atta
 ## Audit grep
 
 ```bash
-rg -i "(api[_-]?key|secret|passwd|password|token|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9_\-]{12,}" --type ts
+rg -i "(api[_-]?key|secret|passwd|password|token|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9_\-]{12,}" --glob "**/*.{js,jsx,ts,tsx}"
 rg 'sk_live_|sk_test_|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35}|ghp_[A-Za-z0-9]{36}|xox[baprs]-'
-rg 'AsyncStorage\.setItem' --type ts -B 2 -A 2      # check what's being stored
+rg 'AsyncStorage\.setItem' --glob "**/*.{js,jsx,ts,tsx}" -B 2 -A 2      # check what's being stored
 rg 'new MMKV\(' -A 3                                 # literal encryptionKey?
-rg 'console\.(log|warn|debug)' --type ts -l
+rg 'console\.(log|warn|debug)' --glob "**/*.{js,jsx,ts,tsx}" -l
 rg 'allowBackup|dataExtractionRules' android/app/src/main/AndroidManifest.xml
 rg 'secureTextEntry' --type tsx                       # present on every password field?
 git log -p --all -S 'sk_live' | head                  # secrets in history

@@ -368,11 +368,11 @@ perceived-performance wins available: the app opens with content instead of spin
 
 ```bash
 rg 'useEffect' -A 8 --type tsx | rg 'fetch\(|axios\.'      # hand-rolled data fetching
-rg 'fetch\(' --type ts -A 3 | rg -v 'signal'                # no timeout / cancellation
-rg 'JSON\.parse' --type ts
-rg 'setInterval' --type ts -B 2 -A 2 | rg -i 'poll|refresh|fetch'
-rg 'staleTime|refetchOnWindowFocus|refetchInterval' --type ts
-rg 'AsyncStorage\.(set|get)Item' --type ts                  # candidates for MMKV
+rg 'fetch\(' --glob "**/*.{js,jsx,ts,tsx}" -A 3 | rg -v 'signal'                # no timeout / cancellation
+rg 'JSON\.parse' --glob "**/*.{js,jsx,ts,tsx}"
+rg 'setInterval' --glob "**/*.{js,jsx,ts,tsx}" -B 2 -A 2 | rg -i 'poll|refresh|fetch'
+rg 'staleTime|refetchOnWindowFocus|refetchInterval' --glob "**/*.{js,jsx,ts,tsx}"
+rg 'AsyncStorage\.(set|get)Item' --glob "**/*.{js,jsx,ts,tsx}"                  # candidates for MMKV
 ```
 
 ---
@@ -917,8 +917,8 @@ missing dependency that made someone drop the cleanup.
 rg 'addListener|addEventListener' --type tsx -A 6 | rg -v 'remove\(\)|return \(\)'
 rg 'setInterval|setTimeout' --type tsx -A 6 | rg -v 'clear(Interval|Timeout)'
 rg 'removeEventListener'                      # removed API — broken cleanup
-rg 'new Map\(\)|new Set\(\)' --type ts        # check each for a size bound
-rg 'onSnapshot|onValue|subscribe\(' --type ts -A 5
+rg 'new Map\(\)|new Set\(\)' --glob "**/*.{js,jsx,ts,tsx}"        # check each for a size bound
+rg 'onSnapshot|onValue|subscribe\(' --glob "**/*.{js,jsx,ts,tsx}" -A 5
 ```
 
 ---
@@ -1245,8 +1245,8 @@ your app (see the security agent).
 ## Quick audit
 
 ```bash
-rg 'from .lodash.$' --type ts               # full lodash import
-rg 'from .moment.' --type ts
+rg 'from .lodash.$' --glob "**/*.{js,jsx,ts,tsx}"               # full lodash import
+rg 'from .moment.' --glob "**/*.{js,jsx,ts,tsx}"
 rg "require\('\./" index.js                  # eager side-effect imports
 rg 'inlineRequires' metro.config.js
 rg 'minifyEnabled|shrinkResources' android/app/build.gradle

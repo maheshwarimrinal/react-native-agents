@@ -120,7 +120,7 @@ rg 'TouchableNativeFeedback|android_ripple' --type tsx -c
 rg 'Platform\.(OS|select)' --type tsx -c | sort -t: -k2 -rn | head
 rg '@react-navigation/(native-)?stack' package.json
 rg 'headerTitleAlign' --type tsx
-rg 'createChannel|setNotificationChannel' --type ts        # Android channels
-rg 'openSettings|Linking\.openSettings' --type ts          # denied-permission path
+rg 'createChannel|setNotificationChannel' --glob "**/*.{js,jsx,ts,tsx}"        # Android channels
+rg 'openSettings|Linking\.openSettings' --glob "**/*.{js,jsx,ts,tsx}"          # denied-permission path
 ls **/*.ios.tsx **/*.android.tsx 2>/dev/null
 ```

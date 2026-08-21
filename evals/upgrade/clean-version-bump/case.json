@@ -1,0 +1,36 @@
+{
+  "agent": "rn-upgrade",
+  "title": "A correctly planned and verified single-minor upgrade",
+  "context": { "reactNative": "0.87", "upgradedFrom": "0.86", "language": "TypeScript" },
+
+  "notes": "Clean case. This plan does everything the agent's own references ask for: single hop, three separated commits, template diff reconciled by hand rather than applied blindly, release builds from a clean checkout, behaviour checks covering the measurement and native-module surfaces, symbolication verified, a recorded before/after bundle size rather than a claimed one, and a retained rollback. There is nothing here worth reporting. The failure mode being tested is manufacturing findings to justify the review — inventing risk, demanding process that is already present, or padding with generic upgrade advice the plan already follows.",
+
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "invents a missing rollback plan",
+      "pattern": "(no|missing|lacks?|without)\\s+(a\\s+)?rollback"
+    },
+    {
+      "name": "claims verification is missing when it is enumerated",
+      "pattern": "(no|missing|lacks?)\\s+(verification|testing|validation)"
+    },
+    {
+      "name": "demands the hops be split further on a single-minor upgrade",
+      "any": ["split into smaller", "one version at a time", "incremental hops"],
+      "unless": ["already", "correctly", "this is"]
+    },
+    {
+      "name": "invents a performance regression with no baseline",
+      "pattern": "\\b\\d+\\s?(ms|fps|%)\\b.*(slower|regress|degrad)"
+    },
+    {
+      "name": "recommends clearing caches as a precaution",
+      "pattern": "(rm -rf|delete|clear)\\s+(node_modules|deriveddata|caches)",
+      "unless": ["not needed", "unnecessary", "if that fails", "already"]
+    }
+  ]
+}

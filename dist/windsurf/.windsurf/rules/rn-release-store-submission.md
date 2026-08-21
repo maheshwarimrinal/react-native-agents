@@ -137,5 +137,5 @@ find ios -name 'PrivacyInfo.xcprivacy'
 rg 'ITSAppUsesNonExemptEncryption|NS.*UsageDescription' ios/*/Info.plist
 rg 'targetSdkVersion|compileSdkVersion' android/build.gradle android/app/build.gradle
 rg 'uses-permission' android/app/src/main/AndroidManifest.xml
-rg -i 'deleteAccount|delete.*account' --type ts
+rg -i 'deleteAccount|delete.*account' --glob "**/*.{js,jsx,ts,tsx}"
 ```

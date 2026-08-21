@@ -1,5 +1,5 @@
 ---
-applyTo: "**/*.tsx,**/*.ts"
+applyTo: "**/*.{ts,tsx,js,jsx}"
 description: Use when writing new React Native code — screens, components, forms, lists, navigation, data fetching. Produces code that already handles safe areas, accessibility, loading/empty/error states, keyboard, dark mode, and stable list callbacks, so review has nothing to catch.
 ---
 

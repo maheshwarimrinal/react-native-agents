@@ -168,11 +168,11 @@ different UI and different user actions, and conflating them is a common and con
 ## Audit
 
 ```bash
-rg 'catch\s*\([^)]*\)\s*\{\s*\}' --type ts          # empty catch
-rg 'catch' --type ts -A 3 | rg -c 'console\.'        # log-and-continue
+rg 'catch\s*\([^)]*\)\s*\{\s*\}' --glob "**/*.{js,jsx,ts,tsx}"          # empty catch
+rg 'catch' --glob "**/*.{js,jsx,ts,tsx}" -A 3 | rg -c 'console\.'        # log-and-continue
 rg 'ErrorBoundary' --type tsx -l                      # any at all? per screen?
-rg 'setGlobalHandler|rejection-tracking' --type ts
+rg 'setGlobalHandler|rejection-tracking' --glob "**/*.{js,jsx,ts,tsx}"
 rg 'isPending|isLoading' --type tsx -A 6 | rg -c 'EmptyState|empty'
-rg 'throw new Error\(' --type ts                      # untyped errors
-rg 'status === 401|response\.status' --type ts -A 5
+rg 'throw new Error\(' --glob "**/*.{js,jsx,ts,tsx}"                      # untyped errors
+rg 'status === 401|response\.status' --glob "**/*.{js,jsx,ts,tsx}" -A 5
 ```

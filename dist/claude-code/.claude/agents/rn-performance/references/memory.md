@@ -118,6 +118,6 @@ missing dependency that made someone drop the cleanup.
 rg 'addListener|addEventListener' --type tsx -A 6 | rg -v 'remove\(\)|return \(\)'
 rg 'setInterval|setTimeout' --type tsx -A 6 | rg -v 'clear(Interval|Timeout)'
 rg 'removeEventListener'                      # removed API — broken cleanup
-rg 'new Map\(\)|new Set\(\)' --type ts        # check each for a size bound
-rg 'onSnapshot|onValue|subscribe\(' --type ts -A 5
+rg 'new Map\(\)|new Set\(\)' --glob "**/*.{js,jsx,ts,tsx}"        # check each for a size bound
+rg 'onSnapshot|onValue|subscribe\(' --glob "**/*.{js,jsx,ts,tsx}" -A 5
 ```

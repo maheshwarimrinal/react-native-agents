@@ -22,6 +22,29 @@ const GENERATED_NOTE =
  * Claude Code — plugin + marketplace + plain subagents
  * ------------------------------------------------------------------ */
 
+/**
+ * Marketplace and plugin blurbs, derived rather than written.
+ *
+ * These were hardcoded as "Six specialist React Native agents: performance,
+ * security, code quality, UI/accessibility, testing, and release." and still
+ * said it at 21 agents. A literal in a generator is invisible — nothing fails
+ * when it stops being true — so it is computed from the agent list instead.
+ */
+function marketplaceBlurb(agents) {
+  const review = agents.filter((a) => a.mode !== 'interactive').length;
+  return (
+    `${agents.length} specialist React Native agents (${review} review, ` +
+    `${agents.length - review} interactive) covering upgrades, debugging, performance, ` +
+    'security, offline, navigation, push, permissions, platform parity, state, ' +
+    'accessibility, testing, native modules, observability, release, and store submission.'
+  );
+}
+
+function marketplaceKeywords(agents) {
+  // Every agent's own id, minus the rn- prefix, plus the ecosystem anchors.
+  return ['react-native', 'expo', 'mobile', ...agents.map((a) => a.id.replace(/^rn-/, ''))];
+}
+
 export function emitClaudeCode({ agents, shared, distDir }) {
   const files = [];
   const out = path.join(distDir, 'claude-code');
@@ -36,18 +59,17 @@ export function emitClaudeCode({ agents, shared, distDir }) {
           name: 'react-native-agents',
           owner: { name: 'React Native Agents contributors' },
           metadata: {
-            description: 'Expert React Native agents for performance, security, quality, a11y, testing, and release.',
+            description: marketplaceBlurb(agents),
             version: VERSION,
           },
           plugins: [
             {
               name: 'react-native-agents',
               source: './plugins/react-native-agents',
-              description:
-                'Six specialist React Native agents: performance, security, code quality, UI/accessibility, testing, and release.',
+              description: marketplaceBlurb(agents),
               version: VERSION,
               category: 'development',
-              keywords: ['react-native', 'expo', 'mobile', 'performance', 'security', 'accessibility'],
+              keywords: marketplaceKeywords(agents),
             },
           ],
         },
@@ -63,11 +85,10 @@ export function emitClaudeCode({ agents, shared, distDir }) {
       JSON.stringify(
         {
           name: 'react-native-agents',
-          description:
-            'Six specialist React Native agents: performance, security, code quality, UI/accessibility, testing, and release.',
+          description: marketplaceBlurb(agents),
           version: VERSION,
           license: 'MIT',
-          keywords: ['react-native', 'expo', 'mobile'],
+          keywords: marketplaceKeywords(agents),
         },
         null,
         2,

@@ -21,14 +21,25 @@ Run these subagents in parallel where possible:
 
 - **rn-build** — RN Build
 - **rn-code-quality** — RN Code Quality
+- **rn-debug** — RN Debug
+- **rn-dependencies** — RN Dependencies
 - **rn-doctor** — RN Doctor
 - **rn-native-modules** — RN Native Modules
+- **rn-navigation** — RN Navigation
 - **rn-observability** — RN Observability
+- **rn-offline** — RN Offline
+- **rn-onboard** — RN Onboard
 - **rn-performance** — RN Performance
+- **rn-permissions** — RN Permissions
+- **rn-platform-parity** — RN Platform Parity
+- **rn-push** — RN Push
 - **rn-release** — RN Release
 - **rn-security** — RN Security
+- **rn-state** — RN State
+- **rn-store-submission** — RN Store Submission
 - **rn-testing** — RN Testing
 - **rn-ui-accessibility** — RN UI & A11y
+- **rn-upgrade** — RN Upgrade
 
 Scope: $ARGUMENTS (if empty, scope to `src/` and the app entry points, and say so).
 

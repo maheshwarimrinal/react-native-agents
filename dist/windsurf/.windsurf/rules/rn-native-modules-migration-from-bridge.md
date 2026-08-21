@@ -14,7 +14,7 @@ correctness problem, not a modernisation preference.
 rg 'RCTBridgeModule|RCT_EXPORT_METHOD|RCTViewManager|ReactContextBaseJavaModule|SimpleViewManager' \
    --type-add 'native:*.{h,m,mm,java,kt}' -t native
 
-rg 'requireNativeComponent|NativeModules\.' --type ts
+rg 'requireNativeComponent|NativeModules\.' --glob "**/*.{js,jsx,ts,tsx}"
 ```
 
 | Legacy | Replacement |

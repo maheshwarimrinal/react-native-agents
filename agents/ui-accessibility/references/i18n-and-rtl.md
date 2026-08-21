@@ -142,7 +142,7 @@ rg 'marginLeft|marginRight|paddingLeft|paddingRight' --type tsx -c
 rg "left:\s|right:\s" --type tsx | head -20
 rg 'I18nManager' --type tsx -c
 rg 'toUpperCase\(\)' --type tsx
-rg 'new Intl\.' --type ts -c                                # inside render?
-rg 'toLocaleDateString|toLocaleString' --type ts            # check a locale is passed
+rg 'new Intl\.' --glob "**/*.{js,jsx,ts,tsx}" -c                                # inside render?
+rg 'toLocaleDateString|toLocaleString' --glob "**/*.{js,jsx,ts,tsx}"            # check a locale is passed
 rg '\$\{.*\}\s*(item|result|day)s?' --type tsx              # manual pluralisation
 ```

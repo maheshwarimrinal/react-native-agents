@@ -1,0 +1,50 @@
+{
+  "agent": "rn-debug",
+  "title": "Screen freezes — effect depends on an object literal recreated every render",
+  "context": { "reactNative": "0.87", "language": "TypeScript" },
+
+  "notes": "The canonical infinite loop. `options` is an object literal, so it is a new reference on every render; the effect sees a changed dependency, sets state, triggers a render, and repeats. The best answer is not useMemo — it is that this effect should not exist at all, because rows is derivable from orders during render. A secondary issue is the index-based keyExtractor, which is a real bug but not the cause of the freeze; an agent that leads with it has misordered the diagnosis. Tests whether the agent distinguishes cause from co-located defect, and whether it reaches for the structural fix over the memoisation patch.",
+
+  "expect": [
+    {
+      "name": "identifies the object literal as a new reference each render",
+      "any": ["new object", "new reference", "recreated", "identity", "every render"]
+    },
+    {
+      "name": "explains the loop mechanism",
+      "any": ["setstate", "set state", "triggers a render", "loop", "cycle", "re-runs"]
+    },
+    {
+      "name": "recommends deriving during render instead of storing in state",
+      "any": ["derive", "during render", "no effect", "without an effect", "compute"]
+    },
+    {
+      "name": "does not stop at useMemo as the only fix",
+      "any": ["derive", "remove the effect", "does not need", "unnecessary effect"]
+    }
+  ],
+
+  "expectSeverity": [{ "atLeast": "P1" }],
+
+  "forbid": [
+    {
+      "name": "leads with the index keyExtractor rather than the loop",
+      "pattern": "^[\\s\\S]{0,400}keyextractor",
+      "unless": ["separately", "also", "unrelated", "secondary"]
+    },
+    {
+      "name": "recommends removing the dependency from the array to stop the loop",
+      "pattern": "(remove|drop)\\s+`?options`?\\s+from\\s+the\\s+(dependency|deps)",
+      "unless": ["do not", "would introduce", "stale"]
+    },
+    {
+      "name": "recommends a setTimeout or a ref guard to break the loop",
+      "any": ["settimeout", "useref guard", "hasrun.current"],
+      "unless": ["do not", "avoid", "masks", "not the fix"]
+    },
+    {
+      "name": "invents a measured render count",
+      "pattern": "\\b\\d+\\s+(renders?|re-?renders?)\\s+per\\s+(second|frame)"
+    }
+  ]
+}

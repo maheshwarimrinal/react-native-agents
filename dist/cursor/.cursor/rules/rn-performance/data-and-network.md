@@ -103,9 +103,9 @@ perceived-performance wins available: the app opens with content instead of spin
 
 ```bash
 rg 'useEffect' -A 8 --type tsx | rg 'fetch\(|axios\.'      # hand-rolled data fetching
-rg 'fetch\(' --type ts -A 3 | rg -v 'signal'                # no timeout / cancellation
-rg 'JSON\.parse' --type ts
-rg 'setInterval' --type ts -B 2 -A 2 | rg -i 'poll|refresh|fetch'
-rg 'staleTime|refetchOnWindowFocus|refetchInterval' --type ts
-rg 'AsyncStorage\.(set|get)Item' --type ts                  # candidates for MMKV
+rg 'fetch\(' --glob "**/*.{js,jsx,ts,tsx}" -A 3 | rg -v 'signal'                # no timeout / cancellation
+rg 'JSON\.parse' --glob "**/*.{js,jsx,ts,tsx}"
+rg 'setInterval' --glob "**/*.{js,jsx,ts,tsx}" -B 2 -A 2 | rg -i 'poll|refresh|fetch'
+rg 'staleTime|refetchOnWindowFocus|refetchInterval' --glob "**/*.{js,jsx,ts,tsx}"
+rg 'AsyncStorage\.(set|get)Item' --glob "**/*.{js,jsx,ts,tsx}"                  # candidates for MMKV
 ```

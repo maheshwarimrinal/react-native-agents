@@ -406,13 +406,13 @@ different UI and different user actions, and conflating them is a common and con
 ## Audit
 
 ```bash
-rg 'catch\s*\([^)]*\)\s*\{\s*\}' --type ts          # empty catch
-rg 'catch' --type ts -A 3 | rg -c 'console\.'        # log-and-continue
+rg 'catch\s*\([^)]*\)\s*\{\s*\}' --glob "**/*.{js,jsx,ts,tsx}"          # empty catch
+rg 'catch' --glob "**/*.{js,jsx,ts,tsx}" -A 3 | rg -c 'console\.'        # log-and-continue
 rg 'ErrorBoundary' --type tsx -l                      # any at all? per screen?
-rg 'setGlobalHandler|rejection-tracking' --type ts
+rg 'setGlobalHandler|rejection-tracking' --glob "**/*.{js,jsx,ts,tsx}"
 rg 'isPending|isLoading' --type tsx -A 6 | rg -c 'EmptyState|empty'
-rg 'throw new Error\(' --type ts                      # untyped errors
-rg 'status === 401|response\.status' --type ts -A 5
+rg 'throw new Error\(' --glob "**/*.{js,jsx,ts,tsx}"                      # untyped errors
+rg 'status === 401|response\.status' --glob "**/*.{js,jsx,ts,tsx}" -A 5
 ```
 
 ---
@@ -946,8 +946,8 @@ a real bug on slow networks).
 rg 'createContext' --type tsx -A 15 | rg 'value=\{\{'         # unmemoised context
 rg 'useSelector\(\(.*\) => \(\{|useStore\(\(.*\) => \(\{'      # object-returning selectors
 rg 'useEffect' --type tsx -A 8 | rg 'fetch\(|axios'            # server state in effects
-rg 'persist|redux-persist' --type ts -A 6 | rg -i 'version|migrate'
-rg -i 'token|auth' --type ts | rg -i 'persist|AsyncStorage'
+rg 'persist|redux-persist' --glob "**/*.{js,jsx,ts,tsx}" -A 6 | rg -i 'version|migrate'
+rg -i 'token|auth' --glob "**/*.{js,jsx,ts,tsx}" | rg -i 'persist|AsyncStorage'
 rg 'useState' --type tsx -c | sort -t: -k2 -rn | head          # components with many useStates
 ```
 
@@ -1109,8 +1109,8 @@ Turning everything on at once produces 5,000 errors and gets reverted. Instead:
 
 ```bash
 ls eslint.config.* .eslintrc*                 # does config exist at all?
-rg 'eslint-disable' --type ts -c | sort -t: -k2 -rn | head   # where are the exceptions?
-rg '@ts-ignore' --type ts                      # prefer @ts-expect-error
+rg 'eslint-disable' --glob "**/*.{js,jsx,ts,tsx}" -c | sort -t: -k2 -rn | head   # where are the exceptions?
+rg '@ts-ignore' --glob "**/*.{js,jsx,ts,tsx}"                      # prefer @ts-expect-error
 rg '"strict"' tsconfig.json
 rg 'max-warnings' .github/workflows/ package.json
 npx tsc --noEmit 2>&1 | tail -5
@@ -1310,10 +1310,10 @@ Each use should be adjacent to a runtime check or a comment explaining why it's 
 ## Audit
 
 ```bash
-rg ':\s*any\b|as any|<any>' --type ts | rg -v '\.d\.ts'
-rg '!\.' --type ts                              # non-null assertions
-rg 'declare module' --type ts
-rg '@ts-ignore|@ts-expect-error' --type ts      # expect-error is fine; ignore is not
+rg ':\s*any\b|as any|<any>' --glob "**/*.{js,jsx,ts,tsx}" | rg -v '\.d\.ts'
+rg '!\.' --glob "**/*.{js,jsx,ts,tsx}"                              # non-null assertions
+rg 'declare module' --glob "**/*.{js,jsx,ts,tsx}"
+rg '@ts-ignore|@ts-expect-error' --glob "**/*.{js,jsx,ts,tsx}"      # expect-error is fine; ignore is not
 rg '"strict"' tsconfig.json
 npx tsc --noEmit                                 # does it actually pass?
 ```

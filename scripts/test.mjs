@@ -14,7 +14,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { loadAgents, loadSharedContext, parseFrontmatter, serializeFrontmatter, KNOWLEDGE, VERSION, knowledgeAgeDays } =
   await import(path.join(ROOT, 'scripts/lib/source.mjs'));
 const { plan, apply, isUserOwned, summarise } = await import(path.join(ROOT, 'scripts/lib/install.mjs'));
-const { scoreAgents, explainRouting } = await import(path.join(ROOT, 'mcp-server/routing.mjs'));
+const { scoreAgents, explainRouting, SIGNALS } = await import(path.join(ROOT, 'mcp-server/routing.mjs'));
+const { telemetryState, consentState, sanitise, capture, ALLOWED_PROPERTIES } = await import(
+  path.join(ROOT, 'scripts/lib/telemetry.mjs')
+);
 const { loadCases, scoreOutput } = await import(path.join(ROOT, 'evals/run.mjs'));
 const os = await import('node:os');
 
@@ -150,8 +153,16 @@ for (const a of agents) {
   test(`${a.id}: no unresolved authoring placeholders`, () => {
     // Note: `{{count}}` style braces are legitimate here (i18n interpolation
     // examples), so only genuine authoring markers are flagged.
+    //
+    // Code samples are stripped before matching. These tokens are legitimate
+    // *content* in a shell or JS example — `test.todo` is a real Jest API, and
+    // a grep pattern that searches for FIXME is not itself a FIXME. Checking
+    // prose only keeps the guard meaningful without punishing accurate code.
     const all = [a.body, ...a.references.map((r) => r.content)].join('\n');
-    const m = all.match(/\b(TODO|FIXME|XXX|TBD)\b|<placeholder>/i);
+    const prose = all
+      .replace(/```[\s\S]*?```/g, '')  // fenced blocks
+      .replace(/`[^`\n]*`/g, '');       // inline code
+    const m = prose.match(/\b(TODO|FIXME|XXX|TBD)\b|<placeholder>/i);
     assert(!m, `contains: ${m?.[0]}`);
   });
 
@@ -163,9 +174,283 @@ for (const a of agents) {
   });
 }
 
+test('README documents every agent and states the right counts', () => {
+  // The README said "Ten expert AI agents" and "57 reference documents" while
+  // the collection was 21 and 113. Docs drift silently; this makes it fail loudly.
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+
+  const undocumented = agents.filter((a) => !readme.includes(`\`/${a.command}\``)).map((a) => a.id);
+  assert(undocumented.length === 0, `not in the README table: ${undocumented.join(', ')}`);
+
+  const refCount = agents.reduce((n, a) => n + a.references.length, 0);
+  assert(
+    readme.includes(`${agents.length} playbooks`),
+    `README should say "${agents.length} playbooks"`,
+  );
+  assert(
+    readme.includes(`${refCount} reference documents`),
+    `README should say "${refCount} reference documents"`,
+  );
+});
+
+test('README lists exactly the agents excluded from PR routing', () => {
+  // The claim "Doctor and Build are excluded" stayed in the README after four
+  // more interactive agents were added.
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const interactive = agents.filter((a) => a.mode === 'interactive');
+
+  for (const a of interactive) {
+    const title = a.title.replace(/^RN /, '');
+    assert(
+      new RegExp(`\\*\\*[^*]*\\b${title}\\b[^*]*\\*\\*`, 'i').test(readme),
+      `${a.id} is interactive but not named in the README's excluded list`,
+    );
+  }
+});
+
+test('generated marketplace and plugin metadata state the real agent count', () => {
+  // These said "Six specialist React Native agents" at 21 agents, across three
+  // releases, because they were literals in the generator that nothing checked.
+  for (const rel of [
+    'dist/claude-code/.claude-plugin/marketplace.json',
+    'dist/claude-code/plugins/react-native-agents/.claude-plugin/plugin.json',
+  ]) {
+    const full = path.join(ROOT, rel);
+    if (!fs.existsSync(full)) continue;
+    const json = JSON.parse(fs.readFileSync(full, 'utf8'));
+    const descriptions = [json.description, json.metadata?.description, json.plugins?.[0]?.description]
+      .filter(Boolean);
+    assert(descriptions.length > 0, `${rel} has no description`);
+    for (const d of descriptions) {
+      assert(
+        new RegExp(`\\b${agents.length}\\b`).test(d),
+        `${rel} should state ${agents.length} agents: ${d.slice(0, 70)}...`,
+      );
+    }
+  }
+});
+
+test('package.json description states the real agent count', () => {
+  // The description claimed ten areas at 21 agents, and an earlier fix to it
+  // silently no-opped. A count in prose is exactly the thing that goes stale.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert(
+    new RegExp(`\\b${agents.length}\\b`).test(pkg.description),
+    `description should state ${agents.length} agents: ${pkg.description.slice(0, 80)}...`,
+  );
+});
+
+test('package.json keywords cover the agent domains', () => {
+  // npm discovery runs on keywords. An agent nobody can find is an agent
+  // nobody uses.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const haystack = `${pkg.description} ${pkg.keywords.join(' ')}`.toLowerCase();
+  const required = [
+    'upgrade', 'debug', 'dependenc', 'navigation', 'offline', 'push',
+    'permission', 'state', 'parity', 'onboarding', 'store',
+    'performance', 'security', 'accessibility', 'observability', 'release',
+  ];
+  const missing = required.filter((k) => !haystack.includes(k));
+  assert(missing.length === 0, `not discoverable: ${missing.join(', ')}`);
+});
+
+test('docs pin the action to the floating major tag, not a stale version', () => {
+  // Four places pinned @v1.1.0 and were still pinned there at 1.2.0. A hard
+  // version in docs goes stale on every release; @v1 does not.
+  for (const rel of ['README.md', 'docs/github-action.md']) {
+    const full = path.join(ROOT, rel);
+    if (!fs.existsSync(full)) continue;
+    const stale = fs.readFileSync(full, 'utf8').match(/react-native-agents@v\d+\.\d+\.\d+/g);
+    assert(!stale, `${rel} pins a stale version: ${stale?.join(', ')}`);
+  }
+});
+
+test('docs/agents.md documents every agent', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'docs/agents.md'), 'utf8');
+  const missing = agents.filter((a) => !doc.includes(`\`${a.id}\``)).map((a) => a.id);
+  assert(missing.length === 0, `undocumented in docs/agents.md: ${missing.join(', ')}`);
+});
+
+// A large share of React Native projects are JavaScript, and an agent whose
+// globs or audit commands only reach TypeScript is invisible in them. This was
+// the single most common finding across two rounds of review.
+const TS_ONLY_BY_DESIGN = new Set([
+  // Codegen requires TypeScript spec files — `NativeFoo.ts`, `FooSpec.ts` —
+  // so these globs are correctly TypeScript-only.
+  'rn-native-modules',
+]);
+
+for (const a of agents) {
+  test(`${a.id}: globs reach JavaScript projects`, () => {
+    if (TS_ONLY_BY_DESIGN.has(a.id)) return;
+    const globs = (a.globs ?? []).join(' ');
+    const mentionsTs = /\bts\b|\.ts|tsx/.test(globs);
+    if (!mentionsTs) return; // native/config-only agents are fine
+    assert(
+      /\bjs\b|\.js|jsx/.test(globs),
+      `globs cover TypeScript but not JavaScript: ${(a.globs ?? []).join(', ')}`,
+    );
+  });
+
+  test(`${a.id}: audit commands do not exclude JavaScript`, () => {
+    const all = [a.body, ...a.references.map((r) => r.content)].join('\n');
+    const bad = all.match(/--glob ["'][^"']*\{ts,tsx\}["']|--type ts\b|--glob ["']\*\*\/\*\.tsx["']/g);
+    assert(!bad, `ripgrep examples exclude .js/.jsx: ${[...new Set(bad ?? [])].join(', ')}`);
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Telemetry — the tests that matter are the ones proving it does nothing
+ * unless asked, and cannot carry personal data if it does.
+ * ------------------------------------------------------------------ */
+
+test('telemetry is off by default', () => {
+  // No config, no env vars — the state a first-time user is in.
+  // Asserted against consentState so it holds regardless of whether this
+  // build has a key configured.
+  const state = consentState({}, {});
+  assert(!state.enabled, `should be off by default, got: ${state.reason}`);
+  assert(!telemetryState({}, {}).enabled, 'and off end to end');
+});
+
+test('telemetry stays off when the user has not opted in', () => {
+  for (const config of [{}, { installId: 'x' }, { telemetryNoticeShown: true }]) {
+    assert(!consentState({}, config).enabled, JSON.stringify(config));
+  }
+});
+
+test('DO_NOT_TRACK overrides an explicit opt-in', () => {
+  // Any signal that says no wins. There must be no combination where a user
+  // who set DO_NOT_TRACK still gets tracked.
+  for (const env of [{ DO_NOT_TRACK: '1' }, { DO_NOT_TRACK: 'true' }]) {
+    // consentState, not telemetryState: with no key configured the latter
+    // short-circuits and would pass without testing the rule at all.
+    const state = consentState(env, { telemetry: true });
+    assert(!state.enabled, `DO_NOT_TRACK should win, got: ${state.reason}`);
+    assert(state.reason.includes('DO_NOT_TRACK'), `for the right reason, got: ${state.reason}`);
+  }
+});
+
+test('RN_AGENTS_TELEMETRY=0 overrides an opt-in config', () => {
+  const state = consentState({ RN_AGENTS_TELEMETRY: '0' }, { telemetry: true });
+  assert(!state.enabled, state.reason);
+  assert(state.reason.includes('RN_AGENTS_TELEMETRY'), `for the right reason, got: ${state.reason}`);
+});
+
+test('an explicit opt-in is actually honoured', () => {
+  // The mirror of the DO_NOT_TRACK test. Without this, "always returns false"
+  // would pass every consent test on this page.
+  assert(consentState({}, { telemetry: true }).enabled, 'config opt-in should enable');
+  assert(consentState({ RN_AGENTS_TELEMETRY: '1' }, {}).enabled, 'env opt-in should enable');
+});
+
+test('sanitise drops everything not on the allow-list', () => {
+  const dirty = {
+    surface: 'cli',
+    tool: 'cursor',
+    // None of these should survive.
+    projectName: 'acme-banking',
+    repo: 'acme/mobile',
+    cwd: '/Users/sam/code/acme',
+    email: 'sam@example.com',
+    errorMessage: 'ENOENT: no such file',
+    stack: 'at Object.<anonymous>',
+    userName: 'sam',
+  };
+  const clean = sanitise(dirty);
+
+  const kept = Object.keys(clean).sort().join(',');
+  assert(kept === 'surface,tool', `only surface,tool should survive — got: ${kept}`);
+});
+
+test('sanitise drops allow-listed keys whose value looks like a path or an email', () => {
+  // Second line of defence: even if a key is on the list, a value carrying a
+  // separator, a traversal, or a Windows drive letter never ships.
+  for (const value of ['/Users/sam/app', 'C:\\code\\app', '../secrets', 'sam@example.com', 'acme/mobile']) {
+    const clean = sanitise({ tool: value });
+    assert(clean.tool === undefined, `should have dropped: ${value}`);
+  }
+});
+
+test('sanitise accepts only primitives', () => {
+  const clean = sanitise({ agent_count: { nested: 'object' }, version: ['1.2.0'] });
+  assert(Object.keys(clean).length === 0, `expected nothing, got: ${JSON.stringify(clean)}`);
+});
+
+test('capture is a no-op when telemetry is disabled', async () => {
+  // If this ever performs a network call while disabled, it is a serious bug.
+  const sent = await capture('test_event', { surface: 'cli' }, { env: { RN_AGENTS_TELEMETRY: '0' } });
+  assert(sent === false, 'capture should not send while disabled');
+});
+
+test('the allow-list contains no field that could identify a person', () => {
+  // A tripwire on the list itself. Adding `repo`, `path`, `email` or similar
+  // fails here rather than in production.
+  const forbidden = /path|dir|repo|project|email|user|name|host|ip|url|file|message|stack|token|key/i;
+  const offenders = [...ALLOWED_PROPERTIES].filter(
+    (k) => forbidden.test(k) && !['agent_id', 'node_major'].includes(k),
+  );
+  assert(offenders.length === 0, `identifying-sounding fields on the allow-list: ${offenders.join(', ')}`);
+});
+
+test('telemetry is documented', () => {
+  const doc = path.join(ROOT, 'TELEMETRY.md');
+  assert(fs.existsSync(doc), 'TELEMETRY.md must exist');
+  const text = fs.readFileSync(doc, 'utf8');
+
+  // Every field that can ship must be named in the document.
+  for (const key of ALLOWED_PROPERTIES) {
+    assert(text.includes(key), `TELEMETRY.md does not document the field: ${key}`);
+  }
+  for (const phrase of ['DO_NOT_TRACK', 'RN_AGENTS_TELEMETRY', 'telemetry disable']) {
+    assert(text.includes(phrase), `TELEMETRY.md should mention ${phrase}`);
+  }
+});
+
+test('navigator factory triggers match real React Navigation APIs', () => {
+  // `creatematerialtopnavigator` shipped and could never match: the real API is
+  // createMaterialTopTabNavigator. A trigger with a typo is invisible — it
+  // simply never fires, and nothing fails.
+  const nav = agents.find((a) => a.id === 'rn-navigation');
+  const REAL = [
+    'createstacknavigator',
+    'createnativestacknavigator',
+    'createbottomtabnavigator',
+    'creatematerialtoptabnavigator',
+    'creatematerialbottomtabnavigator',
+    'createdrawernavigator',
+  ];
+  const factories = nav.triggers.filter((t) => t.startsWith('create'));
+  const bogus = factories.filter((t) => !REAL.includes(t));
+  assert(bogus.length === 0, `not real navigator factories: ${bogus.join(', ')}`);
+});
+
 test('agent ids are unique', () => {
   const ids = agents.map((a) => a.id);
   assert(new Set(ids).size === ids.length, 'duplicate ids');
+});
+
+test('agent colors are unique', () => {
+  // Cosmetic, but a collision means two agents are visually indistinguishable
+  // in every target's UI. Four collided when the collection grew from 10 to 21,
+  // and nothing caught it.
+  const seen = new Map();
+  for (const a of agents) {
+    if (seen.has(a.color)) {
+      assert(false, `${a.color}: ${seen.get(a.color)} and ${a.id}`);
+    }
+    seen.set(a.color, a.id);
+  }
+});
+
+test('agent emoji are unique', () => {
+  const seen = new Map();
+  for (const a of agents) {
+    if (seen.has(a.emoji)) {
+      assert(false, `${a.emoji}: ${seen.get(a.emoji)} and ${a.id}`);
+    }
+    seen.set(a.emoji, a.id);
+  }
 });
 
 test('slash commands are unique', () => {
@@ -587,7 +872,9 @@ const routeCases = [
   ['My large product catalogue is stuttering', 'rn-performance'],
   ['the app freezes when I open the inbox', 'rn-performance'],
   ['is it safe to keep the JWT where I am keeping it', 'rn-security'],
-  ['the store rejected my build again', 'rn-release'],
+  // Was rn-release before rn-store-submission existed. A store rejection is
+  // now a review-triage question, not a build-and-ship one.
+  ['the store rejected my build again', 'rn-store-submission'],
   ['screen reader users cannot use the cart', 'rn-ui-accessibility'],
   ['my tests keep failing randomly', 'rn-testing'],
   ['can you refactor this messy component', 'rn-code-quality'],
@@ -625,13 +912,59 @@ test('routing: crash-reporting language beats release, not ties with it', () => 
 });
 
 test('routing: release still wins its own vocabulary', () => {
+  // rn-release ends at a signed, shipped artefact. Rejection triage moved to
+  // rn-store-submission, so 'rejected' is deliberately no longer a release term.
   for (const [task, expected] of [
-    ['the store rejected my build', 'rn-release'],
     ['plan the OTA rollback', 'rn-release'],
     ['code signing certificate expired', 'rn-release'],
+    ['eas build then eas submit', 'rn-release'],
+    ['staged rollout percentage', 'rn-release'],
   ]) {
     eq(scoreAgents(task, agents)[0]?.id, expected, task);
   }
+});
+
+test('routing: every one of the 21 agents is reachable from a plausible query', () => {
+  // The 11 agents added in 1.2.0 had no MCP signals at all, so automatic
+  // selection could never reach them — users would be silently routed to a
+  // near-neighbour at low confidence. This asserts each one is the top match
+  // for a query a real person would type.
+  for (const [task, expected] of [
+    ['debug an infinite render loop', 'rn-debug'],
+    ['should I add react-native-mmkv', 'rn-dependencies'],
+    ['upgrade React Native from 0.81 to 0.87', 'rn-upgrade'],
+    ['App Store rejected the privacy manifest', 'rn-store-submission'],
+    ['deep link opens the wrong nested screen', 'rn-navigation'],
+    ['push notifications never arrive when the app is killed', 'rn-push'],
+    ['the keyboard covers the submit button only on android', 'rn-platform-parity'],
+    ['camera permission denied and the allow button does nothing', 'rn-permissions'],
+    ['changes are lost when the user has no connection', 'rn-offline'],
+    ['should we use zustand or redux toolkit', 'rn-state'],
+    ['we inherited this codebase with no documentation', 'rn-onboard'],
+  ]) {
+    eq(scoreAgents(task, agents)[0]?.id, expected, task);
+  }
+});
+
+test('routing: new-agent queries resolve above low confidence', () => {
+  // A correct top match at 'low' confidence still prints a hedge telling the
+  // user it is a guess, which defeats the point.
+  for (const task of [
+    'debug an infinite render loop',
+    'upgrade React Native from 0.81 to 0.87',
+    'deep link opens the wrong nested screen',
+    'App Store rejected the privacy manifest',
+  ]) {
+    const top = scoreAgents(task, agents)[0];
+    assert(top && top.confidence !== 'low', `${task}: ${top?.id} at ${top?.confidence}`);
+  }
+});
+
+test('routing: every agent has an MCP signal block', () => {
+  // Without one an agent can only be reached by its own trigger words, which
+  // scores 2 and reads as a coin flip.
+  const missing = agents.map((a) => a.id).filter((id) => !SIGNALS[id]);
+  assert(missing.length === 0, `no MCP signals for: ${missing.join(', ')}`);
 });
 
 test('routing: unrelated text matches nothing rather than guessing', () => {

@@ -1,0 +1,58 @@
+{
+  "agent": "rn-onboard",
+  "title": "Inherited client app, no handover, no documentation",
+  "context": { "language": "TypeScript" },
+
+  "notes": "The directory listing contains two findings visible before any code is read, and a good answer spots at least the first. (1) Both yarn.lock and package-lock.json are present — two package managers, so installs are non-deterministic and whichever the previous agency actually used is unknown. This must be resolved before anything else, because every subsequent step depends on a reproducible install. (2) patches/ exists, which is a list of things that hurt someone enough to fork a dependency in place, and is the highest-information directory for an inheritor. Beyond those, the correct approach is to read decisions before code — package.json, native config, New Arch status, git history — rather than starting at App.tsx and following imports. Should also flag that the README is unverified and that the test suite must be run rather than assumed. Tests whether the agent reads the evidence it was given rather than producing a generic onboarding checklist.",
+
+  "expect": [
+    {
+      "name": "spots the two competing lockfiles",
+      "any": ["yarn.lock", "package-lock", "two lockfiles", "both lock", "package manager"]
+    },
+    {
+      "name": "prioritises reading patches/",
+      "any": ["patches", "patch-package", "forked"]
+    },
+    {
+      "name": "recommends reading configuration and dependencies before application code",
+      "any": ["package.json", "before", "decisions", "config first", "start with"]
+    },
+    {
+      "name": "uses git history to find hot spots or the bus factor",
+      "any": ["git log", "shortlog", "history", "most changed", "contributors", "who wrote"]
+    },
+    {
+      "name": "says the README should be verified rather than trusted",
+      "any": ["verify", "may be out of date", "do not trust", "stale", "check against"]
+    },
+    {
+      "name": "recommends running the build and tests before changing anything",
+      "any": ["run the tests", "build it", "both platforms", "before touching", "baseline"]
+    }
+  ],
+
+  "expectSeverity": [],
+
+  "forbid": [
+    {
+      "name": "recommends starting at App.tsx and following imports",
+      "pattern": "start\\s+(at|with|from)\\s+app\\.tsx",
+      "unless": ["do not", "rather than", "instead", "avoid"]
+    },
+    {
+      "name": "recommends a rewrite or large refactor before understanding",
+      "pattern": "(rewrite|refactor|modernis|moderniz)",
+      "unless": ["do not", "avoid", "resist", "not yet", "later", "before you understand"]
+    },
+    {
+      "name": "asserts code quality without having read any code",
+      "pattern": "(the code is|codebase is)\\s+(well|poorly|badly|cleanly)"
+    },
+    {
+      "name": "invents specifics about an app it has not seen",
+      "pattern": "(the app|this app)\\s+(uses|has)\\s+(redux|zustand|react navigation|firebase)",
+      "unless": ["if", "check", "likely", "may", "look for", "determine"]
+    }
+  ]
+}

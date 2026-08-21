@@ -10,8 +10,7 @@ emoji: "🏗️"
 mode: interactive
 tools: [Read, Grep, Glob, Write, Edit, Bash]
 globs:
-  - "**/*.tsx"
-  - "**/*.ts"
+  - "**/*.{ts,tsx,js,jsx}"
 alwaysApply: false
 command: rn-new
 triggers:

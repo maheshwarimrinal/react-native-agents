@@ -193,7 +193,7 @@ export const makeUser = (o: Partial<User> = {}) => UserSchema.parse({ ...default
 ```bash
 rg 'jest\.mock\(' --type tsx -c | sort -t: -k2 -rn | head    # most-mocked files
 rg 'jest\.mock\(.\./' --type tsx                              # mocking local modules — suspicious
-rg 'msw|setupServer' --type ts -l
+rg 'msw|setupServer' --glob "**/*.{js,jsx,ts,tsx}" -l
 rg 'useFakeTimers' --type tsx -A 20 | rg -c useRealTimers     # timers restored?
 rg 'new Date\(\)' --type tsx --glob '*test*'                  # unfrozen time
 rg 'mockResolvedValue' --type tsx -c

@@ -254,13 +254,13 @@ The strongest login is worthless if recovery is weak. Check:
 
 ```bash
 rg 'response_type=token|implicit'                       # deprecated flow
-rg 'client_secret' --type ts                            # must not exist on mobile
+rg 'client_secret' --glob "**/*.{js,jsx,ts,tsx}"                            # must not exist on mobile
 rg 'usePKCE|code_challenge'                             # should be present
-rg -i 'authenticateAsync' --type ts -A 6                # biometric theatre check
-rg 'AsyncStorage.*[Tt]oken|persist.*auth' --type ts     # tokens in insecure storage
-rg -i 'logout|signOut' --type ts -A 12                  # does it clear everything?
-rg 'jwtDecode|jwt_decode' --type ts -A 4                # decode used for authz decisions?
-rg 'state' --type ts -C 3 | rg -i 'oauth|authoriz'      # state validated?
+rg -i 'authenticateAsync' --glob "**/*.{js,jsx,ts,tsx}" -A 6                # biometric theatre check
+rg 'AsyncStorage.*[Tt]oken|persist.*auth' --glob "**/*.{js,jsx,ts,tsx}"     # tokens in insecure storage
+rg -i 'logout|signOut' --glob "**/*.{js,jsx,ts,tsx}" -A 12                  # does it clear everything?
+rg 'jwtDecode|jwt_decode' --glob "**/*.{js,jsx,ts,tsx}" -A 4                # decode used for authz decisions?
+rg 'state' --glob "**/*.{js,jsx,ts,tsx}" -C 3 | rg -i 'oauth|authoriz'      # state validated?
 ```
 
 ---
@@ -647,13 +647,13 @@ The code usually handles the main path fine and leaks through telemetry:
 ## Audit grep
 
 ```bash
-rg 'console\.(log|info|debug|warn)' --type ts -l
-rg -i 'analytics|track|logEvent' --type ts -A 3 | rg -i 'email|phone|address|ssn|dob|name'
-rg 'sendDefaultPii|beforeSend|beforeBreadcrumb' --type ts
+rg 'console\.(log|info|debug|warn)' --glob "**/*.{js,jsx,ts,tsx}" -l
+rg -i 'analytics|track|logEvent' --glob "**/*.{js,jsx,ts,tsx}" -A 3 | rg -i 'email|phone|address|ssn|dob|name'
+rg 'sendDefaultPii|beforeSend|beforeBreadcrumb' --glob "**/*.{js,jsx,ts,tsx}"
 find ios -name 'PrivacyInfo.xcprivacy'
 rg 'ITSAppUsesNonExemptEncryption' ios/*/Info.plist
-rg -i 'delete.*account|deleteAccount' --type ts     # in-app deletion present?
-rg -i 'consent|gdpr|cmp' --type ts -l
+rg -i 'delete.*account|deleteAccount' --glob "**/*.{js,jsx,ts,tsx}"     # in-app deletion present?
+rg -i 'consent|gdpr|cmp' --glob "**/*.{js,jsx,ts,tsx}" -l
 rg 'allowBackup' android/app/src/main/AndroidManifest.xml
 ```
 
@@ -808,11 +808,11 @@ It is fine for non-sensitive preferences. It is not a place for anything an atta
 ## Audit grep
 
 ```bash
-rg -i "(api[_-]?key|secret|passwd|password|token|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9_\-]{12,}" --type ts
+rg -i "(api[_-]?key|secret|passwd|password|token|private[_-]?key)\s*[:=]\s*['\"][A-Za-z0-9_\-]{12,}" --glob "**/*.{js,jsx,ts,tsx}"
 rg 'sk_live_|sk_test_|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_\-]{35}|ghp_[A-Za-z0-9]{36}|xox[baprs]-'
-rg 'AsyncStorage\.setItem' --type ts -B 2 -A 2      # check what's being stored
+rg 'AsyncStorage\.setItem' --glob "**/*.{js,jsx,ts,tsx}" -B 2 -A 2      # check what's being stored
 rg 'new MMKV\(' -A 3                                 # literal encryptionKey?
-rg 'console\.(log|warn|debug)' --type ts -l
+rg 'console\.(log|warn|debug)' --glob "**/*.{js,jsx,ts,tsx}" -l
 rg 'allowBackup|dataExtractionRules' android/app/src/main/AndroidManifest.xml
 rg 'secureTextEntry' --type tsx                       # present on every password field?
 git log -p --all -S 'sk_live' | head                  # secrets in history
@@ -1272,8 +1272,8 @@ rg 'allowUniversalAccessFromFileURLs|allowFileAccess|mixedContentMode'
 rg 'injectedJavaScript' -A 5 --type tsx
 rg 'onMessage=' -A 10 --type tsx
 rg 'source=\{\{\s*html' --type tsx
-rg 'Linking\.openURL' -B 3 --type ts
-rg 'navigation\.navigate\((?!\x27)' --type ts       # dynamic route names
+rg 'Linking\.openURL' -B 3 --glob "**/*.{js,jsx,ts,tsx}"
+rg 'navigation\.navigate\((?!\x27)' --glob "**/*.{js,jsx,ts,tsx}"       # dynamic route names
 rg 'exported="true"' android/app/src/main/AndroidManifest.xml -B 2
 rg 'autoVerify' android/app/src/main/AndroidManifest.xml
 rg 'CFBundleURLSchemes' -A 5 ios/*/Info.plist

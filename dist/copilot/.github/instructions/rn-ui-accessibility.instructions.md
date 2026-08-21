@@ -469,8 +469,8 @@ rg 'marginLeft|marginRight|paddingLeft|paddingRight' --type tsx -c
 rg "left:\s|right:\s" --type tsx | head -20
 rg 'I18nManager' --type tsx -c
 rg 'toUpperCase\(\)' --type tsx
-rg 'new Intl\.' --type ts -c                                # inside render?
-rg 'toLocaleDateString|toLocaleString' --type ts            # check a locale is passed
+rg 'new Intl\.' --glob "**/*.{js,jsx,ts,tsx}" -c                                # inside render?
+rg 'toLocaleDateString|toLocaleString' --glob "**/*.{js,jsx,ts,tsx}"            # check a locale is passed
 rg '\$\{.*\}\s*(item|result|day)s?' --type tsx              # manual pluralisation
 ```
 
@@ -947,8 +947,8 @@ rg 'TouchableNativeFeedback|android_ripple' --type tsx -c
 rg 'Platform\.(OS|select)' --type tsx -c | sort -t: -k2 -rn | head
 rg '@react-navigation/(native-)?stack' package.json
 rg 'headerTitleAlign' --type tsx
-rg 'createChannel|setNotificationChannel' --type ts        # Android channels
-rg 'openSettings|Linking\.openSettings' --type ts          # denied-permission path
+rg 'createChannel|setNotificationChannel' --glob "**/*.{js,jsx,ts,tsx}"        # Android channels
+rg 'openSettings|Linking\.openSettings' --glob "**/*.{js,jsx,ts,tsx}"          # denied-permission path
 ls **/*.ios.tsx **/*.android.tsx 2>/dev/null
 ```
 

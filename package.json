@@ -1,7 +1,7 @@
 {
   "name": "@maheshwarimrinal/react-native-agents",
-  "version": "1.1.0",
-  "description": "Expert React Native agents for build failures, implementation, performance, security, code quality, accessibility, testing, native modules, observability, and release \u2014 plus a deterministic bundle-size analyzer. Portable across Claude Code, Cursor, Windsurf, Copilot, Codex, MCP clients, and GitHub Actions.",
+  "version": "1.2.0",
+  "description": "21 expert React Native agents — upgrades and New Architecture migration, debugging, performance, security, offline sync, navigation and deep linking, push notifications, permissions, iOS/Android parity, state management, accessibility, testing, native modules, observability, release, store submission, dependency choices, and codebase onboarding — plus a deterministic bundle-size analyzer. Portable across Claude Code, Cursor, Windsurf, Copilot, Codex, MCP clients, and GitHub Actions.",
   "type": "module",
   "bin": {
     "react-native-agents": "./scripts/cli.mjs",
@@ -25,6 +25,7 @@
   },
   "files": [
     "agents",
+    "TELEMETRY.md",
     "shared",
     "scripts",
     "mcp-server",
@@ -61,7 +62,22 @@
     "build-errors",
     "observability",
     "crash-reporting",
-    "monitoring"
+    "monitoring",
+    "react-native-upgrade",
+    "new-architecture",
+    "fabric",
+    "debugging",
+    "dependencies",
+    "react-navigation",
+    "deep-linking",
+    "offline-first",
+    "push-notifications",
+    "permissions",
+    "state-management",
+    "platform-parity",
+    "app-store-review",
+    "onboarding",
+    "github-action"
   ],
   "license": "MIT",
   "engines": {
