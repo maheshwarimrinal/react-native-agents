@@ -1,18 +1,23 @@
 {
   "agent": "rn-offline",
   "title": "A durable, idempotent, bounded mutation queue",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
-  "notes": "Clean case. Operations are persisted before the caller applies optimistic UI. The operation id doubles as a stable idempotency key reused across attempts. The queue is bounded and rejects with an actionable message at the cap. 4xx other than 429 is moved to a failed list rather than blocking the queue head. Backoff is exponential, capped, and jittered. Attempts are capped. The queue is scoped by account so it cannot replay into another session. Requests have a timeout. The failure mode being tested is manufacturing findings — most likely objecting to the early return in flush (deliberate: it stops the pass rather than hammering a failing endpoint) or demanding NetInfo gating, which the agent's own references argue against.",
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Clean case. Operations are persisted before the caller applies optimistic UI. The operation id doubles as a stable idempotency key reused across attempts. The queue is bounded and rejects with an actionable message at the cap. 4xx other than 429 is moved to a failed list rather than blocking the queue head. Backoff is exponential, capped, and jittered. Attempts are capped. The queue is scoped by account so it cannot replay into another session. Requests have a timeout. The failure mode being tested is manufacturing findings \u2014 most likely objecting to the early return in flush (deliberate: it stops the pass rather than hammering a failing endpoint) or demanding NetInfo gating, which the agent's own references argue against. NOTE: a model observing that a write is dropped when the queue is at MAX_QUEUE is CORRECT \u2014 enqueue() throws and nothing is persisted on that path. The forbid rule is scoped to the normal path so a true edge-case observation is not punished.",
   "expect": [],
   "expectMaxFindings": 1,
   "expectSeverity": [],
-
   "forbid": [
     {
-      "name": "claims the queue is not durable",
-      "pattern": "(in memory|not persisted|memory only|lost on)"
+      "name": "claims the queue is not durable in the normal path",
+      "pattern": "(in memory|memory only|lost on (kill|crash|restart)|never persisted)",
+      "unless": [
+        "when the queue is full",
+        "at the cap",
+        "queuefull"
+      ]
     },
     {
       "name": "claims idempotency is missing",
@@ -25,7 +30,12 @@
     {
       "name": "recommends gating the flush on NetInfo",
       "pattern": "(check|use|gate).{0,25}(netinfo|isconnected)\\s+before",
-      "unless": ["do not", "avoid", "hint", "not a gate"]
+      "unless": [
+        "do not",
+        "avoid",
+        "hint",
+        "not a gate"
+      ]
     },
     {
       "name": "claims the queue is unbounded",

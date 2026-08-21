@@ -43,7 +43,7 @@ function parseArgs(argv) {
  * ------------------------------------------------------------------ */
 
 export function loadCases(root = HERE) {
-  const cases = [];
+  let cases = [];
   for (const agentDir of fs.readdirSync(root, { withFileTypes: true })) {
     if (!agentDir.isDirectory()) continue;
     const agentPath = path.join(root, agentDir.name);
@@ -163,12 +163,44 @@ export function checkMaxFindings(findings, def) {
   };
 }
 
+/** P0 is most severe. Used for `atLeast` comparisons. */
+const SEVERITY_ORDER = ['P0', 'P1', 'P2', 'P3'];
+const rank = (s) => {
+  const i = SEVERITY_ORDER.indexOf(String(s).toUpperCase());
+  return i === -1 ? Number.POSITIVE_INFINITY : i;
+};
+
+/**
+ * Two accepted shapes:
+ *
+ *   "expectSeverity": ["P1", "P2"]        at least one finding is exactly P1 or P2
+ *   "expectSeverity": [{ "atLeast": "P1" }]  at least one finding is P1 or more severe
+ *
+ * The second form was written into twelve cases and silently never matched,
+ * because the old implementation compared an object against severity strings
+ * with `includes()`. Those cases reported a failure no model could avoid, and
+ * the message rendered as "expected one of [object Object]" — which is the only
+ * reason it was ever noticed.
+ */
 export function checkSeverity(findings, def) {
   if (!def.expectSeverity?.length) return { ok: true, note: 'no severity expectation' };
   if (!findings.length) return { ok: false, note: 'no structured findings emitted' };
-  const got = [...new Set(findings.map((f) => f.severity))];
-  const ok = def.expectSeverity.some((s) => got.includes(s));
-  return { ok, note: `expected one of ${def.expectSeverity.join('/')}, got ${got.join('/') || 'none'}` };
+
+  const got = [...new Set(findings.map((f) => String(f.severity).toUpperCase()))];
+
+  const ok = def.expectSeverity.some((want) => {
+    if (typeof want === 'string') return got.includes(want.toUpperCase());
+    if (want && typeof want === 'object' && want.atLeast) {
+      return got.some((g) => rank(g) <= rank(want.atLeast));
+    }
+    return false;
+  });
+
+  const describe = def.expectSeverity
+    .map((w) => (typeof w === 'string' ? w : w?.atLeast ? `${w.atLeast} or worse` : JSON.stringify(w)))
+    .join(' / ');
+
+  return { ok, note: `expected ${describe}, got ${got.join('/') || 'none'}` };
 }
 
 /* ------------------------------------------------------------------ *
@@ -190,6 +222,25 @@ function validate(cases, agents) {
       problems.push(`${id}: no expectations — the case asserts nothing`);
     }
     if (!tc.input.trim()) problems.push(`${id}: empty input fixture`);
+
+    /**
+     * An expectation that cannot match is worse than no expectation: it reports
+     * a failure the model has no way to avoid. Twelve cases shipped with
+     * `[{ atLeast: 'P1' }]` while the checker only understood plain strings, and
+     * --validate passed all twelve because it never looked at the shape.
+     */
+    for (const want of def.expectSeverity ?? []) {
+      const valid =
+        (typeof want === 'string' && SEVERITY_ORDER.includes(want.toUpperCase())) ||
+        (want && typeof want === 'object' && typeof want.atLeast === 'string' &&
+          SEVERITY_ORDER.includes(want.atLeast.toUpperCase()));
+      if (!valid) {
+        problems.push(
+          `${id}: expectSeverity entry ${JSON.stringify(want)} is not a severity ` +
+            `("P0".."P3") or an { atLeast } object — it can never match`,
+        );
+      }
+    }
 
     for (const e of def.expect ?? []) {
       if (!e.name) problems.push(`${id}: an expectation has no name`);
@@ -257,7 +308,11 @@ async function main() {
   const apiKey = args['api-key'] ?? process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY ?? '';
   const model = args.model ?? (provider === 'openai' ? 'gpt-5' : 'claude-sonnet-5');
 
-  if (provider !== 'mock' && !apiKey) {
+  // A local runtime (Ollama, LM Studio) needs no key. Only demand one when
+  // talking to a hosted endpoint.
+  const needsKey =
+    provider !== 'mock' && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(args['base-url'] ?? process.env.OPENAI_BASE_URL ?? '');
+  if (needsKey && !apiKey) {
     console.error(
       c.red('\n  No API key. Set ANTHROPIC_API_KEY, or run with --validate for structural checks only.\n'),
     );
@@ -266,8 +321,61 @@ async function main() {
 
   console.log(c.bold(`\n  Running ${cases.length} eval case(s) against ${model}\n`));
 
-  const llm = new LLM({ provider, apiKey, model, budgetUsd: Number(args.budget ?? 5) });
+  const baseUrl = args['base-url'] ?? process.env.OPENAI_BASE_URL;
+  if (baseUrl) console.log(c.dim(`  endpoint: ${baseUrl}\n`));
+
+  const llm = new LLM({
+    provider,
+    apiKey,
+    model,
+    baseUrl,
+    budgetUsd: Number(args.budget ?? 5),
+  });
   const results = [];
+
+  /**
+   * Results were written once, at the end, only with --json. A full sweep
+   * against a local model takes tens of minutes, so a crash or a Ctrl-C at
+   * case 40 threw away everything. Now every case is persisted as it
+   * finishes, and --resume skips what is already recorded.
+   */
+  const RESULTS_FILE = path.join(HERE, 'results.json');
+
+  let previous = [];
+  if (args.resume && fs.existsSync(RESULTS_FILE)) {
+    try {
+      previous = JSON.parse(fs.readFileSync(RESULTS_FILE, 'utf8'));
+      const done = new Set(previous.map((r) => r.id));
+      const before = cases.length;
+      cases = cases.filter((tc) => !done.has(tc.id));
+      console.log(c.dim(`  resuming: ${before - cases.length} already done, ${cases.length} to go\n`));
+    } catch {
+      console.log(c.yellow('  results.json unreadable — starting fresh\n'));
+    }
+  }
+
+  const persist = () => {
+    const rows = [
+      ...previous,
+      ...results.map((r) => ({
+        id: r.tc.id,
+        agent: r.tc.def.agent,
+        clean: r.tc.def.expectMaxFindings !== undefined,
+        pass: r.pass ?? false,
+        expectPassed: r.score?.expectPassed ?? 0,
+        expectTotal: r.score?.expectTotal ?? 0,
+        violations: r.score?.violations?.map((v) => v.name) ?? [],
+        severity: r.sev?.ok ?? null,
+        noise: r.cap?.ok ?? null,
+        error: r.error ?? null,
+      })),
+    ];
+    try {
+      fs.writeFileSync(RESULTS_FILE, `${JSON.stringify(rows, null, 2)}\n`);
+    } catch {
+      /* a failed write must not kill a long run */
+    }
+  };
 
   for (const tc of cases) {
     const agent = agents.find((a) => a.id === tc.def.agent);
@@ -298,6 +406,7 @@ async function main() {
     } catch (err) {
       console.log(c.red(`ERROR — ${err.message}`));
       results.push({ tc, error: err.message, score: null });
+      persist();
       continue;
     }
 
@@ -308,6 +417,7 @@ async function main() {
     const pass = score.pass && sev.ok && cap.ok;
 
     results.push({ tc, raw, parsed, score, sev, cap, pass });
+    persist();
 
     const label = pass
       ? c.green('PASS')
@@ -341,7 +451,50 @@ async function main() {
   console.log(c.bold('\n  Summary\n'));
   console.log(`  ${passed}/${results.length} passed`);
   if (violated) console.log(c.red(`  ${violated} case(s) produced forbidden advice — these matter most`));
-  console.log(c.dim(`  ~$${llm.spentUsd.toFixed(3)} spent\n`));
+  console.log(c.dim(`  ~$${llm.spentUsd.toFixed(3)} spent`));
+
+  /**
+   * Split the report by what the failure actually tells you.
+   *
+   * A weak or small model misses findings for capability reasons, so a failed
+   * *dirty* case is ambiguous — it may be the prompt, it may be the model. A
+   * failed *clean* case is not ambiguous: the model invented findings on
+   * correct code, and no amount of model capability makes that acceptable.
+   * Same for a forbidden-advice violation.
+   */
+  const cleanResults = results.filter((r) => r.tc.def.expectMaxFindings !== undefined);
+  const cleanFailed = cleanResults.filter((r) => !r.pass);
+  const dirtyFailed = results.filter((r) => r.tc.def.expectMaxFindings === undefined && !r.pass);
+
+  console.log(c.bold('\n  Read this first — failures that mean something\n'));
+
+  if (violated) {
+    console.log(c.red(`  ${violated} forbidden-advice violation(s)`));
+    for (const r of results.filter((x) => x.score?.violations.length)) {
+      for (const v of r.score.violations) console.log(c.red(`    ${r.tc.id} — ${v.name}`));
+    }
+  }
+
+  if (cleanFailed.length) {
+    console.log(c.red(`\n  ${cleanFailed.length}/${cleanResults.length} clean case(s) failed — the model reported problems in correct code`));
+    for (const r of cleanFailed) {
+      console.log(c.red(`    ${r.tc.id}`) + c.dim(`  ${r.cap?.note ?? r.sev?.note ?? ''}`));
+    }
+  } else if (cleanResults.length) {
+    console.log(c.green(`  all ${cleanResults.length} clean case(s) passed — no invented findings`));
+  }
+
+  if (dirtyFailed.length) {
+    console.log(
+      c.yellow(`\n  ${dirtyFailed.length} case(s) missed expected findings`) +
+        c.dim(' — ambiguous on a small model; check whether the finding is genuinely absent'),
+    );
+    for (const r of dirtyFailed) {
+      console.log(c.dim(`    ${r.tc.id}  ${r.score?.expectPassed ?? 0}/${r.score?.expectTotal ?? 0}`));
+    }
+  }
+
+  console.log(c.dim(`\n  Results: evals/results.json  ·  re-run with --resume to continue\n`));
 
   if (args.json) {
     fs.writeFileSync(
