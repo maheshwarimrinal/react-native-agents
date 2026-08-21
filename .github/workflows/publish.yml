@@ -8,7 +8,11 @@ name: Publish to npm
 # Publisher. No long-lived token is stored in repository secrets.
 on:
   push:
-    tags: ['v*']
+    # Full semver tags only. 'v*' also matched the floating major tag, so every
+    # `git push origin v1 --force` re-ran this workflow and failed the
+    # tag-vs-package.json check ("Tag v1 does not match version 1.2.0") — a red
+    # X on every release for a tag that is a pointer, not a release.
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-*']
   workflow_dispatch:
     inputs:
       dry_run:
