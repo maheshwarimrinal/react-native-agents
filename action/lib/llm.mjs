@@ -49,8 +49,32 @@ export class LLM {
    * @param {number} [opts.maxOutputTokens]
    * @param {(msg:string)=>void} [opts.log]
    */
-  constructor({ provider, apiKey, model, budgetUsd = 2, maxOutputTokens = 8000, log = () => {} }) {
+  constructor({
+    provider,
+    apiKey,
+    model,
+    budgetUsd = 2,
+    maxOutputTokens = 8000,
+    baseUrl,
+    log = () => {},
+  }) {
     this.provider = provider;
+    /**
+     * Override the API host. The `openai` provider speaks the standard
+     * /v1/chat/completions shape, which nearly every other provider and every
+     * local runtime also implements — so this one option covers Ollama, Groq,
+     * OpenRouter, GitHub Models, Gemini's compatibility endpoint, and any
+     * self-hosted gateway, without a provider implementation for each.
+     */
+    this.baseUrl = (baseUrl ?? process.env.OPENAI_BASE_URL ?? '').replace(/\/+$/, '');
+
+    /**
+     * A locally-hosted model costs nothing, so budgeting it is meaningless —
+     * and actively harmful. An unknown model name falls back to the default
+     * price (Sonnet rates), which meant a free Ollama run was billed at
+     * $3/$15 per million tokens and aborted on any small budget.
+     */
+    this.isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/.test(this.baseUrl);
     this.apiKey = apiKey;
     this.model = model;
     this.budgetUsd = budgetUsd;
@@ -62,11 +86,16 @@ export class LLM {
     this.outTokens = 0;
   }
 
+  /** Local models are free; never let a phantom price stop the run. */
+  #cost(inTokens, outTokens) {
+    return this.isLocal ? 0 : estimateCost(this.model, inTokens, outTokens);
+  }
+
   /** Would this call push us over budget? Checked *before* spending. */
   wouldExceed(promptText) {
     const projected =
       this.spentUsd +
-      estimateCost(this.model, estimateTokens(promptText), this.maxOutputTokens);
+      this.#cost(estimateTokens(promptText), this.maxOutputTokens);
     return projected > this.budgetUsd;
   }
 
@@ -75,7 +104,7 @@ export class LLM {
 
     if (this.wouldExceed(promptText)) {
       const projected =
-        this.spentUsd + estimateCost(this.model, estimateTokens(promptText), this.maxOutputTokens);
+        this.spentUsd + this.#cost(estimateTokens(promptText), this.maxOutputTokens);
       throw new BudgetExceededError(projected, this.budgetUsd);
     }
 
@@ -90,7 +119,7 @@ export class LLM {
     this.calls += 1;
     this.inTokens += res.usage.input;
     this.outTokens += res.usage.output;
-    this.spentUsd += estimateCost(this.model, res.usage.input, res.usage.output);
+    this.spentUsd += this.#cost(res.usage.input, res.usage.output);
     this.log(
       `  ${this.model}: ${res.usage.input} in / ${res.usage.output} out · ` +
         `$${this.spentUsd.toFixed(3)} cumulative · ${((Date.now() - started) / 1000).toFixed(1)}s`,
@@ -122,7 +151,8 @@ export class LLM {
   }
 
   async #openai({ system, user }) {
-    const r = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+    const endpoint = `${this.baseUrl || 'https://api.openai.com/v1'}/chat/completions`;
+    const r = await fetchWithRetry(endpoint, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({
