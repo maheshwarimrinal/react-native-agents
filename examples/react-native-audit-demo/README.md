@@ -32,12 +32,25 @@ The exact findings depend on the provider, model, and changed lines. These are e
 ## Which agents run
 
 Routing selects only the specialists the changed files warrant, so a pull request
-touching one file will not run all of them. Changing the whole demo routes six:
+touching one file will not run all of them. Changing the whole demo routes nine:
 
 ```text
-rn-performance  rn-security  rn-code-quality
-rn-ui-accessibility  rn-testing  rn-native-modules  rn-release
+rn-code-quality  rn-performance  rn-release
+rn-ui-accessibility  rn-security  rn-background
+rn-native-modules  rn-testing  rn-upgrade
 ```
+
+Two of those are less obvious than the rest: `app.json` declares background modes,
+which is what pulls in `rn-background`, and `package.json` carries the React Native
+and Expo versions, which is what pulls in `rn-upgrade`. Neither is a source file
+anyone would think to associate with a specialist, which is the point of routing
+on content rather than on file type alone.
+
+Note that the demo workflow sets `max-agents: 9` rather than leaving the default
+of `6`. The default is a sensible cost control on a real repository, where a PR
+rarely touches nine distinct areas — but here it would silently drop three
+specialists from a demonstration whose whole purpose is to show what routing
+selects.
 
 `rn-doctor` and `rn-build` are deliberately excluded from pull-request review —
 they need an error log or a request rather than a diff.

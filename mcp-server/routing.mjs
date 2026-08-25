@@ -18,14 +18,20 @@
 export const SIGNALS = {
   'rn-performance': {
     strong: [
+      // NOT 'profil*': 'profile' is a user-profile screen far more often than a
+      // performance activity, and the prefix routed "edit profile avatar" to
+      // rn-performance at high confidence.
+      'profiling', 'profiler', 'profile the app', 'profile performance',
+      'cpu profile', 'performance profile',
       'slow', 'laggy', 'lag', 'janky', 'jank', 'stutter', 'stuttering', 'freeze', 'freezing',
       'frozen', 'fps', 'frame drop', 'dropped frames', 'choppy', 'sluggish', 'hangs', 'hang',
       'memory leak', 'out of memory', 'oom', 're-render', 'rerender', 'slow startup',
       'takes ages', 'unresponsive', 'bundle size', 'app size', 'cold start', 'tti',
     ],
     medium: [
-      'performance', 'optimis', 'optimiz', 'render', 'scroll', 'scrolling', 'list', 'flatlist',
-      'flashlist', 'startup', 'launch', 'animation', 'animate', 'bundle', 'memory', 'profil',
+      'performance', 'optimis*', 'optimiz*', 'render', 'scroll', 'scrolling', 'list', 'flatlist',
+      'hermes runtime', 'react profiler', 'flamegraph', 'trace the render',
+      'flashlist', 'startup', 'launch', 'animation', 'animate', 'bundle', 'memory',
       'speed', 'fast', 'heavy', 'expensive', 'infinite scroll', 'pagination', 'image loading',
     ],
     weak: ['catalogue', 'catalog', 'feed', 'grid', 'thousands', 'large dataset', 'many items'],
@@ -33,10 +39,10 @@ export const SIGNALS = {
 
   'rn-security': {
     strong: [
-      'vulnerab', 'exploit', 'insecure', 'security', 'leak', 'leaked', 'hardcoded', 'api key',
+      'vulnerab*', 'exploit', 'insecure', 'security', 'leak', 'leaked', 'hardcoded', 'api key',
       'secret', 'credential', 'penetration', 'pentest', 'owasp', 'masvs', 'certificate pinning',
       'ssl pinning', 'man in the middle', 'mitm', 'reverse engineer', 'decompile', 'jailbreak',
-      'rooted', 'obfuscat', 'encrypt', 'cve', 'jwt', 'refresh token', 'store the token',
+      'rooted', 'obfuscat*', 'encrypt*', 'cve', 'jwt', 'refresh token', 'store the token',
     ],
     medium: [
       'token', 'auth', 'login', 'password', 'keychain', 'keystore', 'asyncstorage',
@@ -49,12 +55,12 @@ export const SIGNALS = {
   'rn-code-quality': {
     strong: [
       'code review', 'review my', 'refactor', 'clean up', 'cleanup', 'technical debt', 'tech debt',
-      'code smell', 'maintainab', 'architecture', 'restructure', 'stale closure', 'antipattern',
+      'code smell', 'maintainab*', 'architecture', 'restructure', 'stale closure', 'antipattern',
       'anti-pattern', 'best practice',
     ],
     medium: [
       'typescript', 'types', 'any type', 'useeffect', 'hook', 'state management', 'redux',
-      'zustand', 'context', 'error handling', 'folder structure', 'organis', 'organiz',
+      'zustand', 'context', 'error handling', 'folder structure', 'organis*', 'organiz*',
       'naming', 'duplicate', 'lint', 'eslint',
     ],
     weak: ['readable', 'messy', 'confusing', 'improve', 'better way', 'idiomatic'],
@@ -62,15 +68,15 @@ export const SIGNALS = {
 
   'rn-ui-accessibility': {
     strong: [
-      'accessib', 'a11y', 'screen reader', 'voiceover', 'talkback', 'contrast', 'colour blind',
+      'accessib*', 'a11y', 'screen reader', 'voiceover', 'talkback', 'contrast', 'colour blind',
       'color blind', 'dark mode', 'wcag', 'dynamic type', 'font scaling', 'rtl', 'right to left',
       'safe area', 'notch', 'keyboard covers', 'keyboard hides', 'edge to edge',
     ],
     medium: [
       'layout', 'responsive', 'tablet', 'landscape', 'rotation', 'foldable', 'theme', 'theming',
       'styling', 'design system', 'spacing', 'typography', 'keyboard', 'modal', 'animation',
-      'haptic', 'empty state', 'loading state', 'skeleton', 'i18n', 'translation', 'localis',
-      'localiz',
+      'haptic', 'empty state', 'loading state', 'skeleton', 'i18n', 'translation', 'localis*',
+      'localiz*',
     ],
     weak: ['ui', 'ux', 'looks', 'visual', 'design', 'button', 'screen size'],
   },
@@ -79,10 +85,10 @@ export const SIGNALS = {
     strong: [
       'write tests', 'unit test', 'test coverage', 'flaky', 'flakey', 'testing library', 'rntl',
       'jest', 'detox', 'maestro', 'e2e', 'end to end', 'mock', 'mocking', 'snapshot test',
-      'test fails', 'failing test', 'tests fail', 'tests keep failing', 'test flake', 'intermittent',
+      'test fails', 'failing test', 'tests fail', 'tests keep failing', 'test flake', 'intermittent*',
     ],
     medium: ['test', 'spec', 'coverage', 'assertion', 'fixture', 'stub', 'ci pipeline'],
-    weak: ['verify', 'regression', 'confidence'],
+    weak: ['verify*', 'regression', 'confidence'],
   },
 
   'rn-doctor': {
@@ -99,7 +105,7 @@ export const SIGNALS = {
     ],
     medium: [
       'error', 'failing', 'broken', 'stuck', 'cache', 'xcode', 'android studio', 'jdk', 'java',
-      'node_modules', 'reinstall', 'after upgrade', 'after pull', 'ci fails', 'compile',
+      'node_modules', 'reinstall', 'after upgrade', 'after pull', 'ci fails', 'compile*',
     ],
     weak: ['setup', 'install', 'environment', 'toolchain'],
   },
@@ -135,7 +141,7 @@ export const SIGNALS = {
   'rn-observability': {
     strong: [
       'crash reporting', 'crashlytics', 'sentry', 'new relic', 'newrelic', 'bugsnag',
-      'symbolicat', 'dsym', 'source map', 'sourcemap', 'stack trace', 'unreadable stack',
+      'symbolicat*', 'dsym', 'source map', 'sourcemap', 'stack trace', 'unreadable stack',
       'no crashes', 'not reporting', 'not showing up', 'crash-free', 'crash free',
       'breadcrumb', 'distributed tracing', 'session replay', 'observability', 'telemetry',
       'instrumentation', 'proguard rules', 'minified stack',
@@ -144,7 +150,7 @@ export const SIGNALS = {
       'monitoring', 'analytics', 'metrics', 'logging', 'alerting', 'dashboard', 'tracing',
       'custom event', 'error tracking', 'apm', 'proguard', 'release health', 'anr',
     ],
-    weak: ['visibility', 'insight', 'report', 'track'],
+    weak: ['visibility', 'insight', 'report', 'track*'],
   },
 
   'rn-upgrade': {
@@ -152,14 +158,17 @@ export const SIGNALS = {
       'upgrade', 'upgrading', 'migrate to', 'migration', 'new architecture', 'newarch',
       'fabric', 'turbomodule', 'turbo module', 'bridgeless', 'interop layer', 'codegen',
       'upgrade helper', 'version bump', 'bump react native', 'expo sdk', 'sdk upgrade',
+      // Enumerated rather than 'modernis*', which matched 'modernist'.
+      'modernise', 'modernize', 'modernising', 'modernizing',
+      'modernisation', 'modernization', 'bring it up to date', 'get current',
       'breaking change', 'view flattening', 'react native version',
     ],
     medium: [
       'deprecated', 'no longer works', 'after upgrading', 'since upgrading', 'older version',
-      'latest version', 'compatib', 'peer dependency', 'scope move', 'renamed package',
+      'latest version', 'compatib*', 'peer dependency', 'scope move', 'renamed package',
       'gradle version', 'kotlin version', 'ref is null',
     ],
-    weak: ['0.7', '0.8', 'behind', 'outdated', 'legacy', 'modernis', 'moderniz'],
+    weak: ['0.7', '0.8', 'behind', 'outdated', 'legacy'],
   },
 
   'rn-dependencies': {
@@ -174,7 +183,7 @@ export const SIGNALS = {
       'bundle cost', 'weekly downloads', 'last published', 'fork', 'patch-package',
       'transitive', 'native dependency',
     ],
-    weak: ['compare', 'versus', ' vs ', 'options', 'recommend', 'popular'],
+    weak: ['compare', 'versus', ' vs ', 'options', 'recommend*', 'popular'],
   },
 
   'rn-debug': {
@@ -186,7 +195,7 @@ export const SIGNALS = {
     ],
     medium: [
       'debug', 'debugging', 'why does', 'why is', 'not working', 'unexpected', 'weird',
-      'strange', 'inconsistent', 'intermittent', 'sometimes', 'console.log', 'logging',
+      'strange*', 'inconsistent', 'intermittent*', 'sometimes', 'console.log', 'logging',
       'stuck', 'behaves differently',
     ],
     weak: ['investigate', 'track down', 'figure out', 'diagnose', 'root cause'],
@@ -226,6 +235,10 @@ export const SIGNALS = {
       'only on android', 'only on ios', 'works on ios but', 'works on android but',
       'different on android', 'different on ios', 'platform.select', 'platform.os',
       'keyboardavoidingview', 'keyboard covers', 'safe area', 'notch', 'hardware back',
+      // NOT bare 'orientation': "new developer orientation" matched it. The
+      // screen sense is always qualified in practice.
+      'screen orientation', 'device orientation', 'orientation change',
+      'landscape', 'portrait mode', 'rotate the device',
       'back button exits', 'elevation', 'shadow not showing', 'status bar',
     ],
     medium: [
@@ -289,7 +302,7 @@ export const SIGNALS = {
       'store listing', 'screenshots', 'age rating', 'demo account', 'testflight',
       'compliance', 'policy',
     ],
-    weak: ['approval', 'publish', 'launch', 'live'],
+    weak: ['approval', 'publish*', 'launch', 'live'],
   },
 
   'rn-onboard': {
@@ -304,6 +317,57 @@ export const SIGNALS = {
       'previous developer', 'previous agency', 'legacy project', 'client app', 'map the',
     ],
     weak: ['overview', 'tour', 'orient', 'first day', 'unfamiliar'],
+  },
+
+  'rn-payments': {
+    strong: [
+      'in-app purchase', 'in app purchase', 'iap', 'storekit', 'play billing', 'subscriptions',
+      'subscription lifecycle', 'subscription status', 'renew the subscription',
+      'receipt validation', 'restore purchases', 'entitlement', 'grace period', 'billing retry',
+      'family sharing', 'proration', 'revenuecat', 'react-native-iap', 'auto-renew',
+      'refund', 'paywall', 'free trial',
+      'lost premium', 'lost access', 'lost subscription', 'not restored',
+      'purchased but', 'paid but', 'charged but',
+    ],
+    medium: [
+      'purchase', 'purchases', 'billing', 'subscribed', 'premium', 'pro tier', 'subscription',
+      'upgrade tier', 'payment', 'charge', 'checkout', 'consumable', 'sandbox tester',
+    ],
+    weak: ['monetis*', 'monetiz*', 'revenue', 'price', 'plan'],
+  },
+
+  'rn-background': {
+    strong: [
+      'background task', 'background fetch', 'headless js', 'background location',
+      'background upload', 'workmanager', 'bgtaskscheduler', 'background modes',
+      'foreground service', 'doze', 'battery optimization', 'battery optimisation',
+      'app standby', 'periodic sync', 'does not run in background', 'runs when the app is closed',
+    ],
+    medium: [
+      'background', 'scheduled', 'periodic', 'geofenc*', 'keep alive', 'wake', 'killed app',
+      'app is closed', 'sync in the background', 'battery drain',
+    ],
+    weak: ['interval', 'schedule', 'later', 'idle'],
+  },
+
+  'rn-monorepo': {
+    strong: [
+      'monorepo', 'workspace', 'workspaces', 'pnpm workspace', 'yarn workspace', 'turborepo',
+      'nx', 'watchfolders', 'nodemodulespaths', 'node-linker', 'hoisting', 'duplicate react',
+      'shared package',
+      // These only indicate a monorepo *with* workspace context. On their own
+      // they are ordinary single-project failures that belong to rn-doctor, and
+      // as strong terms they tied with or outranked it.
+      'unable to resolve module in a monorepo', 'invalid hook call after adding a workspace',
+      'resolve module across packages', 'hook call duplicate react',
+    ],
+    medium: [
+      'symlink', 'packages/', 'apps/', 'shared code', 'turbo*', 'lockfile', 'resolution',
+      'extranodemodules', 'transformignorepatterns',
+      // Demoted from strong: real signals, but only alongside workspace context.
+      'unable to resolve module', 'invalid hook call', 'metro config',
+    ],
+    weak: ['structure', 'layout', 'split', 'reuse'],
   },
 
   'rn-release': {
@@ -321,7 +385,7 @@ export const SIGNALS = {
     medium: [
       // 'store' and 'submission' are too generic now that rn-store-submission
       // and rn-state exist — 'store' fired on both "App Store" and "the store".
-      'release', 'deploy', 'publish', 'build', 'ship', 'signing',
+      'release', 'deploy*', 'publish*', 'build', 'ship', 'signing',
       'staged',
       // 'sentry', 'crash', 'monitoring', and 'source map' moved to
       // rn-observability, which owns diagnosis. Release keeps the rollout-specific
@@ -340,6 +404,41 @@ const WEIGHT = { strong: 5, medium: 2, weak: 1 };
  * @param {object[]} agents
  * @returns {{ id:string, agent:object, score:number, confidence:'high'|'medium'|'low', matched:string[] }[]}
  */
+/**
+ * Boundary-aware containment.
+ *
+ * Two failure modes had to be fixed together, and fixing one at a time is what
+ * produced the churn here:
+ *
+ *   - Plain `includes()` matched `list` in `listener`, `store` in `restore`,
+ *     `npm` in `pnpm`.
+ *   - A right boundary applied only to short terms left multi-word terms
+ *     unbounded, so `app store` matched `app storefront` and `app stored`.
+ *   - Guessing English suffixes for every short term made `list` match
+ *     `listing` and was never going to generalise.
+ *
+ * So: every term is bounded on both sides, plural-tolerant, and a term that is
+ * genuinely a stem says so with a trailing `*`. Explicit beats clever.
+ */
+function containsTerm(haystack, term) {
+  if (!term) return false;
+
+  const isStem = term.endsWith('*');
+  const base = isStem ? term.slice(0, -1) : term;
+  if (!base) return false;
+
+  const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Never match mid-word: 'npm' in 'pnpm', 'store' in 'restore'.
+  const left = /^[\w]/.test(base) ? '(?<![\\w-])' : '';
+
+  // A stem intentionally runs into its inflections, so it takes no right
+  // boundary. Everything else is a whole word, plural allowed.
+  const right = isStem ? '' : /[\w]$/.test(base) ? '(?:e?s)?(?![\\w-])' : '';
+
+  return new RegExp(`${left}${escaped}${right}`).test(haystack);
+}
+
 export function scoreAgents(task, agents) {
   const text = ` ${String(task ?? '').toLowerCase()} `;
 
@@ -351,7 +450,7 @@ export function scoreAgents(task, agents) {
     if (sig) {
       for (const tier of ['strong', 'medium', 'weak']) {
         for (const term of sig[tier] ?? []) {
-          if (text.includes(term)) {
+          if (containsTerm(text, term)) {
             score += WEIGHT[tier];
             matched.push(term);
           }
@@ -363,7 +462,7 @@ export function scoreAgents(task, agents) {
     // and stay in sync with the playbook automatically.
     for (const t of agent.triggers ?? []) {
       const term = String(t).toLowerCase();
-      if (term.length > 3 && text.includes(term) && !matched.includes(term)) {
+      if (term.length > 3 && containsTerm(text, term) && !matched.includes(term)) {
         score += WEIGHT.medium;
         matched.push(term);
       }

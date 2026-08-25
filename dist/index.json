@@ -1,6 +1,6 @@
 {
   "generatedAt": null,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "knowledge": {
     "$comment": "Freshness metadata for the React Native knowledge in agents/ and shared/. This is the single source of truth for 'what have we actually checked?'. The scheduled freshness workflow compares these against the live npm registry and opens an issue when they fall behind. Update `last_verified` only after genuinely reviewing the affected references — bumping the date without reading is worse than leaving it stale, because it launders an unchecked claim as a verified one.",
     "last_verified": "2026-08-12",
@@ -18,6 +18,38 @@
       "verified_through": "19.2",
       "notes": "Concurrent features, React Compiler, and `use()` are all in scope."
     },
+    "libraries": {
+      "$comment": "Third-party libraries whose API the agents quote concretely. Tracked separately from the platform because they move on their own schedule, and because payments guidance went stale across three review rounds while the React Native version above was current.",
+      "react-native-iap": {
+        "package": "react-native-iap",
+        "verified_through": "14.7",
+        "verified_on": "2026-08-24",
+        "used_by": [
+          "rn-payments"
+        ],
+        "notes": "v14 is a hard break, not a deprecation: getProducts, getSubscriptions, requestSubscription, getPurchaseHistory, clearProductsIOS, flushFailedPurchasesCachedAsPendingAndroid and setup were removed. StoreKit 2 (iOS 15+), Play Billing 7+, RN 0.71+. Error codes moved to the unified ErrorCode enum, so the old 'E_USER_CANCELLED' string silently stops matching. purchase-flow.md carries the full v13→v14 table."
+      }
+    },
+    "yarnBerry": {
+      "$comment": "Recorded because 'Yarn workspaces = hoisted' was true of Classic and wrong for Berry, and the monorepo agent stated it flatly.",
+      "verified_on": "2026-08-24",
+      "source": "https://yarnpkg.com/configuration/yarnrc#nodeLinker",
+      "notes": "Yarn 2+ has three nodeLinker modes: 'pnp' (single .pnp loader, no node_modules), 'pnpm' (node_modules of symlinks/hardlinks into a content-addressable store), and 'node-modules' (regular hoisted layout as in Classic/npm). React Native requires node-modules — Metro, autolinking, Gradle and CocoaPods all need real directories and none support PnP. nmHoistingLimits (none | workspaces | dependencies) still restricts hoisting under node-modules and can reintroduce duplicate copies. Do not state a Berry default; it has been contested between releases — read the project's .yarnrc.yml instead.",
+      "used_by": [
+        "rn-monorepo"
+      ]
+    },
+    "appleBackground": {
+      "$comment": "Not an npm package, so the freshness job cannot check it. Recorded so the claim carries a date.",
+      "verified_on": "2026-08-24",
+      "source": "https://developer.apple.com/documentation/foundation/urlsessionconfiguration/background(withidentifier:)",
+      "notes": "A background URLSession transfer continues when the app is suspended or terminated BY THE SYSTEM, and the system relaunches the app so it can collect results using the same identifier. User force-quit from the app switcher is different: the system cancels all of that session's background transfers and does not automatically relaunch the app — the user must open it before transfers resume. Guidance must distinguish the two; 'survives being killed' unqualified is wrong."
+    },
+    "applePayments": {
+      "$comment": "Not an npm package, so the freshness job cannot check it — it is recorded here so the claim has a date attached rather than being implicitly current.",
+      "verified_on": "2026-08-24",
+      "notes": "verifyReceipt deprecated 2023-06-05. Still functional, no end-of-life date announced, receives no new features. Apple directs new work to the App Store Server API, to verifying StoreKit 2 signed JWS via the App Store Server Library, or to App Store Server Notifications V2. The 21007 production-then-sandbox retry is specific to verifyReceipt: the App Store Server API selects environment by base URL (api.storekit.itunes.apple.com vs api.storekit-sandbox.itunes.apple.com) and returns 401 for a cross-environment transaction id."
+    },
     "policy": {
       "review_window_days": 90,
       "on_new_minor": "Open a maintenance issue listing references that mention version-specific behaviour.",
@@ -25,6 +57,67 @@
     }
   },
   "agents": [
+    {
+      "id": "rn-background",
+      "name": "React Native Background Execution Agent",
+      "title": "RN Background",
+      "description": "Use for work that must happen while the app is not in the foreground — background fetch, headless JS, background location, silent pushes as triggers, uploads that outlive the screen, and scheduled tasks. Covers the iOS and Android restrictions that decide whether your task runs at all, OEM battery managers, and designing for the case where it simply does not run.",
+      "version": "1.0.0",
+      "emoji": "🌙",
+      "color": "bronze",
+      "command": "rn-background",
+      "triggers": [
+        "background task",
+        "background fetch",
+        "headless js",
+        "background location",
+        "background upload",
+        "workmanager",
+        "bgtaskscheduler",
+        "background modes",
+        "foreground service",
+        "doze",
+        "battery optimization",
+        "app standby",
+        "periodic sync",
+        "scheduled task",
+        "keep alive",
+        "startlocationupdatesasync",
+        "registerheadlesstask",
+        "registertaskasync",
+        "definetask"
+      ],
+      "globs": [
+        "**/*.{ts,tsx,js,jsx}",
+        "**/AndroidManifest.xml",
+        "**/Info.plist",
+        "**/*.entitlements",
+        "**/app.json",
+        "**/app.config.*"
+      ],
+      "references": [
+        {
+          "slug": "android-model",
+          "title": "Android"
+        },
+        {
+          "slug": "designing-for-failure",
+          "title": "Designing for the Task Not Running"
+        },
+        {
+          "slug": "ios-model",
+          "title": "iOS"
+        },
+        {
+          "slug": "location-and-uploads",
+          "title": "Location and Uploads"
+        },
+        {
+          "slug": "what-actually-runs",
+          "title": "What Actually Runs"
+        }
+      ]
+    },
     {
       "id": "rn-build",
       "name": "React Native Implementation Agent",
@@ -278,6 +371,65 @@
         {
           "slug": "metro-resolution",
           "title": "Metro, Resolution, and Bundling Failures"
+        }
+      ]
+    },
+    {
+      "id": "rn-monorepo",
+      "name": "React Native Monorepo Agent",
+      "title": "RN Monorepo",
+      "description": "Use for React Native inside a workspace — Metro resolution across packages, hoisting and node-linker settings, pnpm/Yarn/npm workspaces with Turborepo or Nx, sharing code between mobile and web, native autolinking from a nested app, and the duplicate-React and unresolved-module failures that workspaces produce.",
+      "version": "1.0.0",
+      "emoji": "🗂️",
+      "color": "olive",
+      "command": "rn-monorepo",
+      "triggers": [
+        "monorepo",
+        "workspace",
+        "workspaces",
+        "pnpm workspace",
+        "yarn workspace",
+        "turborepo",
+        "turbo",
+        "nx",
+        "metro config",
+        "watchfolders",
+        "hoisting",
+        "node-linker",
+        "symlink",
+        "duplicate react",
+        "invalid hook call",
+        "shared package"
+      ],
+      "globs": [
+        "**/metro.config.js",
+        "**/babel.config.js",
+        "**/package.json",
+        "**/pnpm-workspace.yaml",
+        "**/turbo.json",
+        "**/nx.json",
+        "**/.npmrc"
+      ],
+      "references": [
+        {
+          "slug": "diagnosing",
+          "title": "Diagnosing"
+        },
+        {
+          "slug": "metro-resolution",
+          "title": "Metro in a Workspace"
+        },
+        {
+          "slug": "native-and-builds",
+          "title": "Native Builds from a Nested App"
+        },
+        {
+          "slug": "package-manager",
+          "title": "Package Managers"
+        },
+        {
+          "slug": "shared-packages",
+          "title": "Sharing Code Between Packages"
         }
       ]
     },
@@ -567,6 +719,63 @@
         {
           "slug": "the-map",
           "title": "Building the Map"
+        }
+      ]
+    },
+    {
+      "id": "rn-payments",
+      "name": "React Native Payments Agent",
+      "title": "RN Payments",
+      "description": "Use for in-app purchases and payments in React Native — StoreKit and Play Billing, server-side receipt validation, subscription lifecycle and renewal state, restore purchases, refunds, family sharing, grace periods and billing retry, and the store rules that decide whether you may use an external payment method at all. Specialises in the failure modes that cost money in one direction or the other.",
+      "version": "1.0.0",
+      "emoji": "💳",
+      "color": "mint",
+      "command": "rn-pay",
+      "triggers": [
+        "in-app purchase",
+        "in app purchase",
+        "iap",
+        "storekit",
+        "play billing",
+        "subscription",
+        "subscriptions",
+        "receipt validation",
+        "restore purchases",
+        "purchase flow",
+        "revenuecat",
+        "react-native-iap",
+        "entitlement",
+        "grace period",
+        "billing retry",
+        "refund",
+        "family sharing",
+        "paywall"
+      ],
+      "globs": [
+        "**/*.{ts,tsx,js,jsx}",
+        "**/*.entitlements",
+        "**/AndroidManifest.xml"
+      ],
+      "references": [
+        {
+          "slug": "purchase-flow",
+          "title": "The Purchase Flow"
+        },
+        {
+          "slug": "store-policy",
+          "title": "Store Policy"
+        },
+        {
+          "slug": "subscription-lifecycle",
+          "title": "Subscription Lifecycle"
+        },
+        {
+          "slug": "the-money-rules",
+          "title": "The Rules That Cost Money"
+        },
+        {
+          "slug": "validation",
+          "title": "Receipt Validation"
         }
       ]
     },

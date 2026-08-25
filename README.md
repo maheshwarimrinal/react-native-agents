@@ -2,7 +2,7 @@
 
 # React Native Agents
 
-**21 expert AI agents for React Native — upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, and store submission.**
+**24 expert AI agents for React Native — upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, store submission, payments, background execution, and monorepos.**
 
 Works with Claude Code, Cursor, Windsurf, GitHub Copilot, Codex, Zed, Aider, MCP clients, and GitHub Actions.
 
@@ -72,7 +72,7 @@ OpenAI is also supported:
     api-key: ${{ secrets.OPENAI_API_KEY }}
 ```
 
-`@v1` tracks the latest v1 release. To pin exactly, use a full tag (`@v1.2.0`) or a commit SHA — the SHA is the strictest option and what supply-chain-sensitive setups should prefer.
+`@v1` tracks the latest v1 release. To pin exactly, use a full tag (`@v1.3.0`) or a commit SHA — the SHA is the strictest option and what supply-chain-sensitive setups should prefer.
 
 Store API keys as GitHub Actions repository secrets. Do not commit them to workflow files.
 
@@ -93,6 +93,7 @@ would rather accept partial coverage.
 | 📦 Dependencies | Should we add this library — New Arch support, maintenance, native cost, lighter alternatives | `/rn-deps` |
 | 🗺️ Onboard | Orienting in an inherited codebase — architecture map, conventions, landmines, what to read first | `/rn-onboard` |
 | 🏪 Store Submission | Rejection triage, privacy manifests, Data Safety, ATT, target API deadlines | `/rn-submit` |
+| 🗂️ Monorepo | Metro resolution across packages, hoisting, duplicate React, autolinking from a nested app | `/rn-monorepo` |
 
 **Review** — these run on a diff, and on pull requests:
 
@@ -113,13 +114,15 @@ would rather accept partial coverage.
 | 📱 Platform Parity | iOS/Android divergence — keyboard, safe areas, hardware back, shadows, pickers | `/rn-parity` |
 | 📴 Offline | Durable mutation queues, idempotency, optimistic rollback, conflicts, sync | `/rn-offline` |
 | 🗃️ State | Server vs client state, selectors and re-renders, persistence and hydration | `/rn-state` |
+| 💳 Payments | IAP and subscriptions, server-side receipt validation, restore, refunds, grace periods | `/rn-pay` |
+| 🌙 Background | Background fetch, headless JS, location, and designing for the task not running | `/rn-background` |
 | 🔎 Audit | Runs and consolidates every review specialist | `/rn-audit` |
 
-Six agents are deliberately excluded from pull-request routing — **Doctor, Build, Debug, Dependencies, Onboard, and Store Submission**. They need something brought to them: an error log, a question, a rejection notice. Firing them at a diff would spend tokens to say nothing.
+Seven agents are deliberately excluded from pull-request routing — **Doctor, Build, Debug, Dependencies, Onboard, Store Submission, and Monorepo**. They need something brought to them: an error log, a question, a rejection notice. Firing them at a diff would spend tokens to say nothing.
 
-Routing is narrow on purpose. A typical UI change reaches about three agents, not twenty-one — signals are scoped so that adding specialists does not raise the cost of an ordinary pull request.
+Routing is narrow on purpose. A typical UI change reaches about three agents, not twenty-four — signals are scoped so that adding specialists does not raise the cost of an ordinary pull request.
 
-21 playbooks and 113 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
+24 playbooks and 128 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
 
 ## Bundle size, measured
 

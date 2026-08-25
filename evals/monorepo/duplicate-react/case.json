@@ -1,0 +1,107 @@
+{
+  "agent": "rn-monorepo",
+  "title": "Invalid hook call after adding a workspace UI package, pnpm, default Metro config",
+  "context": {
+    "language": "TypeScript"
+  },
+  "notes": "Every clue points at duplicate React and the answer should take one command to confirm. The user is on Expo with the default metro.config.js and no .npmrc. The correct response depends on their Expo SDK: from SDK 52 expo/metro-config configures watchFolders automatically, and from SDK 54 isolated pnpm installs are supported — so blanket 'add watchFolders and node-linker=hoisted' is outdated advice that can itself cause problems. A good answer names duplicate React as the cause, gives a command to confirm it, and ASKS WHICH SDK before prescribing config. 'Works in apps/web' is corroborating: web bundlers dedupe differently. The failure mode being tested is twofold — investigating hook usage the user already ruled out, or reciting the pre-SDK-52 monorepo setup as though it were universal.",
+  "expect": [
+    {
+      "name": "identifies duplicate React as the cause rather than hook misuse",
+      "any": [
+        "two copies",
+        "duplicate",
+        "more than one",
+        "second copy",
+        "multiple react"
+      ]
+    },
+    {
+      "name": "gives a command to confirm it",
+      "any": [
+        "find",
+        "ls",
+        "npm ls react",
+        "pnpm why",
+        "resolve"
+      ]
+    },
+    {
+      "name": "asks which Expo SDK version before prescribing metro config",
+      "any": [
+        "which sdk",
+        "sdk version",
+        "expo sdk",
+        "depends on",
+        "version",
+        "sdk 52",
+        "sdk 54"
+      ]
+    },
+    {
+      "name": "raises pnpm linking mode as version-dependent rather than a blanket fix",
+      "any": [
+        "node-linker",
+        "hoisted",
+        ".npmrc",
+        "isolated",
+        "sdk 54",
+        "depends"
+      ]
+    },
+    {
+      "name": "recommends pinning react to a single resolution",
+      "any": [
+        "extranodemodules",
+        "resolutions",
+        "overrides",
+        "single copy",
+        "pin"
+      ]
+    },
+    {
+      "name": "explains why apps/web is unaffected",
+      "any": [
+        "web",
+        "different bundler",
+        "dedupe",
+        "resolves differently",
+        "webpack",
+        "vite"
+      ]
+    }
+  ],
+  "expectSeverity": [],
+  "forbid": [
+    {
+      "name": "investigates hook usage the user already ruled out",
+      "pattern": "(conditional|inside a loop|rules of hooks|not a function component)",
+      "unlessPattern": "already\\s+(?:tried|done|ruled out|attempted|handled|covered|been)|(?<![\\w-])ruled\\ out(?![\\w-])|(?<![\\w-])not\\ the\\ cause(?![\\w-])|(?<![\\w-])you\\ have(?![\\w-])"
+    },
+    {
+      "name": "recommends deleting node_modules as the first step",
+      "pattern": "(rm -rf|delete|remove)\\s+node_modules",
+      "unlessPattern": "\\b(after|once)\\b[^.;,]{0,50}\\b(confirm|identif|diagnos|understand)\\w*|\\b(not|never)\\s+(the\\s+)?first\\b|\\bdestroys\\b|\\bconfirm first\\b|\\bonly (after|once)\\b|\\b(do not|don't|avoid)\\s+\\w{0,10}\\s*(rm -rf|delet|remov)"
+    },
+    {
+      "name": "recommends switching package manager as the fix",
+      "pattern": "(switch|move|migrate)\\s+(to|from)\\s+(yarn|npm|pnpm)",
+      "unlessPattern": "(?<![\\w-])not\\ necessary(?![\\w-])|(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|(?<![\\w-])no\\ need(?![\\w-])"
+    },
+    {
+      "name": "asserts what their node_modules contains without having seen it",
+      "pattern": "(you have|there are)\\s+two\\s+copies\\s+of\\s+react\\s+(in|at)\\s+",
+      "unlessPattern": "(?:is|are|it|this|that)\\s+likely|likely\\s+(?:to|that|the)|probably\\s+\\w+|(?:check|inspect|look at)\\s+\\w+|confirm\\s+\\w+|\\bconfirm(?:ing)? (?:first|this|that)|would\\s+(?:be|not|need|require|show|introduce|explain)"
+    },
+    {
+      "name": "prescribes the pre-SDK-52 manual metro setup as universally required",
+      "pattern": "(must|need to|should)\\s+(add|set)\\s+.{0,25}(watchfolders|nodemodulespaths)",
+      "unlessPattern": "depends\\s+on|(?<![\\w-])if\\ you\\ are\\ on(?![\\w-])|(?<![\\w-])before\\ sdk(?![\\w-])|(?<![\\w-])bare\\ react\\ native(?![\\w-])|(?<![\\w-])which\\ sdk(?![\\w-])|older\\s+(?:expo|sdk|version|release)"
+    },
+    {
+      "name": "prescribes node-linker=hoisted without qualifying by SDK version",
+      "pattern": "node-linker\\s*=\\s*hoisted",
+      "unlessPattern": "\\bsdk\\s*5[0-9]\\b|\\bexpo\\s*sdk\\b|\\bdepends on\\b|\\b(check|which)\\s+(your\\s+)?(sdk|version)\\b|\\bbare react native\\b|\\bolder (expo|sdk|version)\\b|\\bif you are on\\b"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "agent": "rn-payments",
+  "title": "A correct purchase handler: server-validated, ordered, idempotent",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Clean case. The listener is at module scope so interrupted and re-delivered purchases are seen, and a foreground reconciliation covers Android renewals that occur while the app is closed and never reach the listener. Validation is server-side and the device never decides entitlement. transactionId is sent so retries are idempotent. finishTransaction happens only after the backend records the purchase, and is deliberately skipped on failure so the store re-delivers. User cancellation is treated as a non-event. The failure mode being tested is manufacturing findings — most likely objecting to the empty catch path (it reports and intentionally leaves the transaction unfinished), or demanding restore/lifecycle handling that legitimately lives in other files this one does not contain.",
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+  "forbid": [
+    {
+      "name": "claims validation is missing or client-side",
+      "pattern": "(missing|no|lacks?|client-side)\\s+.{0,25}(validation|receipt)"
+    },
+    {
+      "name": "claims the transaction is not finished",
+      "pattern": "(not|never|fails? to)\\s+(finish|acknowledg)"
+    },
+    {
+      "name": "objects to skipping finishTransaction on error",
+      "pattern": "should\\s+(still\\s+)?(finish|acknowledge).{0,30}(error|catch|fail)",
+      "unlessPattern": "\\b(deliberate|intentional|correct|right)\\b[^.;,]{0,40}\\b(not|skip|leav\\w+ unfinished)|\\b(should|must) not\\s+(still\\s+)?(finish|acknowledge)|\\bre-?deliver\\w*\\b|\\bleaving it unfinished is (correct|right|deliberate|intentional)"
+    },
+    {
+      "name": "invents missing restore or lifecycle code not present in this file",
+      "pattern": "(missing|no)\\s+(restore|grace period|refund handling)",
+      "unlessPattern": "\\belsewhere\\b|\\bnot in this file\\b|\\bout(side)? of (this|the) (file|scope)\\b|\\b(verify|check|confirm)\\b|\\bif (it|they|these|this) (is|are)\\s+not\\b"
+    },
+    {
+      "name": "claims cancellation is mishandled",
+      "pattern": "(cancel\\w*).{0,30}(should be|not handled|mishandl)",
+      "unlessPattern": "\\bcancel\\w*\\b[^.;,]{0,40}\\b(is|are)\\s+(handled\\s+)?(correctly|properly|fine|appropriately)|\\bcorrectly (ignor|handl|silenc)\\w*|\\bis not an error\\b"
+    },
+    {
+      "name": "claims the listener alone catches Android renewals",
+      "pattern": "listener\\s+.{0,40}(catches|handles|covers)\\s+.{0,20}renewal",
+      "unlessPattern": "(?<![\\w-])does\\ not(?![\\w-])|(?<![\\w-])not\\ sufficient(?![\\w-])|(?<![\\w-])queryPurchases(?![\\w-])|(?<![\\w-])on\\ resume(?![\\w-])"
+    }
+  ]
+}

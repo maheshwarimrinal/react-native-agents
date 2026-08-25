@@ -1,50 +1,86 @@
 {
   "agent": "rn-navigation",
   "title": "Deep links handled only for the running app, with no auth intent preservation",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "The reported symptom names the bug precisely: it works in testing because testing is done with the app already running. (1) Only Linking.addEventListener is registered — getInitialURL is absent, so a link that launches a killed app is never read. This is the primary finding. (2) Even with getInitialURL added, navigating immediately would be a no-op because the navigator is not mounted yet; the intent must be held until onReady. (3) A link to a protected order while signed out renders AuthStack and the target is dropped, so the user logs in and lands nowhere. (4) The id is extracted by string replace with no validation, and the host check is a naive split that matches any URL containing the substring. Tests whether the agent distinguishes the three entry paths rather than reading this as generic routing code.",
-
   "expect": [
     {
       "name": "identifies the missing getInitialURL for cold start",
-      "any": ["getinitialurl", "cold start", "killed", "initial url", "launched by"]
+      "any": [
+        "getinitialurl",
+        "cold start",
+        "killed",
+        "initial url",
+        "launched by"
+      ]
     },
     {
       "name": "connects that to why testing passed",
-      "any": ["already running", "app is open", "foreground", "backgrounded", "in testing"]
+      "any": [
+        "already running",
+        "app is open",
+        "foreground",
+        "backgrounded",
+        "in testing"
+      ]
     },
     {
       "name": "raises the navigator-not-mounted timing problem",
-      "any": ["not mounted", "onready", "before the navigator", "timing", "no-op", "not ready"]
+      "any": [
+        "not mounted",
+        "onready",
+        "before the navigator",
+        "timing",
+        "no-op",
+        "not ready"
+      ]
     },
     {
       "name": "flags that the auth gate drops the pending target",
-      "any": ["auth", "login", "signed out", "preserve", "pending", "after login"]
+      "any": [
+        "auth",
+        "login",
+        "signed out",
+        "preserve",
+        "pending",
+        "after login"
+      ]
     },
     {
       "name": "flags the unvalidated id and weak host check",
-      "any": ["validat", "untrusted", "split", "any url", "sanitis", "sanitiz"]
+      "any": [
+        "validat",
+        "untrusted",
+        "split",
+        "any url",
+        "sanitis",
+        "sanitiz"
+      ]
     }
   ],
-
-  "expectSeverity": [{ "atLeast": "P1" }],
-
+  "expectSeverity": [
+    {
+      "atLeast": "P1"
+    }
+  ],
   "forbid": [
     {
       "name": "recommends a setTimeout to wait for the navigator",
       "pattern": "settimeout",
-      "unless": ["do not", "avoid", "instead of", "not the fix", "fragile"]
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|(?<![\\w-])instead\\ of(?![\\w-])|(?<![\\w-])not\\ the\\ fix(?![\\w-])|(?<![\\w-])fragile(?![\\w-])"
     },
     {
       "name": "claims the native association files are missing without having read them",
       "pattern": "(missing|no)\\s+(apple-app-site-association|assetlinks)",
-      "unless": ["verify", "check", "confirm", "if", "cannot see"]
+      "unlessPattern": "\\b(verify|check|confirm)\\b|\\bcannot see\\b|\\bnot (visible|included|shown) (in|here)\\b|\\bif (the|they|these|those|it)\\b|\\bunable to (see|read|inspect)\\b"
     },
     {
       "name": "recommends a custom scheme as the primary fix",
       "pattern": "use\\s+a\\s+custom\\s+(url\\s+)?scheme",
-      "unless": ["fallback", "not", "avoid", "in addition"]
+      "unlessPattern": "\\b(fallback|in addition|as well as|secondary|alongside)\\b|\\b(do not|don't|avoid|not)\\s+\\w{0,15}\\s*(use\\s+)?a?\\s*custom\\s+(url\\s+)?scheme|\\buniversal links?\\b[^.;,]{0,40}\\b(first|primary|instead)\\b"
     },
     {
       "name": "invents a proportion of affected users",

@@ -1,49 +1,88 @@
 {
   "agent": "rn-state",
   "title": "One store holding server state, a token, derived state and no persistence version",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Six defects at genuinely different severities, testing whether the agent ranks by consequence rather than by how architecturally offensive each is. The authToken persisted to AsyncStorage is unencrypted credential storage — P0, and a security finding, not a state-architecture opinion. No version or migrate on persist means any shape change breaks existing users only, passing every fresh-install test. isAuthenticated is a boolean with no loading state, so a login screen flashes on every launch and deep links in that window are dropped. orders with ordersLoading/ordersError is server state hand-managed in a client store. cartTotal is derived state stored separately and will diverge. useApp() subscribes to the entire store and is used in 60+ components, so every change re-renders all of them. The failure mode being tested is leading with the server-state split — the most interesting architectural point — ahead of the plaintext token.",
-
   "expect": [
     {
       "name": "flags the auth token persisted to unencrypted storage",
-      "any": ["asyncstorage", "unencrypted", "keychain", "securestore", "plaintext", "not encrypted"]
+      "any": [
+        "asyncstorage",
+        "unencrypted",
+        "keychain",
+        "securestore",
+        "plaintext",
+        "not encrypted"
+      ]
     },
     {
       "name": "flags the missing persistence version and migration",
-      "any": ["version", "migrat", "existing users", "schema"]
+      "any": [
+        "version",
+        "migrat",
+        "existing users",
+        "schema"
+      ]
     },
     {
       "name": "identifies orders as server state in a client store",
-      "any": ["server state", "react query", "tanstack", "cache", "server-state"]
+      "any": [
+        "server state",
+        "react query",
+        "tanstack",
+        "cache",
+        "server-state"
+      ]
     },
     {
       "name": "flags cartTotal as derived state that will diverge",
-      "any": ["derived", "diverge", "two sources", "computed", "out of sync"]
+      "any": [
+        "derived",
+        "diverge",
+        "two sources",
+        "computed",
+        "out of sync"
+      ]
     },
     {
       "name": "flags the whole-store subscription across 60+ components",
-      "any": ["entire store", "whole store", "selector", "re-render", "subscribes to"]
+      "any": [
+        "entire store",
+        "whole store",
+        "selector",
+        "re-render",
+        "subscribes to"
+      ]
     },
     {
       "name": "raises the missing loading state on auth",
-      "any": ["loading", "third state", "hydrat", "flash", "restore"]
+      "any": [
+        "loading",
+        "third state",
+        "hydrat",
+        "flash",
+        "restore"
+      ]
     }
   ],
-
-  "expectSeverity": [{ "atLeast": "P0" }],
-
+  "expectSeverity": [
+    {
+      "atLeast": "P0"
+    }
+  ],
   "forbid": [
     {
       "name": "leads with the server-state split ahead of the plaintext token",
       "pattern": "^[\\s\\S]{0,400}(server state|tanstack|react query)",
-      "unless": ["token", "keychain", "asyncstorage", "credential"]
+      "unlessPattern": "\\btoken\\b|(?<![\\w-])keychain(?![\\w-])|(?<![\\w-])asyncstorage(?![\\w-])|credential\\w*"
     },
     {
       "name": "recommends migrating to Redux as the fix",
       "pattern": "(migrate|switch|move)\\s+to\\s+redux",
-      "unless": ["do not", "no reason", "not necessary", "would not"]
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?<![\\w-])no\\ reason(?![\\w-])|(?<![\\w-])not\\ necessary(?![\\w-])|(?<![\\w-])would\\ not(?![\\w-])"
     },
     {
       "name": "invents a re-render count",
@@ -51,8 +90,10 @@
     },
     {
       "name": "presents the server-state migration as free",
-      "all": ["tanstack"],
-      "unless": ["cost", "touches", "migration", "work", "effort", "every screen", "incremental"]
+      "all": [
+        "tanstack"
+      ],
+      "unlessPattern": "\\b(cost|effort|work|touches|every screen|incremental|not free|takes time|migration cost)\\b"
     }
   ]
 }

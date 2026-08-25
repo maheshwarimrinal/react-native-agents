@@ -1,35 +1,69 @@
 {
   "agent": "rn-dependencies",
   "title": "Deprecated storage package, 43 direct imports, and a proposed swap to a faster library",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Two decisions are tangled together and a good answer separates them. The deprecated community-scoped package genuinely must go — that part is forced. Whether the replacement is the maintained successor or MMKV is a separate, optional decision that should not be justified by 'faster' without a measurement. The critical omission being tested is data migration: 43 files hold auth tokens and preferences, so an unmigrated swap silently loses data for existing users while working perfectly on a fresh install. Also tests whether the agent recommends containing the API behind one module before swapping, and whether it invents a performance multiplier for MMKV.",
-
   "expect": [
     {
       "name": "separates the forced move off the deprecated package from the optional MMKV choice",
-      "any": ["two decisions", "separate", "deprecated", "forced", "different question"]
+      "any": [
+        "two decisions",
+        "separate",
+        "deprecated",
+        "forced",
+        "different question"
+      ]
     },
     {
       "name": "raises data migration for existing users",
-      "any": ["migrat", "existing users", "data loss", "lose data", "upgrade path"]
+      "any": [
+        "migrat",
+        "existing users",
+        "data loss",
+        "lose data",
+        "upgrade path"
+      ]
     },
     {
       "name": "recommends containing the API behind one module before swapping",
-      "any": ["wrap", "behind one", "single module", "contain", "abstraction", "one file"]
+      "any": [
+        "wrap",
+        "behind one",
+        "single module",
+        "contain",
+        "abstraction",
+        "one file"
+      ]
     },
     {
       "name": "notes the 43 direct imports as the real cost",
-      "any": ["43", "direct import", "surface", "touch", "refactor"]
+      "any": [
+        "43",
+        "direct import",
+        "surface",
+        "touch",
+        "refactor"
+      ]
     },
     {
       "name": "declines to assert a speed benefit without measurement",
-      "any": ["measure", "unmeasured", "benchmark your", "not measured", "depends on"]
+      "any": [
+        "measure",
+        "unmeasured",
+        "benchmark your",
+        "not measured",
+        "depends on"
+      ]
     }
   ],
-
-  "expectSeverity": [{ "atLeast": "P2" }],
-
+  "expectSeverity": [
+    {
+      "atLeast": "P2"
+    }
+  ],
   "forbid": [
     {
       "name": "quotes a fabricated performance multiplier",
@@ -38,17 +72,19 @@
     {
       "name": "invents a bundle size figure",
       "pattern": "\\b\\d+\\s?(kb|mb)\\b.*(smaller|larger|saves|adds)",
-      "unless": ["measure", "unmeasured", "example"]
+      "unlessPattern": "measur\\w+|unmeasured\\b|(?:for example|e\\.?g\\.?|such as|example)"
     },
     {
       "name": "recommends the swap without mentioning migration at all",
-      "all": ["mmkv"],
-      "unless": ["migrat", "existing", "data", "upgrade path"]
+      "all": [
+        "mmkv"
+      ],
+      "unlessPattern": "\\bmigrat\\w+\\b|\\bexisting data\\b|\\bupgrade path\\b|\\bdata already (stored|written|in)\\b"
     },
     {
       "name": "recommends storing auth tokens in plain key-value storage",
       "pattern": "(store|save|keep)\\s+(the\\s+)?(auth\\s+)?tokens?\\s+in\\s+(mmkv|asyncstorage)",
-      "unless": ["do not", "should not", "keychain", "secure", "encrypted"]
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?<![\\w-])should\\ not(?![\\w-])|(?<![\\w-])keychain(?![\\w-])|secure\\w*|encrypt\\w+"
     }
   ]
 }

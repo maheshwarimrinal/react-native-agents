@@ -1,49 +1,86 @@
 {
   "agent": "rn-push",
   "title": "Background handler registered inside a component, plus three chain breaks",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Four defects along the delivery chain, and the reported symptom ('works open, not closed') points straight at the first. (1) setBackgroundMessageHandler is inside a useEffect, so it does not exist when the app is killed — the exact case it is for. It must be at module scope in index.js. (2) api.post is not awaited and has no error handling, so a failed token write is invisible and that device silently never receives push. (3) No onTokenRefresh, so tokens rotate and delivery decays over time. (4) getInitialNotification is absent, so a tap on a killed app opens the home screen and loses the intent — and msg.data.deepLink is passed to navigate unvalidated. Also worth flagging: permission is requested on mount, which spends the one iOS prompt at the worst moment. Tests whether the agent walks the chain rather than reading the code top to bottom.",
-
   "expect": [
     {
       "name": "identifies that the background handler must be at module scope",
-      "any": ["module scope", "index.js", "outside the component", "top level", "outside any component"]
+      "any": [
+        "module scope",
+        "index.js",
+        "outside the component",
+        "top level",
+        "outside any component"
+      ]
     },
     {
       "name": "connects that directly to the reported symptom",
-      "any": ["killed", "closed", "not running", "terminated", "app is closed"]
+      "any": [
+        "killed",
+        "closed",
+        "not running",
+        "terminated",
+        "app is closed"
+      ]
     },
     {
       "name": "flags the unawaited token write as a silent failure",
-      "any": ["await", "not awaited", "error handling", "silently", "fails"]
+      "any": [
+        "await",
+        "not awaited",
+        "error handling",
+        "silently",
+        "fails"
+      ]
     },
     {
       "name": "flags missing token refresh handling",
-      "any": ["ontokenrefresh", "token refresh", "rotate", "refresh"]
+      "any": [
+        "ontokenrefresh",
+        "token refresh",
+        "rotate",
+        "refresh"
+      ]
     },
     {
       "name": "flags missing getInitialNotification for the cold-start tap",
-      "any": ["getinitialnotification", "cold start", "killed", "initial notification"]
+      "any": [
+        "getinitialnotification",
+        "cold start",
+        "killed",
+        "initial notification"
+      ]
     },
     {
       "name": "flags the unvalidated deep link from the payload",
-      "any": ["validat", "untrusted", "sanitis", "sanitiz", "arbitrary"]
+      "any": [
+        "validat",
+        "untrusted",
+        "sanitis",
+        "sanitiz",
+        "arbitrary"
+      ]
     }
   ],
-
-  "expectSeverity": [{ "atLeast": "P1" }],
-
+  "expectSeverity": [
+    {
+      "atLeast": "P1"
+    }
+  ],
   "forbid": [
     {
       "name": "claims a 200 from the send API proves delivery",
       "pattern": "(200|success(ful)?)\\s+response.{0,40}(means|proves|confirms).{0,20}deliver",
-      "unless": ["does not", "not", "only means accepted"]
+      "unlessPattern": "\\b(does not|doesn't|do not)\\s+(mean|prove|confirm|guarantee)\\b|\\bonly means (it was )?accepted\\b|\\bnot (proof|a guarantee) of\\b|\\baccepted, not delivered\\b"
     },
     {
       "name": "recommends requesting permission on first launch",
       "pattern": "request\\s+permission\\s+(on|at)\\s+(first\\s+launch|app\\s+start|mount)",
-      "unless": ["do not", "avoid", "instead", "worst"]
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|instead\\s+(?:of|,)|worst\\s+\\w+"
     },
     {
       "name": "invents a delivery rate figure",
@@ -52,7 +89,10 @@
     {
       "name": "asserts what the Firebase console shows without being told",
       "pattern": "(the|your)\\s+firebase\\s+console\\s+(shows|will show|says)",
-      "unless": ["check", "if", "would", "should"]
+      "unlessPattern": "\\b(check|inspect|open|look at)\\b[^.;,]{0,40}\\bconsole\\b|\\b(if|once) (the|your|it)\\b|\\b(would|should|may|might) show\\b"
     }
+  ],
+  "elidedHelpers": [
+    "handleData"
   ]
 }

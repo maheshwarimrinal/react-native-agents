@@ -33,3 +33,12 @@ jobs:
           api-key: ${{ secrets.OPENAI_API_KEY }}
           budget-usd: '1.50'
           fail-on: never
+
+          # The demo exists to show what routing selects. Changing the whole
+          # fixture routes nine specialists, so the default cap of 6 would drop
+          # three of them — and the run would look correct while demonstrating
+          # something other than what the README describes.
+          #
+          # A real repository should keep the default: it is a cost control, and
+          # a PR that genuinely spans nine areas is usually a PR to split up.
+          max-agents: '9'

@@ -1,40 +1,73 @@
 {
   "agent": "rn-performance",
   "title": "Unstable renderItem, index keys, per-row formatter, and JS-thread scroll handler",
-  "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "expo": "57",
+    "language": "TypeScript"
+  },
   "notes": "Four real defects stacked. The interesting failure mode is an agent that leads with 'switch to FlashList' instead of fixing the identity problems that would still be present after the switch.",
-
   "expect": [
     {
       "name": "identifies the unstable renderItem identity",
-      "any": ["renderitem", "inline arrow", "new function identity", "usecallback"]
+      "any": [
+        "renderitem",
+        "inline arrow",
+        "new function identity",
+        "usecallback"
+      ]
     },
     {
       "name": "identifies index-based keys",
-      "any": ["keyextractor", "index key", "index as", "item.id"]
+      "any": [
+        "keyextractor",
+        "index key",
+        "index as",
+        "item.id"
+      ]
     },
     {
       "name": "identifies the JS-thread scroll handler causing a render per frame",
-      "any": ["onscroll", "setscrolly", "state update per", "reanimated", "useanimatedscrollhandler"]
+      "any": [
+        "onscroll",
+        "setscrolly",
+        "state update per",
+        "reanimated",
+        "useanimatedscrollhandler"
+      ]
     },
     {
       "name": "notes expensive per-row work",
-      "any": ["intl", "numberformat", "formatter", "per render", "hoist"]
+      "any": [
+        "intl",
+        "numberformat",
+        "formatter",
+        "per render",
+        "hoist"
+      ]
     },
     {
       "name": "recommends measuring rather than asserting an outcome",
-      "any": ["profiler", "measure", "devtools", "release build", "verify"]
+      "any": [
+        "profiler",
+        "measure",
+        "devtools",
+        "release build",
+        "verify"
+      ]
     }
   ],
-
-  "expectSeverity": ["P1", "P2"],
-
+  "expectSeverity": [
+    "P1",
+    "P2"
+  ],
   "forbid": [
     {
       "name": "recommends FlashList as the primary fix without any measurement framing",
-      "all": ["flashlist"],
-      "unless": ["measure", "profil", "after", "once", "consider"]
+      "all": [
+        "flashlist"
+      ],
+      "unlessPattern": "\\b(measure|profil\\w*|benchmark)\\w*\\b|\\bafter (you|fixing|the)\\b|\\bonce (you|the)\\b|\\bonly (if|after|once)\\b|\\bconsider\\b[^.;,]{0,30}\\bflashlist"
     },
     {
       "name": "invents a quantitative impact it did not measure",
@@ -42,12 +75,18 @@
     },
     {
       "name": "suggests removeClippedSubviews without caveats",
-      "all": ["removeclippedsubviews"],
-      "unless": ["caution", "blank", "measure", "only if", "careful"]
+      "all": [
+        "removeclippedsubviews"
+      ],
+      "unlessPattern": "caution\\w*|\\bblank\\b|measur\\w+|(?<![\\w-])only\\ if(?![\\w-])|careful\\w*"
     },
     {
       "name": "gives stale pre-0.76 advice",
-      "any": ["ram bundle", "flipper", "messagequeue"]
+      "any": [
+        "ram bundle",
+        "flipper",
+        "messagequeue"
+      ]
     }
   ]
 }

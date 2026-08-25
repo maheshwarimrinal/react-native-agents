@@ -89,15 +89,53 @@ async function main() {
 
   const rnBehind = rnLatest ? isNewer(minorOf(rnLatest), rnKnown) : false;
   const expoBehind = expoLatest ? isNewer(minorOf(expoLatest).split('.')[0], expoKnown) : false;
+
+  /**
+   * Third-party libraries the agents quote concretely.
+   *
+   * The platform versions above were current the whole time the payments agent
+   * was documenting a react-native-iap API that had been *removed* — the
+   * library moves on its own schedule, so checking only React Native and Expo
+   * left the most version-brittle guidance in the collection unwatched.
+   */
+  const libs = Object.entries(KNOWLEDGE.libraries ?? {}).filter(([k]) => !k.startsWith('$'));
+  const libResults = await Promise.all(
+    libs.map(async ([key, meta]) => {
+      const latest = await latestOnNpm(meta.package ?? key);
+      const known = String(meta.verified_through);
+      return {
+        key,
+        package: meta.package ?? key,
+        latest,
+        known,
+        usedBy: meta.used_by ?? [],
+        behind: latest ? isNewer(minorOf(latest), known) : false,
+      };
+    }),
+  );
+  const libsBehind = libResults.filter((l) => l.behind);
+
   const tooOld = age > window;
-  const stale = rnBehind || expoBehind || tooOld;
+  const stale = rnBehind || expoBehind || libsBehind.length > 0 || tooOld;
 
   const affected = stale ? referencesMentioningVersions() : [];
 
   if (args.has('--json')) {
     console.log(
       JSON.stringify(
-        { rnLatest, rnKnown, rnBehind, expoLatest, expoKnown, expoBehind, age, tooOld, stale, affected },
+        {
+          rnLatest,
+          rnKnown,
+          rnBehind,
+          expoLatest,
+          expoKnown,
+          expoBehind,
+          libraries: libResults,
+          age,
+          tooOld,
+          stale,
+          affected,
+        },
         null,
         2,
       ),
@@ -108,6 +146,12 @@ async function main() {
   const lines = [];
   if (rnBehind) lines.push(`- **React Native ${minorOf(rnLatest)}** is out; knowledge is verified through **${rnKnown}**.`);
   if (expoBehind) lines.push(`- **Expo SDK ${minorOf(expoLatest).split('.')[0]}** is out; knowledge is verified through **${expoKnown}**.`);
+  for (const l of libsBehind) {
+    lines.push(
+      `- **${l.package} ${minorOf(l.latest)}** is out; knowledge is verified through **${l.known}**` +
+        (l.usedBy.length ? ` (quoted by ${l.usedBy.join(', ')}).` : '.'),
+    );
+  }
   if (tooOld) lines.push(`- Knowledge was last verified **${age} days** ago (review window is ${window} days).`);
 
   const body = [
@@ -138,7 +182,9 @@ async function main() {
     ? `Knowledge review: React Native ${minorOf(rnLatest)} released`
     : expoBehind
       ? `Knowledge review: Expo SDK ${minorOf(expoLatest).split('.')[0]} released`
-      : `Knowledge review: last verified ${age} days ago`;
+      : libsBehind.length
+        ? `Knowledge review: ${libsBehind[0].package} ${minorOf(libsBehind[0].latest)} released`
+        : `Knowledge review: last verified ${age} days ago`;
 
   if (args.has('--github-output') && process.env.GITHUB_OUTPUT) {
     const out = process.env.GITHUB_OUTPUT;
@@ -150,6 +196,12 @@ async function main() {
   console.log(c.bold('\n  Knowledge freshness\n'));
   console.log(`  React Native   verified ${rnKnown}   npm ${rnLatest ?? '?'}   ${rnBehind ? c.yellow('BEHIND') : c.green('ok')}`);
   console.log(`  Expo SDK       verified ${expoKnown}      npm ${expoLatest ?? '?'}   ${expoBehind ? c.yellow('BEHIND') : c.green('ok')}`);
+  for (const l of libResults) {
+    console.log(
+      `  ${l.package.padEnd(14)} verified ${String(l.known).padEnd(6)} npm ${String(l.latest ?? '?').padEnd(6)} ` +
+        (l.behind ? c.yellow('BEHIND') : c.green('ok')),
+    );
+  }
   console.log(`  Last verified  ${KNOWLEDGE.last_verified} (${age} days ago)   ${tooOld ? c.yellow('STALE') : c.green('ok')}`);
 
   if (stale) {

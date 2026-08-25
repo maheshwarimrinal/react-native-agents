@@ -1,0 +1,112 @@
+{
+  "agent": "rn-payments",
+  "title": "Entitlement decided on the device, no server validation, no restore",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Seven defects and the two reported symptoms both trace to the same root. (1) Entitlement is an AsyncStorage flag anyone can write — P0 revenue loss, trivially spoofed. (2) No server-side receipt validation at all; the purchase result is trusted. (3) Expiry computed as Date.now() + 30 days on the device, so changing the clock extends the subscription, and it does not reflect actual renewal. (4) No restore path — this is the reported 'lost premium after reinstalling', and it is also an Apple rejection. (5) finishTransaction is called before any backend has recorded the purchase, so a failure between them keeps the money and grants nothing. (6) No purchaseUpdatedListener at startup, so renewals and interrupted purchases are never seen. (7) Hardcoded $9.99 rather than product.localizedPrice — wrong in every other currency and a rejection cause. Tests whether the agent leads with the entitlement model rather than the visible reinstall bug.",
+  "expect": [
+    {
+      "name": "identifies that entitlement is decided on the device rather than server-verified",
+      "any": [
+        "server",
+        "asyncstorage",
+        "client",
+        "spoof",
+        "anyone can",
+        "trusted"
+      ]
+    },
+    {
+      "name": "flags the absence of server-side receipt validation",
+      "any": [
+        "receipt",
+        "validat",
+        "verify",
+        "backend",
+        "server-side"
+      ]
+    },
+    {
+      "name": "connects the missing restore path to the reported reinstall complaint",
+      "any": [
+        "restore",
+        "reinstall",
+        "new device",
+        "restorepurchases"
+      ]
+    },
+    {
+      "name": "flags device-time expiry as manipulable",
+      "any": [
+        "device time",
+        "date.now",
+        "clock",
+        "server time",
+        "change the date"
+      ]
+    },
+    {
+      "name": "flags finishTransaction happening before the backend records the purchase",
+      "any": [
+        "finishtransaction",
+        "acknowledg",
+        "before",
+        "ordering",
+        "records"
+      ]
+    },
+    {
+      "name": "flags the missing startup purchase listener",
+      "any": [
+        "listener",
+        "purchaseupdated",
+        "startup",
+        "renewal",
+        "outside"
+      ]
+    },
+    {
+      "name": "flags the hardcoded price",
+      "any": [
+        "hardcod",
+        "localizedprice",
+        "displayprice",
+        "currency",
+        "9.99"
+      ]
+    }
+  ],
+  "expectSeverity": [
+    {
+      "atLeast": "P0"
+    }
+  ],
+  "forbid": [
+    {
+      "name": "recommends validating the receipt on the device",
+      "pattern": "validat\\w*\\s+(the\\s+)?receipt\\s+(on|in)\\s+the\\s+(device|client|app)",
+      "unlessPattern": "\\b(do not|don't|never|must not|should not|cannot)\\s+\\w*\\s*validat|validat\\w*[^.;,]{0,50}\\b(is|are|remains?)\\s+(insufficient|inadequate|not sufficient|not enough|unsafe)|\\bon-?device validation\\b[^.;,]{0,40}\\b(is|remains?)\\s+(insufficient|inadequate|not enough|weaker)"
+    },
+    {
+      "name": "recommends encrypting the AsyncStorage flag as the fix",
+      "pattern": "(encrypt|secure|obfuscat)\\w*\\s+.{0,30}(flag|asyncstorage|ispremium)",
+      "unlessPattern": "\\b(is|are)\\s+(not|never)\\s+(the\\s+)?fix|\\b(does not|doesn't|will not|won't)\\s+(help|fix|solve|prevent)|\\b(still|remains?)\\s+(spoofable|forgeable|writable|insufficient|inadequate)|\\b(is|are)\\s+(insufficient|inadequate|not enough)"
+    },
+    {
+      "name": "treats the subscription as a boolean without mentioning lifecycle states",
+      "all": [
+        "subscription"
+      ],
+      "unlessPattern": "cancel\\w*|grace\\s*period|expir\\w+|refund\\w*|renew\\w*|\\bstate\\b"
+    },
+    {
+      "name": "invents a revenue figure",
+      "pattern": "\\b\\d+\\s?%\\s+of\\s+(revenue|users|subscriptions)"
+    }
+  ],
+  "elidedHelpers": [
+    "unlockPremiumFeatures"
+  ]
+}

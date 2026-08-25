@@ -9,6 +9,17 @@
  *   ANTHROPIC_API_KEY=... node evals/run.mjs
  *   node evals/run.mjs --agent rn-security --verbose
  *   node evals/run.mjs --case security/jwt-in-asyncstorage
+ *   node evals/run.mjs --resume                    # continue an interrupted run
+ *   node evals/run.mjs --min-pass-rate 0.4         # expect a weak local model
+ *
+ * Exit code: 0 only if none of these happened —
+ *   - an agent gave advice its case forbids
+ *   - a case errored
+ *   - a *clean* case failed (findings invented in correct code)
+ *   - fewer than --min-pass-rate of *dirty* cases fully passed (default 0.7)
+ *
+ * Under --resume, restored results count toward all of the above. They did not
+ * used to, so resuming a broadly-failing run reported success.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -81,6 +92,64 @@ export function loadCases(root = HERE) {
  * a suite that asserts exact wording fails constantly and gets switched off.
  * We check that the substance is present.
  */
+/**
+ * Split on clause boundaries, not just sentence enders.
+ *
+ * A qualifier after a comma or semicolon attaches to its own clause, not to the
+ * one before it — which is exactly the difference between "do not validate on
+ * the device" and "validate on the device, which is not hard".
+ */
+export function splitClauses(text) {
+  return text
+    .split(/(?<=[.!?;:,\n])\s+|\s+[—–]\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Concessive constructions, which void a keyword `unless` exception.
+ *
+ * These are the grammar of "I acknowledge the objection and am doing it
+ * anyway" — the shape of:
+ *
+ *   "Validate the receipt on the device even though it is insufficient,
+ *    and grant premium from that result anyway."
+ *
+ * which the clause rule excused because `insufficient` sat in the same clause.
+ * A closed list of markers is not more semantic guessing: these words have one
+ * job, and their presence means the qualifier is being conceded rather than
+ * applied. Anything subtler than this belongs in `unlessPattern`.
+ */
+export const CONCESSIVE_MARKERS = [
+  'even though',
+  'even so',
+  'even if',
+  'although',
+  'though',
+  'despite',
+  'in spite of',
+  'regardless',
+  'nonetheless',
+  'nevertheless',
+  'anyway',
+  'anyhow',
+  'all the same',
+  'still fine',
+  'but still',
+];
+
+/**
+ * Whole-term containment, so `not` does not match inside `notary`, `another`
+ * or `nothing`. Multi-word terms ("do not", "not the fix") work unchanged.
+ */
+export function containsWholeTerm(haystack, term) {
+  if (!term) return false;
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const left = /^[\w]/.test(term) ? '(?<![\\w-])' : '';
+  const right = /[\w]$/.test(term) ? '(?![\\w-])' : '';
+  return new RegExp(`${left}${escaped}${right}`, 'i').test(haystack);
+}
+
 export function scoreOutput(text, def) {
   const haystack = text.toLowerCase();
   const expected = [];
@@ -120,11 +189,85 @@ export function scoreOutput(text, def) {
       }
     }
 
-    // `unless` is the escape hatch: mentioning FlashList is fine if the answer
-    // also says "measure first". Without this the forbid rules are too blunt.
-    if (triggered && f.unless?.length) {
-      const excused = f.unless.some((t) => haystack.includes(String(t).toLowerCase()));
-      if (excused) triggered = false;
+    /**
+     * `unless` excuses a forbidden phrase only when the exception appears in
+     * the SAME CLAUSE as the evidence, as a whole word.
+     *
+     * This started as "anywhere in the response", which let a `not` three
+     * sentences away excuse forbidden advice. Narrowing it to the sentence was
+     * not enough — two bypasses survived, both verified against the scorer:
+     *
+     *   "Validate the receipt on the device, which is not hard to do."
+     *   "Validate the receipt on the device; this is not optional."
+     *
+     * Both give the forbidden advice and then *reinforce* it, and both were
+     * excused by the trailing `not`. Worse, substring matching meant `not`
+     * matched inside `notary`, `another` and `nothing`.
+     *
+     * Clause boundaries (`, ; : —` as well as `. ! ?`) are where a qualifier
+     * stops applying to what came before it. "Do not validate ..." keeps its
+     * negation in the same clause; "..., which is not hard" does not. That also
+     * preserves the legitimate trailing form, "Validating the receipt on the
+     * device is insufficient", which sits in one clause with its qualifier.
+     */
+    if (triggered && evidence && f.unlessPattern) {
+      const ev = String(evidence).toLowerCase();
+      const clauses = splitClauses(haystack);
+      const at = clauses.findIndex((part) => part.includes(ev));
+
+      /**
+       * The evidence clause, plus a comma-joined clause immediately before it.
+       *
+       * "Only after confirming the duplicate, remove node_modules" puts the
+       * qualifier in its own clause, and it plainly governs what follows —
+       * clause-only scoping flagged that legitimate answer.
+       *
+       * The comma is doing real work here and is not a softening of the rule.
+       * A preceding clause ending in a full stop is a *different sentence*:
+       * allowing that back would reopen the very first bypass, where
+       * "Do not hardcode prices. Validate the receipt on the device." was
+       * excused by a negation about something else entirely.
+       */
+      const prev = at > 0 ? clauses[at - 1] : '';
+      const clause =
+        at === -1 ? '' : /,$/.test(prev) ? `${prev} ${clauses[at]}` : clauses[at];
+
+      /**
+       * A conceded qualifier is not an applied one, whichever mechanism found
+       * it. "Even though it is insufficient, do it anyway" acknowledges the
+       * objection and proceeds — it is the *opposite* of an exception.
+       *
+       * Checked before either matcher rather than inside the keyword branch,
+       * because an explicit `unlessPattern` is only as careful as the regex
+       * someone wrote. While testing this I wrote a plausible-looking pattern
+       * that matched the concessive sentence, which is exactly the mistake a
+       * rule author will make.
+       */
+      /**
+       * Whole-word, for the same reason `not` must not match inside `notary`:
+       * `clause.includes('though')` fires on "thoughtful", so
+       * "After a thoughtful review, do not validate on the device" had its
+       * perfectly correct exception voided. The concessive check errs toward
+       * reporting a violation, so a false positive here is a *wrong failure* —
+       * the kind that teaches people to ignore the suite.
+       */
+      const conceded = CONCESSIVE_MARKERS.some((m) => containsWholeTerm(clause, m));
+
+      /**
+       * `unlessPattern` is now the only mechanism.
+       *
+       * The keyword form asked "does a word suggesting negation appear
+       * nearby?", which is a semantic question keywords cannot answer. Three
+       * narrowings — whole response, sentence, clause — each left a new bypass,
+       * and the last needed only a legitimate word in an unrelated role:
+       *
+       *   "Use useRef as the fix for the derived state and store its id there."
+       *
+       * excused by `id`. All 98 rules now state their exceptions outright, so
+       * the branch is gone rather than deprecated: a code path nothing uses is
+       * how the old behaviour comes back.
+       */
+      triggered = conceded || !new RegExp(f.unlessPattern, 'i').test(clause);
     }
 
     forbidden.push({ name: f.name, violated: triggered, evidence });
@@ -153,6 +296,49 @@ export function scoreOutput(text, def) {
  * that misses some, because every false positive costs a human the time to
  * dismiss it and erodes trust in the real findings.
  */
+/** The default share of dirty cases that must fully pass for the suite to pass. */
+export const DEFAULT_MIN_PASS_RATE = 0.7;
+
+/**
+ * Decide whether a suite run failed, and say why.
+ *
+ * Pure and exported so the gate itself can be tested. It previously lived
+ * inline in `main()`, which is part of why two holes sat in it unnoticed: a
+ * decision nothing can call is a decision nothing can check.
+ *
+ * @param {Array} all  every case in the run — restored *and* freshly executed
+ * @param {number} minPassRate
+ * @returns {{ reasons: string[], dirtyRate: number, totalMatched: number, totalExpected: number }}
+ */
+export function gateReasons(all, minPassRate = DEFAULT_MIN_PASS_RATE) {
+  const isClean = (r) => r.tc?.def?.expectMaxFindings !== undefined;
+  const dirty = all.filter((r) => !isClean(r));
+  const dirtyFailed = dirty.filter((r) => !r.pass);
+
+  const violated = all.filter((r) => r.score?.violations?.length).length;
+  const errored = all.filter((r) => r.error).length;
+  const cleanFailures = all.filter((r) => isClean(r) && !r.pass).length;
+  const noneMatched = all.length > 0 && all.every((r) => (r.score?.expectPassed ?? 0) === 0);
+
+  const dirtyRate = dirty.length ? (dirty.length - dirtyFailed.length) / dirty.length : 1;
+  const totalExpected = dirty.reduce((n, r) => n + (r.score?.expectTotal ?? 0), 0);
+  const totalMatched = dirty.reduce((n, r) => n + (r.score?.expectPassed ?? 0), 0);
+
+  const reasons = [];
+  if (violated) reasons.push(`${violated} forbidden-advice violation(s)`);
+  if (errored) reasons.push(`${errored} case(s) errored`);
+  if (cleanFailures) reasons.push(`${cleanFailures} clean case(s) failed`);
+  if (noneMatched) reasons.push('no case matched any expectation — likely a provider failure');
+  if (dirty.length && dirtyRate < minPassRate) {
+    reasons.push(
+      `only ${(dirtyRate * 100) | 0}% of dirty cases passed (floor ${(minPassRate * 100) | 0}%) — ` +
+        `raise with --min-pass-rate if this model is expected to be weak`,
+    );
+  }
+
+  return { reasons, dirtyRate, totalMatched, totalExpected, dirtyCount: dirty.length };
+}
+
 export function checkMaxFindings(findings, def) {
   if (def.expectMaxFindings === undefined) return { ok: true, note: 'no cap' };
   const ok = findings.length <= def.expectMaxFindings;
@@ -182,6 +368,50 @@ const rank = (s) => {
  * the message rendered as "expected one of [object Object]" — which is the only
  * reason it was ever noticed.
  */
+/**
+ * Identifiers a fixture calls but never defines or imports.
+ *
+ * Heuristic by necessity — this package has no dependencies, so there is no
+ * parser. It is tuned to have no false positives on the current suite rather
+ * than to be exhaustive: keywords, destructuring, object shorthand and callback
+ * parameters are all accounted for.
+ */
+const JS_GLOBALS = new Set([
+  'console','setTimeout','clearTimeout','setInterval','clearInterval','fetch','Promise','JSON',
+  'Object','Array','String','Number','Boolean','Date','Math','Error','RegExp','Map','Set','Symbol',
+  'require','process','parseInt','parseFloat','isNaN','encodeURIComponent','decodeURIComponent',
+  'Buffer','structuredClone','queueMicrotask','AbortController','URL','TextEncoder','alert',
+  'useState','useEffect','useCallback','useMemo','useRef','useLayoutEffect','useContext','useReducer',
+  'describe','it','test','expect','beforeEach','afterEach','beforeAll','afterAll','jest',
+  'async','else','do','try','finally','yield','delete','void','in','of','if','for','while',
+  'switch','catch','return','function','typeof','await','new','super','import',
+]);
+
+export function undefinedCalls(src, inputName = '') {
+  if (!/\.(ts|tsx|js|jsx)$/.test(inputName)) return [];
+
+  const known = new Set(JS_GLOBALS);
+  const add = (n) => { if (/^[\w$]+$/.test(n)) known.add(n); };
+
+  for (const m of src.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s+from/g))
+    for (const part of m[1].split(',')) add(part.trim().split(/\s+as\s+/).pop().replace(/^type\s+/, '').trim());
+  for (const m of src.matchAll(/import\s+(?:type\s+)?([\w$]+)\s*(?:,|from)/g)) add(m[1]);
+  for (const m of src.matchAll(/(?:function|class)\s+([\w$]+)/g)) add(m[1]);
+  for (const m of src.matchAll(/(?:const|let|var)\s+([\w$]+)\s*[=:]/g)) add(m[1]);
+  for (const m of src.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g))
+    for (const part of m[1].split(',')) add(part.trim().split(':').pop().trim());
+  for (const m of src.matchAll(/(?:const|let|var)\s*\[([^\]]*)\]\s*=/g))
+    for (const part of m[1].split(',')) add(part.trim());
+  for (const m of src.matchAll(/([\w$]+)\s*[(:]\s*(?:async\s*)?\(?[^)]*\)?\s*(?:=>|\{)/g)) add(m[1]);
+  for (const m of src.matchAll(/\(([^)]*)\)\s*(?:=>|\{)/g))
+    for (const part of m[1].split(',')) add(part.trim().split(':')[0].replace(/[{}[\].]/g, '').trim());
+
+  const missing = new Set();
+  for (const m of src.matchAll(/(^|[^.\w$])\b([a-z_$][\w$]*)\s*\(/gm))
+    if (!known.has(m[2])) missing.add(m[2]);
+  return [...missing];
+}
+
 export function checkSeverity(findings, def) {
   if (!def.expectSeverity?.length) return { ok: true, note: 'no severity expectation' };
   if (!findings.length) return { ok: false, note: 'no structured findings emitted' };
@@ -223,6 +453,19 @@ function validate(cases, agents) {
     }
     if (!tc.input.trim()) problems.push(`${id}: empty input fixture`);
 
+    // A fixture that calls an identifier it never defines or imports is
+    // usually an editing accident, not a deliberate excerpt — the clean
+    // payments fixture shipped calling handlePurchase(), which did not exist,
+    // and structural validation passed it. Deliberate elisions must be named
+    // in `elidedHelpers` so an accident stands out from a choice.
+    for (const name of undefinedCalls(tc.input, tc.inputName)) {
+      if ((def.elidedHelpers ?? []).includes(name)) continue;
+      problems.push(
+        `${id}: fixture calls "${name}" which is never defined or imported — ` +
+          `fix it, or add it to "elidedHelpers" if the omission is deliberate`,
+      );
+    }
+
     /**
      * An expectation that cannot match is worse than no expectation: it reports
      * a failure the model has no way to avoid. Twelve cases shipped with
@@ -258,11 +501,43 @@ function validate(cases, agents) {
           problems.push(`${id}: forbid "${f.name}" has an invalid regex — ${err.message}`);
         }
       }
+      if (f.unlessPattern) {
+        try {
+          new RegExp(f.unlessPattern, 'i');
+        } catch (err) {
+          problems.push(
+            `${id}: forbid "${f.name}" has an invalid unlessPattern — ${err.message}`,
+          );
+        }
+      }
+      /**
+       * `unless` is gone, and reintroducing it is an error.
+       *
+       * It asked "does a negation-ish word appear nearby?", which keywords
+       * cannot answer. Four bypasses were reported against it, each after a
+       * narrowing — whole response, then sentence, then clause — and the last
+       * one only needed a legitimate word in an unrelated role:
+       *
+       *   "Use useRef as the fix for the derived state and store its id there."
+       *
+       * excused by `id`. All 98 rules now state their exceptions explicitly, so
+       * this is a ratchet rather than a warning: there is nothing left to
+       * grandfather.
+       */
+      if (f.unless !== undefined) {
+        problems.push(
+          `${id}: forbid "${f.name}" uses "unless", which is no longer supported — ` +
+            'state the permitted phrasings in "unlessPattern" instead. ' +
+            'A bare keyword excuses any clause the word happens to appear in.',
+        );
+      }
     }
   }
 
   return problems;
 }
+
+
 
 /* ------------------------------------------------------------------ *
  * Main
@@ -299,13 +574,23 @@ async function main() {
         `    ${c.cyan(tc.id.padEnd(46))} ${(tc.def.expect ?? []).length} expect · ${(tc.def.forbid ?? []).length} forbid${kind}`,
       );
     }
-    console.log();
     return;
   }
 
   // ---- Real run ----------------------------------------------------------
   const provider = args.provider ?? 'anthropic';
-  const apiKey = args['api-key'] ?? process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY ?? '';
+  if (!['anthropic', 'openai', 'mock'].includes(provider)) {
+    console.error(
+      c.red(`\n  Unknown provider "${provider}". Expected: anthropic, openai, or mock.\n`),
+    );
+    process.exit(1);
+  }
+  // Pick the key that belongs to the chosen provider. Preferring ANTHROPIC_API_KEY
+  // unconditionally sent an Anthropic key to OpenAI whenever both were set — an
+  // auth error that reads like a bad key rather than a wiring bug.
+  const providerKey =
+    provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
+  const apiKey = args['api-key'] ?? providerKey ?? '';
   const model = args.model ?? (provider === 'openai' ? 'gpt-5' : 'claude-sonnet-5');
 
   // A local runtime (Ollama, LM Studio) needs no key. Only demand one when
@@ -314,7 +599,11 @@ async function main() {
     provider !== 'mock' && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(args['base-url'] ?? process.env.OPENAI_BASE_URL ?? '');
   if (needsKey && !apiKey) {
     console.error(
-      c.red('\n  No API key. Set ANTHROPIC_API_KEY, or run with --validate for structural checks only.\n'),
+      c.red(
+        `\n  No API key for provider "${provider}". Set ` +
+          `${provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY'}, pass --api-key, ` +
+          `or run with --validate for structural checks only.\n`,
+      ),
     );
     process.exit(1);
   }
@@ -445,11 +734,42 @@ async function main() {
   }
 
   // ---- Report -------------------------------------------------------------
-  const passed = results.filter((r) => r.pass).length;
-  const violated = results.filter((r) => r.score?.violations.length).length;
+
+  /**
+   * Every case in this suite run, restored and fresh together.
+   *
+   * `results` holds only cases run in *this* invocation. Under `--resume` the
+   * restored rows were written back to results.json but never considered again,
+   * so the summary and the exit code both judged whatever happened to be left
+   * over. Resuming a run with forty failures and one new passing case reported
+   * one of one passing, and exited 0.
+   *
+   * Restored rows are already flat, so they are lifted into the same shape the
+   * reporting below expects rather than being special-cased at each use.
+   */
+  const restored = previous.map((row) => ({
+    tc: { id: row.id, def: { agent: row.agent, ...(row.clean ? { expectMaxFindings: 0 } : {}) } },
+    pass: row.pass,
+    score: {
+      expectPassed: row.expectPassed ?? 0,
+      expectTotal: row.expectTotal ?? 0,
+      violations: (row.violations ?? []).map((name) => ({ name })),
+    },
+    sev: { ok: row.severity },
+    cap: { ok: row.noise },
+    error: row.error,
+    restored: true,
+  }));
+  const all = [...restored, ...results];
+
+  const passed = all.filter((r) => r.pass).length;
+  const violated = all.filter((r) => r.score?.violations.length).length;
 
   console.log(c.bold('\n  Summary\n'));
-  console.log(`  ${passed}/${results.length} passed`);
+  console.log(
+    `  ${passed}/${all.length} passed` +
+      (restored.length ? c.dim(`  (${restored.length} restored, ${results.length} run now)`) : ''),
+  );
   if (violated) console.log(c.red(`  ${violated} case(s) produced forbidden advice — these matter most`));
   console.log(c.dim(`  ~$${llm.spentUsd.toFixed(3)} spent`));
 
@@ -462,15 +782,16 @@ async function main() {
    * correct code, and no amount of model capability makes that acceptable.
    * Same for a forbidden-advice violation.
    */
-  const cleanResults = results.filter((r) => r.tc.def.expectMaxFindings !== undefined);
+  const cleanResults = all.filter((r) => r.tc.def.expectMaxFindings !== undefined);
   const cleanFailed = cleanResults.filter((r) => !r.pass);
-  const dirtyFailed = results.filter((r) => r.tc.def.expectMaxFindings === undefined && !r.pass);
+  const dirtyResults = all.filter((r) => r.tc.def.expectMaxFindings === undefined);
+  const dirtyFailed = dirtyResults.filter((r) => !r.pass);
 
   console.log(c.bold('\n  Read this first — failures that mean something\n'));
 
   if (violated) {
     console.log(c.red(`  ${violated} forbidden-advice violation(s)`));
-    for (const r of results.filter((x) => x.score?.violations.length)) {
+    for (const r of all.filter((x) => x.score?.violations.length)) {
       for (const v of r.score.violations) console.log(c.red(`    ${r.tc.id} — ${v.name}`));
     }
   }
@@ -486,29 +807,90 @@ async function main() {
 
   if (dirtyFailed.length) {
     console.log(
-      c.yellow(`\n  ${dirtyFailed.length} case(s) missed expected findings`) +
+      c.yellow(`\n  ${dirtyFailed.length}/${dirtyResults.length} case(s) missed expected findings`) +
         c.dim(' — ambiguous on a small model; check whether the finding is genuinely absent'),
     );
-    for (const r of dirtyFailed) {
-      console.log(c.dim(`    ${r.tc.id}  ${r.score?.expectPassed ?? 0}/${r.score?.expectTotal ?? 0}`));
+    // Sorted worst-first: a case matching 1 of 8 is a different problem from one
+    // matching 7 of 8, and the flat list gave no way to tell them apart.
+    for (const r of [...dirtyFailed].sort(
+      (a, b) => (a.score?.expectPassed ?? 0) / Math.max(1, a.score?.expectTotal ?? 1)
+        - (b.score?.expectPassed ?? 0) / Math.max(1, b.score?.expectTotal ?? 1),
+    )) {
+      const got = r.score?.expectPassed ?? 0;
+      const want = r.score?.expectTotal ?? 0;
+      const line = `    ${r.tc.id}  ${got}/${want}`;
+      // Missing most of what was expected is a signal, not noise.
+      console.log(want && got / want < 0.5 ? c.yellow(line) : c.dim(line));
     }
   }
 
   console.log(c.dim(`\n  Results: evals/results.json  ·  re-run with --resume to continue\n`));
 
   if (args.json) {
-    fs.writeFileSync(
-      path.join(HERE, 'results.json'),
-      JSON.stringify(
-        results.map((r) => ({ id: r.tc.id, pass: r.pass, score: r.score, sev: r.sev, error: r.error })),
-        null,
-        2,
-      ),
-    );
+    /**
+     * One writer, not two.
+     *
+     * This used to serialise `results` itself, which was wrong twice over.
+     * It dropped every restored row under `--resume`, and it emitted a
+     * *different shape* — `{id, pass, score, sev, error}` against the
+     * `{id, agent, clean, expectPassed, …}` that `persist()` writes and that
+     * `--resume` and `evals/watch.mjs` both read back. So `--json` silently
+     * corrupted its own resume file: cases lost their `clean` flag and were
+     * all restored as dirty with a zero score.
+     *
+     * `persist()` already merges restored and fresh rows in the canonical
+     * shape, and runs incrementally during the loop. Calling it here just
+     * guarantees a final write.
+     */
+    persist();
     console.log(c.dim('  Wrote evals/results.json\n'));
   }
 
-  process.exit(violated > 0 ? 1 : 0);
+  /**
+   * The gate.
+   *
+   * Two holes were here. It exited 0 unless a forbidden-advice violation
+   * occurred — so a run where every call errored, or every clean case failed,
+   * reported success. Those were closed. The remaining one: *dirty* failures
+   * never reached this at all. `noneMatched` required every case in the suite
+   * to score zero, so a single expectation matching anywhere kept the exit code
+   * green while forty-eight cases missed most of what they were written to
+   * catch.
+   *
+   * Dirty failures cannot simply be fatal, though: they are genuinely ambiguous
+   * on a weak model, and a suite that always fails is one nobody runs. So they
+   * gate on a *rate* — explicit, printed, and tunable with --min-pass-rate —
+   * rather than being either ignored or absolute.
+   */
+  const MIN_PASS_RATE =
+    args['min-pass-rate'] !== undefined ? Number(args['min-pass-rate']) : DEFAULT_MIN_PASS_RATE;
+  if (!Number.isFinite(MIN_PASS_RATE) || MIN_PASS_RATE < 0 || MIN_PASS_RATE > 1) {
+    console.log(c.red(`\n  Invalid --min-pass-rate "${args['min-pass-rate']}". Expected 0 to 1.\n`));
+    process.exit(1);
+  }
+
+  const { reasons, dirtyRate, totalMatched, totalExpected, dirtyCount } = gateReasons(
+    all,
+    MIN_PASS_RATE,
+  );
+
+  if (dirtyCount) {
+    // Expectations matched is what distinguishes a case that found 7 of 8 from
+    // one that found 1 of 8 — both are a single failure in the rate above.
+    console.log(
+      c.dim(
+        `  Dirty cases: ${(dirtyRate * 100) | 0}% fully passed, ` +
+          `${totalMatched}/${totalExpected} expectations matched ` +
+          `(floor ${(MIN_PASS_RATE * 100) | 0}%)\n`,
+      ),
+    );
+  }
+
+  if (reasons.length) {
+    console.log(c.red(`  Failing: ${reasons.join('; ')}\n`));
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

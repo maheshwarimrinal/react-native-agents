@@ -1,51 +1,108 @@
 {
   "agent": "rn-security",
   "title": "Live Stripe secret inlined via EXPO_PUBLIC_, tokens in AsyncStorage, PII logging, incomplete logout",
-  "context": { "reactNative": "0.87", "expo": "57", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "expo": "57",
+    "language": "TypeScript"
+  },
   "notes": "The P0 is the Stripe secret key reaching the client at all. EXPO_PUBLIC_* is inlined into the JS bundle verbatim, so the key is extractable from any shipped build with `strings` — and the client calls the Stripe API directly with it, giving any attacker refund and charge capability. Developers widely believe env vars are private, so an agent that treats this as merely 'a config smell' has missed the point. The fixture deliberately contains no key-shaped literal (it would trip secret scanners on a public repo); the agent must reason about the mechanism, not pattern-match on `sk_live`.",
-
   "expect": [
     {
       "name": "identifies that the Stripe secret reaches the client bundle",
-      "any": ["stripe", "secret key", "expo_public", "bundle", "inlined", "client"]
+      "any": [
+        "stripe",
+        "secret key",
+        "expo_public",
+        "bundle",
+        "inlined",
+        "client"
+      ]
     },
     {
       "name": "explains that EXPO_PUBLIC_ / build-time env vars are not secret",
-      "any": ["not secret", "not private", "inlined", "plaintext", "extractab", "strings", "public"]
+      "any": [
+        "not secret",
+        "not private",
+        "inlined",
+        "plaintext",
+        "extractab",
+        "strings",
+        "public"
+      ]
     },
     {
       "name": "states the key must be rotated, not merely removed from source",
-      "any": ["rotate", "revoke", "already compromised", "regenerate", "already shipped"]
+      "any": [
+        "rotate",
+        "revoke",
+        "already compromised",
+        "regenerate",
+        "already shipped"
+      ]
     },
     {
       "name": "recommends proxying the Stripe call through a backend",
-      "any": ["backend", "server", "proxy", "never leave", "server-side"]
+      "any": [
+        "backend",
+        "server",
+        "proxy",
+        "never leave",
+        "server-side"
+      ]
     },
     {
       "name": "flags tokens in unencrypted AsyncStorage",
-      "any": ["asyncstorage", "unencrypted", "not encrypted", "plaintext"]
+      "any": [
+        "asyncstorage",
+        "unencrypted",
+        "not encrypted",
+        "plaintext"
+      ]
     },
     {
       "name": "recommends Keychain / Keystore / SecureStore for tokens",
-      "any": ["keychain", "keystore", "securestore", "expo-secure-store", "encryptedsharedpreferences"]
+      "any": [
+        "keychain",
+        "keystore",
+        "securestore",
+        "expo-secure-store",
+        "encryptedsharedpreferences"
+      ]
     },
     {
       "name": "flags the access token and PII being logged",
-      "any": ["console.log", "logging", "logcat", "log"]
+      "any": [
+        "console.log",
+        "logging",
+        "logcat",
+        "log"
+      ]
     },
     {
       "name": "notes logout leaves the refresh token and user data behind",
-      "any": ["logout", "refresh_token", "still", "clear", "revoke"]
+      "any": [
+        "logout",
+        "refresh_token",
+        "still",
+        "clear",
+        "revoke"
+      ]
     },
     {
       "name": "notes client-side role checks are not authorisation",
-      "any": ["server", "client-side", "isadmin", "authoris", "authoriz"]
+      "any": [
+        "server",
+        "client-side",
+        "isadmin",
+        "authoris",
+        "authoriz"
+      ]
     }
   ],
-
-  "expectSeverity": ["P0"],
-
+  "expectSeverity": [
+    "P0"
+  ],
   "forbid": [
     {
       "name": "claims AsyncStorage is encrypted or otherwise safe",
@@ -57,8 +114,10 @@
     },
     {
       "name": "suggests obfuscation as the fix for a shipped secret",
-      "all": ["obfuscat"],
-      "unless": ["not a", "does not", "insufficient", "only raises", "defence in depth", "defense in depth", "not a substitute"]
+      "all": [
+        "obfuscat"
+      ],
+      "unlessPattern": "\\b(is|are)\\s+not\\s+a\\s+(fix|solution|substitute|defence|defense)|\\b(does not|doesn't|will not|won't)\\s+(fix|solve|prevent|stop|help)|\\b(only raises|merely raises|raises the bar)|\\bdefen[cs]e in depth\\b|\\b(is|are)\\s+(insufficient|inadequate|not enough)"
     },
     {
       "name": "suggests moving the key to a non-EXPO_PUBLIC var as a sufficient fix",

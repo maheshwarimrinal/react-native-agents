@@ -1,55 +1,92 @@
 {
   "agent": "rn-debug",
   "title": "Blank screen in the Android release build only, no crash, nothing reported",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "The bisect is already almost done and the agent should notice: it works in debug on Android and in release on iOS, so the variable is Android + release specifically, which points at R8/ProGuard or a __DEV__ branch rather than at anything in the React tree. 'Nothing in Crashlytics' should be read as unreliable evidence rather than as proof of no error — an unverified crash reporter is the classic case of an empty dashboard meaning broken telemetry. Correct next steps are adb logcat against the release build and a temporary R8-off build to isolate. The failure mode being tested is proposing a list of generic React fixes without using the platform/build-type evidence already given.",
-
   "expect": [
     {
       "name": "uses the platform-and-build-type intersection to narrow the cause",
-      "any": ["android", "release", "only", "narrow", "intersection", "both"]
+      "any": [
+        "android",
+        "release",
+        "only",
+        "narrow",
+        "intersection",
+        "both"
+      ]
     },
     {
       "name": "names R8 or ProGuard as a leading suspect",
-      "any": ["r8", "proguard", "minif", "keep rule", "obfuscat"]
+      "any": [
+        "r8",
+        "proguard",
+        "minif",
+        "keep rule",
+        "obfuscat"
+      ]
     },
     {
       "name": "proposes logcat against the release build to get real evidence",
-      "any": ["logcat", "adb"]
+      "any": [
+        "logcat",
+        "adb"
+      ]
     },
     {
       "name": "proposes disabling R8 temporarily as an isolation test rather than a fix",
-      "any": ["temporar", "isolate", "diagnostic", "not a fix", "to test"]
+      "any": [
+        "temporar",
+        "isolate",
+        "diagnostic",
+        "not a fix",
+        "to test"
+      ]
     },
     {
       "name": "treats the empty crash dashboard as unverified rather than as evidence of no error",
-      "any": ["verify", "may not be working", "unreliable", "silently", "test crash", "symbolicat"]
+      "any": [
+        "verify",
+        "may not be working",
+        "unreliable",
+        "silently",
+        "test crash",
+        "symbolicat"
+      ]
     }
   ],
-
-  "expectSeverity": [{ "atLeast": "P1" }],
-
+  "expectSeverity": [
+    {
+      "atLeast": "P1"
+    }
+  ],
   "forbid": [
     {
       "name": "recommends clearing caches or reinstalling, which was already tried",
       "pattern": "(clear|reset|wipe)\\s+(the\\s+)?(cache|app data)|reinstall",
-      "unless": ["already", "you have", "tried", "not the"]
+      "unlessPattern": "already\\s+(?:tried|done|ruled out|attempted|handled|covered|been)|(?<![\\w-])you\\ have(?![\\w-])|(?:already\\s+)?tried\\b|(?<![\\w-])not\\ the(?![\\w-])"
     },
     {
       "name": "proposes generic React render fixes despite the platform evidence",
-      "any": ["check your keys", "add a loading state", "missing return", "check the array is not empty"],
-      "unless": ["unlikely", "would not explain", "does not fit"]
+      "any": [
+        "check your keys",
+        "add a loading state",
+        "missing return",
+        "check the array is not empty"
+      ],
+      "unlessPattern": "unlikely\\s+(?:to|that)|(?<![\\w-])would\\ not\\ explain(?![\\w-])|(?<![\\w-])does\\ not\\ fit(?![\\w-])"
     },
     {
       "name": "asserts no error occurred because the crash reporter is empty",
       "pattern": "(no|nothing)\\s+(error|crash)\\s+(occurred|is happening)",
-      "unless": ["cannot conclude", "may not", "unverified", "unless"]
+      "unlessPattern": "(?<![\\w-])cannot\\ conclude(?![\\w-])|(?<![\\w-])may\\ not(?![\\w-])|unverified\\b|\\bunless\\b"
     },
     {
       "name": "recommends shipping with R8 disabled",
       "pattern": "(disable|turn off)\\s+r8",
-      "unless": ["temporar", "diagnostic", "isolate", "not ship", "never ship", "to test"]
+      "unlessPattern": "temporar\\w+|diagnostic\\w*|isolat\\w+|(?<![\\w-])not\\ ship(?![\\w-])|(?<![\\w-])never\\ ship(?![\\w-])|(?<![\\w-])to\\ test(?![\\w-])"
     }
   ]
 }

@@ -7,14 +7,54 @@
  */
 
 /** Approximate USD per million tokens. Used for budgeting, not billing. */
+/**
+ * Approximate USD per million tokens, for **estimating** spend.
+ *
+ * This is not a cap and must not be described as one. Prices change, token
+ * counts are estimated before the call, and a model absent from this table is
+ * priced by the fallback below. The gpt-5-mini output price was previously
+ * listed at 1.6 against an actual 2.0, so a budget presented as a guarantee
+ * could be exceeded by a quarter without anything noticing.
+ *
+ * Verified against provider pricing pages on 2026-08-24; re-check when adding a
+ * model. Over-stating a price is not the safe direction it looks like: it ends
+ * runs early and reports spend that never happened.
+ */
 export const PRICING = {
-  'claude-sonnet-5': { in: 3, out: 15 },
-  'claude-opus-5': { in: 15, out: 75 },
+  // Anthropic. Sonnet 5's $2/$10 was introductory pricing through 2026-08-31;
+  // Anthropic has since made it the standard price, and the scheduled rise to
+  // $3/$15 was cancelled. Opus 5 is $5/$25 — the $15/$75 previously here is
+  // Opus 4.1/4 pricing, which is three times too high and exhausted budgets
+  // that had plenty left.
+  'claude-fable-5': { in: 10, out: 50 },
+  'claude-opus-5': { in: 5, out: 25 },
+  'claude-sonnet-5': { in: 2, out: 10 },
   'claude-haiku-4-5-20251001': { in: 1, out: 5 },
-  'gpt-5': { in: 2.5, out: 10 },
-  'gpt-5-mini': { in: 0.4, out: 1.6 },
-  default: { in: 3, out: 15 },
+  // OpenAI.
+  'gpt-5': { in: 1.25, out: 10 },
+  'gpt-5-mini': { in: 0.25, out: 2 },
 };
+
+/**
+ * Price for a model this table has never heard of.
+ *
+ * Deliberately the *dearest* known rate, not the average. Under-estimating an
+ * unknown model overspends silently; over-estimating stops the run early and
+ * says why, which is the failure you can see.
+ *
+ * Derived from the table rather than written down, so correcting a price above
+ * cannot leave a stale literal here — which is exactly how `default` ended up
+ * at retired Opus 4.1 pricing while every real model had moved.
+ */
+PRICING.default = {
+  in: Math.max(...Object.values(PRICING).map((p) => p.in)),
+  out: Math.max(...Object.values(PRICING).map((p) => p.out)),
+};
+
+/** Models whose price is known rather than assumed. */
+export const PRICED_MODELS = new Set(
+  Object.keys(PRICING).filter((k) => k !== 'default'),
+);
 
 /**
  * Rough token estimate. Deliberately conservative — it exists to stop a
@@ -45,7 +85,8 @@ export class LLM {
    * @param {'anthropic'|'openai'|'mock'} opts.provider
    * @param {string} opts.apiKey
    * @param {string} opts.model
-   * @param {number} [opts.budgetUsd]  hard cap across all calls in this run
+   * @param {number} [opts.budgetUsd]  estimated preflight budget across all
+   *   calls in this run; checked before each call, not enforced during one
    * @param {number} [opts.maxOutputTokens]
    * @param {(msg:string)=>void} [opts.log]
    */
@@ -58,6 +99,15 @@ export class LLM {
     baseUrl,
     log = () => {},
   }) {
+    // A typo like 'opneai' previously selected the Anthropic key and the Claude
+    // default model, then went down the OpenAI request path — surfacing as an
+    // auth or model error that hides the actual mistake.
+    const KNOWN_PROVIDERS = ['anthropic', 'openai', 'mock'];
+    if (!KNOWN_PROVIDERS.includes(provider)) {
+      throw new Error(
+        `Unknown provider "${provider}". Expected one of: ${KNOWN_PROVIDERS.join(', ')}.`,
+      );
+    }
     this.provider = provider;
     /**
      * Override the API host. The `openai` provider speaks the standard
@@ -71,15 +121,33 @@ export class LLM {
     /**
      * A locally-hosted model costs nothing, so budgeting it is meaningless —
      * and actively harmful. An unknown model name falls back to the default
-     * price (Sonnet rates), which meant a free Ollama run was billed at
-     * $3/$15 per million tokens and aborted on any small budget.
+     * price, which meant a free Ollama run was billed at the dearest rate in
+     * the table and aborted on any small budget.
+     *
+     * Scoped to the provider that actually uses `baseUrl`. `OPENAI_BASE_URL` is
+     * read from the environment, so a developer who had once pointed it at
+     * Ollama left it set, ran an **Anthropic** audit, and got no budgeting at
+     * all: every call priced at zero, the cap never reached, real money spent
+     * against api.anthropic.com. The Anthropic path never consults `baseUrl`,
+     * so it can never be local, and treating it as free was purely a bug.
      */
-    this.isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])/.test(this.baseUrl);
+    this.isLocal =
+      provider === 'openai' &&
+      /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/.test(this.baseUrl);
     this.apiKey = apiKey;
     this.model = model;
     this.budgetUsd = budgetUsd;
+    this.pricingKnown = this.isLocal || provider === 'mock' || PRICED_MODELS.has(model);
     this.maxOutputTokens = maxOutputTokens;
     this.log = log;
+    // Surfaced rather than silent: a budget computed from a guessed price is an
+    // estimate with a wide error bar, and the caller should know which it has.
+    if (!this.pricingKnown) {
+      this.log(
+        `  ⚠ No published price for "${model}" — budgeting at the most expensive ` +
+          `known rate. The budget is an estimate, not a hard cap.`,
+      );
+    }
     this.spentUsd = 0;
     this.calls = 0;
     this.inTokens = 0;

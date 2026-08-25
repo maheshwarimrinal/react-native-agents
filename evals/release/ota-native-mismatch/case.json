@@ -1,47 +1,93 @@
 {
   "agent": "rn-release",
   "title": "OTA published after adding a native module, with a hardcoded runtime version",
-  "context": { "reactNative": "0.87", "expo": "57" },
-
+  "context": {
+    "reactNative": "0.87",
+    "expo": "57"
+  },
   "notes": "This is the single worst failure mode in the whole product: a new native dependency plus a static runtimeVersion means installed binaries fetch JS that calls native code they do not have, crashing on launch with no way for the user to update out of it. An agent that does not treat this as P0 has failed the case.",
-
   "expect": [
     {
       "name": "identifies the native-dependency / OTA incompatibility",
-      "any": ["native", "runtimeversion", "runtime version", "incompatib", "mismatch", "ble-plx"]
+      "any": [
+        "native",
+        "runtimeversion",
+        "runtime version",
+        "incompatib",
+        "mismatch",
+        "ble-plx"
+      ]
     },
     {
       "name": "states that affected users cannot recover via a further update",
-      "any": ["cannot update", "can't update", "reinstall", "crash on launch", "bricked", "no way"]
+      "any": [
+        "cannot update",
+        "can't update",
+        "reinstall",
+        "crash on launch",
+        "bricked",
+        "no way"
+      ]
     },
     {
       "name": "recommends the fingerprint runtime version policy",
-      "any": ["fingerprint", "policy", "appversion"]
+      "any": [
+        "fingerprint",
+        "policy",
+        "appversion"
+      ]
     },
     {
       "name": "flags the static hardcoded runtimeVersion",
-      "any": ["1.0.0", "hardcoded", "static", "manual"]
+      "any": [
+        "1.0.0",
+        "hardcoded",
+        "static",
+        "manual"
+      ]
     },
     {
       "name": "notes a new binary build is required, not an OTA",
-      "any": ["rebuild", "new build", "binary", "store", "not an ota", "cannot be shipped"]
+      "any": [
+        "rebuild",
+        "new build",
+        "binary",
+        "store",
+        "not an ota",
+        "cannot be shipped"
+      ]
     },
     {
       "name": "flags missing OTA code signing",
-      "any": ["code sign", "codesigning", "signed", "unsigned"]
+      "any": [
+        "code sign",
+        "codesigning",
+        "signed",
+        "unsigned"
+      ]
     },
     {
       "name": "flags the blocking fallbackToCacheTimeout",
-      "any": ["fallbacktocachetimeout", "blocks", "launch", "30000", "startup"]
+      "any": [
+        "fallbacktocachetimeout",
+        "blocks",
+        "launch",
+        "30000",
+        "startup"
+      ]
     },
     {
       "name": "flags allowBackup true",
-      "any": ["allowbackup", "adb backup", "backup"]
+      "any": [
+        "allowbackup",
+        "adb backup",
+        "backup"
+      ]
     }
   ],
-
-  "expectSeverity": ["P0"],
-
+  "expectSeverity": [
+    "P0"
+  ],
   "forbid": [
     {
       "name": "says the OTA update is safe to publish",
@@ -49,8 +95,10 @@
     },
     {
       "name": "suggests only bumping runtimeVersion manually without a rebuild",
-      "all": ["bump"],
-      "unless": ["rebuild", "new build", "binary", "fingerprint"]
+      "all": [
+        "bump"
+      ],
+      "unlessPattern": "rebuild\\w*|(?<![\\w-])new\\ build(?![\\w-])|binary\\s+\\w+|\\bnew binary|fingerprint\\w*"
     },
     {
       "name": "confuses versionCode with runtimeVersion as the fix",

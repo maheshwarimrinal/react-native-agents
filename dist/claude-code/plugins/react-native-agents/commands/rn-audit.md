@@ -19,16 +19,19 @@ every agent depends on them.
 
 Run these subagents in parallel where possible:
 
+- **rn-background** — RN Background
 - **rn-build** — RN Build
 - **rn-code-quality** — RN Code Quality
 - **rn-debug** — RN Debug
 - **rn-dependencies** — RN Dependencies
 - **rn-doctor** — RN Doctor
+- **rn-monorepo** — RN Monorepo
 - **rn-native-modules** — RN Native Modules
 - **rn-navigation** — RN Navigation
 - **rn-observability** — RN Observability
 - **rn-offline** — RN Offline
 - **rn-onboard** — RN Onboard
+- **rn-payments** — RN Payments
 - **rn-performance** — RN Performance
 - **rn-permissions** — RN Permissions
 - **rn-platform-parity** — RN Platform Parity
