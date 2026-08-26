@@ -26,11 +26,7 @@
         "one version at a time",
         "incremental hops"
       ],
-      "unless": [
-        "already",
-        "correctly",
-        "this is"
-      ]
+      "unlessPattern": "already\\s+(?:tried|done|ruled out|attempted|handled|covered|been)|(?:is|are|was|were|handled|done|set|configured)\\s+correctly|correctly\\s+\\w+|(?<![\\w-])this\\ is(?![\\w-])"
     },
     {
       "name": "invents a performance regression with no baseline",
@@ -39,12 +35,7 @@
     {
       "name": "recommends clearing caches as a precaution",
       "pattern": "(rm -rf|delete|clear)\\s+(node_modules|deriveddata|caches)",
-      "unless": [
-        "not needed",
-        "unnecessary",
-        "if that fails",
-        "already"
-      ]
+      "unlessPattern": "(?<![\\w-])not\\ needed(?![\\w-])|(?:is|are)\\s+unnecessary|unnecessary\\s+(?:here|step|work)|(?<![\\w-])if\\ that\\ fails(?![\\w-])|already\\s+(?:tried|done|ruled out|attempted|handled|covered|been)"
     }
   ]
 }

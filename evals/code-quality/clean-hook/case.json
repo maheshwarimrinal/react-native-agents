@@ -1,14 +1,13 @@
 {
   "agent": "rn-code-quality",
-  "title": "Clean hook — derived state, functional updates, complete cleanup",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "title": "Clean hook \u2014 derived state, functional updates, complete cleanup",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "The mirror image of the stale-closure case. Every trap is avoided: the interval uses a functional update so there is no stale closure, both effects return cleanup, `elapsedMs` is derived during render rather than mirrored into state, the append callback is stable, dependency arrays are complete, and state is never mutated. An agent that manufactures findings here is pattern-matching on shape rather than reading the code.",
-
   "expectMaxFindings": 1,
-
   "expect": [],
-
   "forbid": [
     {
       "name": "claims a stale closure exists despite the functional update",
@@ -30,5 +29,9 @@
       "name": "claims the dependency array is incomplete",
       "pattern": "(missing|incomplete)\\s+\\w*\\s*dependenc"
     }
+  ],
+  "elidedHelpers": [
+    "subscribe",
+    "remove"
   ]
 }

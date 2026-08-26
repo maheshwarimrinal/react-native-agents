@@ -15,10 +15,19 @@ const { loadAgents, loadSharedContext, parseFrontmatter, serializeFrontmatter, K
   await import(path.join(ROOT, 'scripts/lib/source.mjs'));
 const { plan, apply, isUserOwned, summarise } = await import(path.join(ROOT, 'scripts/lib/install.mjs'));
 const { scoreAgents, explainRouting, SIGNALS } = await import(path.join(ROOT, 'mcp-server/routing.mjs'));
+/**
+ * Terms that look like stems to the heuristic above but are deliberately whole
+ * words — marking them would over-match ('spec' → 'specific', 'orient' →
+ * screen 'orientation').
+ */
+const KNOWN_WHOLE_WORDS = new Set(['spec', 'orient', 'i18n', 'newarch', 'nx']);
+
 const { telemetryState, consentState, sanitise, capture, ALLOWED_PROPERTIES } = await import(
   path.join(ROOT, 'scripts/lib/telemetry.mjs')
 );
-const { loadCases, scoreOutput } = await import(path.join(ROOT, 'evals/run.mjs'));
+const { loadCases, scoreOutput, gateReasons, DEFAULT_MIN_PASS_RATE, splitClauses, containsWholeTerm, isQuestionCase } = await import(
+  path.join(ROOT, 'evals/run.mjs')
+);
 const os = await import('node:os');
 
 let passed = 0;
@@ -257,7 +266,14 @@ test('package.json keywords cover the agent domains', () => {
 test('docs pin the action to the floating major tag, not a stale version', () => {
   // Four places pinned @v1.1.0 and were still pinned there at 1.2.0. A hard
   // version in docs goes stale on every release; @v1 does not.
-  for (const rel of ['README.md', 'docs/github-action.md']) {
+  //
+  // action/examples/ ships inside the npm package, so a stale pin there sends
+  // real users to an older Action — it was missed because this test only
+  // looked at docs.
+  const shipped = fs.existsSync(path.join(ROOT, 'action/examples'))
+    ? fs.readdirSync(path.join(ROOT, 'action/examples')).map((f) => `action/examples/${f}`)
+    : [];
+  for (const rel of ['README.md', 'docs/github-action.md', ...shipped]) {
     const full = path.join(ROOT, rel);
     if (!fs.existsSync(full)) continue;
     const stale = fs.readFileSync(full, 'utf8').match(/react-native-agents@v\d+\.\d+\.\d+/g);
@@ -425,6 +441,175 @@ test('navigator factory triggers match real React Navigation APIs', () => {
   assert(bogus.length === 0, `not real navigator factories: ${bogus.join(', ')}`);
 });
 
+/* ------------------------------------------------------------------ *
+ * QA revalidation guards. Two rounds of review found the same shape of
+ * defect: a reference file corrected while the always-loaded agent body
+ * kept saying the opposite. These assert agreement, not prose.
+ * ------------------------------------------------------------------ */
+
+test('no agent contradicts itself on sandbox receipt handling', () => {
+  // store-policy.md said "reject sandbox receipts in production" while
+  // validation.md correctly said TestFlight and App Review produce them.
+  const pay = agents.find((a) => a.id === 'rn-payments');
+  const all = [pay.body, ...pay.references.map((r) => r.content)].join('\n').toLowerCase();
+  // Match the *prescriptive* form only. "Do not simply reject sandbox receipts"
+  // is the correct guidance and must not trip this.
+  assert(
+    !/(must|should|need to)\s+(\*\*)?reject sandbox/.test(all),
+    'still prescribes rejecting sandbox receipts',
+  );
+  assert(!/reject sandbox receipts in production/.test(all), 'the old wording survives somewhere');
+  assert(all.includes('21007'), 'should document the production-first / 21007 retry flow');
+  assert(all.includes('segregat'), 'should say segregate rather than reject');
+});
+
+test('monorepo guidance is SDK-aware in the body, not only the references', () => {
+  // The body is always loaded; a reference that contradicts it loses.
+  const mono = agents.find((a) => a.id === 'rn-monorepo');
+  assert(/sdk 52/i.test(mono.body), 'agent body should name the SDK 52 threshold');
+  assert(
+    !/- \*\*`watchFolders` includes the workspace root\*\*/.test(mono.body),
+    'agent body still mandates watchFolders unconditionally',
+  );
+  const refs = mono.references.map((r) => r.content).join('\n');
+  assert(/sdk 56/i.test(refs), 'references should separate the SDK 56 filesystem threshold');
+});
+
+test('payments body qualifies claims rather than stating platform mandates', () => {
+  const pay = agents.find((a) => a.id === 'rn-payments');
+  assert(
+    /not sufficient on its own/i.test(pay.body),
+    'body should say the purchase listener alone misses Android renewals',
+  );
+  assert(
+    /threat[- ]model/i.test(pay.body),
+    'body should frame client validation as a threat-model call',
+  );
+});
+
+test('release paths run every validator, including the eval one', () => {
+  // A tag-triggered publish bypassed evals/run.mjs --validate entirely, so the
+  // undefined-helper check could never block a release.
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert(
+    /evals\/run\.mjs --validate/.test(pkg.scripts.prepublishOnly),
+    'prepublishOnly must run the eval validator',
+  );
+
+  const wf = path.join(ROOT, '.github/workflows/publish.yml');
+  if (fs.existsSync(wf)) {
+    const text = fs.readFileSync(wf, 'utf8');
+    for (const cmd of ['scripts/test.mjs', 'action/test.mjs', 'evals/run.mjs --validate']) {
+      assert(text.includes(cmd), `publish.yml must run ${cmd}`);
+    }
+  }
+});
+
+test('monorepo guidance prefers dependency resolution over resolver overrides', () => {
+  const mono = agents.find((a) => a.id === 'rn-monorepo');
+  const refs = mono.references.map((r) => r.content).join('\n');
+  assert(
+    /dependency level first|overrides.*resolutions/i.test(refs),
+    'duplicate React should be fixed by deduplication before extraNodeModules',
+  );
+  assert(
+    /sdk 54/i.test(mono.body) || /sdk 54/i.test(refs),
+    'pnpm guidance must be scoped to the SDK, not stated as always required',
+  );
+});
+
+/**
+ * Contested platform claims, and the phrasing that must never appear.
+ *
+ * Four generations of this guard were defeated, each by the mechanism that was
+ * meant to make it smart:
+ *
+ *   1. Asserting a qualifier existed somewhere — both positions passed at once.
+ *   2. Skipping sentences containing 'not' — the claim excused itself.
+ *   3. Skipping negations before the match — an unrelated 'not' excused it.
+ *   4. An `allow` list matched with includes() — appending a contradictory
+ *      clause to an allowed sentence skipped the whole rule for that sentence.
+ *
+ * There is no escape hatch now. A rule is a list of patterns; if the text
+ * matches, it fails. Correct prose is prose that does not repeat the forbidden
+ * wording — which is a stricter and much simpler contract than teaching a
+ * regular expression to recognise irony.
+ */
+const FORBIDDEN_ABSOLUTES = [
+  {
+    claim: 'sandbox receipts',
+    patterns: [
+      /(must|should|need to)\s+(\*\*)?reject sandbox/i,
+      /reject sandbox receipts in production/i,
+      /\breject(ing)?\s+sandbox\s+receipts?/i,
+    ],
+    why: 'TestFlight and App Review produce sandbox receipts — accept and segregate',
+  },
+  {
+    claim: 'on-device validation',
+    patterns: [
+      /(on-device|client-side)\s+(receipt\s+)?validation\s+is\s+not\s+validation/i,
+      /receipt\s+validated\s+on\s+the\s+device[^.]{0,80}is\s+not\s+validated/i,
+    ],
+    why: 'Apple documents both; it is a threat-model choice, not a non-thing',
+  },
+  {
+    claim: 'restore without an account',
+    patterns: [
+      /restore[^.]{0,60}(must|has to|required to)\s+(work|be reachable)\s+without[^.]{0,20}account/i,
+      // The bullet this originally shipped as, which no earlier pattern caught.
+      /restore path[^.]{0,30},\s*reachable without an account/i,
+      /reachable without an account/i,
+    ],
+    why: 'Apple requires the mechanism, not that it work signed out',
+  },
+  {
+    claim: 'hardcoded prices',
+    patterns: [
+      /hardcoded price[^.]{0,60}(is a|are a|is an|automatic)\s*(store\s+)?rejection/i,
+      // The code-comment form: "wrong in every other currency, and a store rejection".
+      /wrong in every other (currency|storefront)[^.]{0,20},?\s*and a store rejection/i,
+    ],
+    why: 'a plausible rejection cause, not an automatic one',
+  },
+  {
+    claim: 'refund notifications',
+    patterns: [/server[- ]to[- ]server notifications are (required|mandatory|the only)/i],
+    why: 'scheduled reconciliation against the store API is also authoritative',
+  },
+  {
+    claim: 'Android 14 foreground services',
+    patterns: [/(a\s+)?(wrong|mismatched)\s+type\s+is\s+a\s+(store\s+)?rejection/i],
+    why: 'a runtime exception and a policy rejection are distinct outcomes',
+  },
+];
+
+for (const agent of agents) {
+  test(`${agent.id}: no unqualified absolutes on contested platform claims`, () => {
+    // Checked per file so one document cannot hedge on another's behalf.
+    const files = [
+      { name: 'agent.md', text: agent.body },
+      ...agent.references.map((r) => ({ name: `${r.slug ?? r.name}.md`, text: r.content })),
+    ];
+    const hits = [];
+    for (const { name, text } of files) {
+      // Sentence-scoped, because these phrases legitimately appear inside
+      // explicit negations — "it does NOT impose a blanket rule that restore
+      // must work without an account" states the correct position and must
+      // not be flagged as the absolute it is refuting.
+      // Whole-file, not sentence-scoped: sentence splitting was itself an
+      // inference, and a claim split across a line break evaded it.
+      for (const rule of FORBIDDEN_ABSOLUTES) {
+        for (const pattern of rule.patterns) {
+          const m = text.replace(/\n+/g, ' ').match(pattern);
+          if (m) hits.push(`${name}: "${m[0].trim()}" — ${rule.why}`);
+        }
+      }
+    }
+    assert(hits.length === 0, `unqualified absolutes:\n    ${hits.join('\n    ')}`);
+  });
+}
+
 test('agent ids are unique', () => {
   const ids = agents.map((a) => a.id);
   assert(new Set(ids).size === ids.length, 'duplicate ids');
@@ -456,6 +641,34 @@ test('agent emoji are unique', () => {
 test('slash commands are unique', () => {
   const cmds = agents.map((a) => a.command).filter(Boolean);
   assert(new Set(cmds).size === cmds.length, 'duplicate commands');
+});
+
+test('no agent repeats a trigger, glob, or reference within its own frontmatter', () => {
+  // `bgtaskscheduler` appeared twice in rn-background's twenty-item trigger
+  // list. Harmless at run time, but it is the kind of thing that reads as
+  // carelessness in a public repo, and a duplicate is invisible by eye at that
+  // length. Case-insensitive: triggers are matched that way, so `Doze` and
+  // `doze` are the same entry.
+  //
+  // Read the frontmatter rather than the loaded agent: `loadAgents` replaces
+  // the declared `references` list with hydrated objects, so the loaded value
+  // is a directory listing that cannot contain a duplicate — checking it would
+  // have looked like coverage while testing nothing.
+  for (const a of agents) {
+    const { data } = parseFrontmatter(
+      fs.readFileSync(path.join(ROOT, 'agents', a.dir, 'agent.md'), 'utf8'),
+    );
+    for (const key of ['triggers', 'globs', 'references']) {
+      const list = data[key];
+      if (!Array.isArray(list)) continue;
+      const seen = new Set();
+      for (const raw of list) {
+        const item = String(raw).trim().toLowerCase();
+        assert(!seen.has(item), `agents/${a.dir}/agent.md: "${raw}" listed twice under ${key}`);
+        seen.add(item);
+      }
+    }
+  }
 });
 
 /* ---------------------------------------------------------------- *
@@ -579,6 +792,61 @@ await testAsync('MCP server: initialize, tools, prompts, resources', async () =>
   assert(r(8)?.result?.resources?.length > 20, 'resources/list');
   assert(r(9)?.result?.contents?.[0]?.text?.includes('test engineer'), 'resources/read');
   assert(r(10)?.result?.isError === true, 'unknown reference should be an error result');
+});
+
+await testAsync('MCP audit plan lists review agents only, and counts them honestly', async () => {
+  // The plan used to be built from every loaded agent, so it told the client to
+  // "run" rn-doctor and rn-build — which need a failing build or an error log
+  // that a codebase sweep does not have. Seven wasted agent loads, each ending
+  // in a section with nothing in it.
+  const review = agents.filter((a) => a.mode !== 'interactive');
+  const interactive = agents.filter((a) => a.mode === 'interactive');
+  assert(interactive.length > 0, 'fixture assumption: some agents are interactive');
+
+  const [res] = await mcp([
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_audit_plan', arguments: {} } },
+  ]);
+  const plan = res?.result?.content?.[0]?.text ?? '';
+
+  const listed = [...plan.matchAll(/agent_id: "([^"]+)"/g)].map((m) => m[1]);
+  assert(
+    listed.length === review.length,
+    `plan lists ${listed.length} agents, expected the ${review.length} review agents`,
+  );
+  for (const a of interactive) {
+    assert(!listed.includes(a.id), `${a.id} is interactive and must not be in the audit plan`);
+  }
+  for (const a of review) {
+    assert(listed.includes(a.id), `${a.id} reviews code but is missing from the audit plan`);
+  }
+  // The count in the heading is derived; assert it rather than trusting it.
+  assert(
+    new RegExp(`## Step 2[^\\n]*\\(${review.length}\\)`).test(plan),
+    'Step 2 heading should state the real review-agent count',
+  );
+});
+
+await testAsync('MCP initialize instructions state the real agent counts', async () => {
+  // This said "Six React Native specialist agents" while twenty-four were
+  // loaded, across three releases. A literal in a handler is invisible.
+  const [res] = await mcp([
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {} } },
+  ]);
+  const instructions = res?.result?.instructions ?? '';
+  const review = agents.filter((a) => a.mode !== 'interactive').length;
+
+  assert(
+    new RegExp(`\\b${agents.length}\\b`).test(instructions),
+    `instructions should state ${agents.length} agents: ${instructions.slice(0, 80)}`,
+  );
+  assert(
+    new RegExp(`\\b${review}\\b`).test(instructions),
+    `instructions should state ${review} review agents: ${instructions.slice(0, 80)}`,
+  );
+  assert(
+    !/\b(six|seven|eight|nine|ten|eleven|twelve)\b/i.test(instructions),
+    `a spelled-out count cannot be checked against the agent list: ${instructions.slice(0, 80)}`,
+  );
 });
 
 await testAsync('MCP server: unknown method returns a JSON-RPC error', async () => {
@@ -777,6 +1045,55 @@ test('installer: --force still backs up user-authored files', () => {
   eq(fs.readFileSync(path.join(dir, 'AGENTS.md.bak'), 'utf8'), original, 'backup must hold the original');
 });
 
+test('installer: a second --force run does not destroy the first backup', () => {
+  // The backup path was `${dest}.bak` unconditionally. Install once and the
+  // user's AGENTS.md moved to AGENTS.md.bak; install again and that same path
+  // was overwritten with the *generated* file from the first run. The only copy
+  // of the user's own work was gone, and both runs reported "backed up".
+  const dir = scratchProject();
+  const original = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+  assert(original.startsWith('# MY OWN'), 'fixture assumption: AGENTS.md is user-authored');
+
+  apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'overwrite' });
+  // Make the second run a genuine conflict again.
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# EDITED AFTER INSTALL\n');
+  const second = apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'overwrite' });
+
+  eq(
+    fs.readFileSync(path.join(dir, 'AGENTS.md.bak'), 'utf8'),
+    original,
+    'the first backup holds the user\'s own work and must never be overwritten',
+  );
+  assert(fs.existsSync(path.join(dir, 'AGENTS.md.bak.2')), 'the second backup needs its own path');
+  eq(
+    fs.readFileSync(path.join(dir, 'AGENTS.md.bak.2'), 'utf8'),
+    '# EDITED AFTER INSTALL\n',
+    'the second backup holds what was there at the time',
+  );
+  assert(
+    second.backedUp.some((p) => p.endsWith('.bak.2')),
+    `the report must name the path actually written, got ${second.backedUp}`,
+  );
+});
+
+test('installer: a dry run names the backup path it would really use', () => {
+  // It reports what would happen; naming an already-taken path is a lie that
+  // only shows up as data loss when someone acts on it.
+  const dir = scratchProject();
+  apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'overwrite' });
+  fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# EDITED\n');
+
+  const dry = apply(plan(path.join(DIST, 'agents-md'), dir), {
+    onConflict: 'overwrite',
+    dryRun: true,
+  });
+  assert(
+    dry.backedUp.some((p) => p.endsWith('.bak.2')),
+    `dry run should predict .bak.2, got ${dry.backedUp}`,
+  );
+  assert(!fs.existsSync(path.join(dir, 'AGENTS.md.bak.2')), 'a dry run must still write nothing');
+});
+
 test('installer: re-running on a clean install is idempotent', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-idem-'));
   apply(plan(path.join(DIST, 'agents-md'), dir), { onConflict: 'skip' });
@@ -810,6 +1127,659 @@ test('every generated manifest uses the package.json version', () => {
   eq(marketplace.plugins[0].version, VERSION, 'marketplace plugin entry');
   eq(plugin.version, VERSION, 'plugin.json');
   eq(index.version, VERSION, 'index.json');
+});
+
+/* ---------------------------------------------------------------- *
+ * Eval suite gate
+ * ---------------------------------------------------------------- */
+
+// Minimal shapes matching what run.mjs builds for restored and fresh cases.
+const dirtyCase = (id, pass, expectPassed = 0, expectTotal = 6) => ({
+  tc: { id, def: {} },
+  pass,
+  score: { expectPassed, expectTotal, violations: [] },
+});
+const cleanCase = (id, pass) => ({
+  tc: { id, def: { expectMaxFindings: 0 } },
+  pass,
+  score: { expectPassed: 1, expectTotal: 1, violations: [] },
+});
+
+test('an exception cannot be satisfied by a negation that reinforces the advice', () => {
+  // Four verified bypasses across four rounds. Every one came from asking "is a
+  // negation-ish word nearby?" instead of stating what is actually permitted.
+  const def = {
+    forbid: [
+      {
+        name: 'device validation',
+        pattern: 'validat\\w*\\s+(the\\s+)?receipt\\s+(on|in)\\s+the\\s+(device|client|app)',
+        unlessPattern:
+          "\\b(do not|don't|never)\\s+\\w*\\s*validat" +
+          '|validat\\w*[^.;,]{0,50}\\bis (insufficient|not sufficient|not enough)',
+      },
+    ],
+  };
+  const caught = (text) => scoreOutput(text, def).violations.length > 0;
+
+  // Must still be caught:
+  assert(caught('Validate the receipt on the device.'), 'plain forbidden advice');
+  assert(
+    caught('Validate the receipt on the device, which is not hard to do.'),
+    'a negation qualifying something else must not excuse the advice',
+  );
+  assert(
+    caught('Validate the receipt on the device; this is not optional.'),
+    'a clause that reinforces the advice must not excuse it',
+  );
+  assert(
+    caught('Validate the receipt on the device using a notary service.'),
+    '"notary" contains "not" but is not a negation',
+  );
+  assert(
+    caught('Do not hardcode prices. Validate the receipt on the device.'),
+    'a negation in an earlier sentence is unrelated',
+  );
+
+  // Must still be excused — the rule has to be usable, not just strict:
+  assert(!caught('Do not validate the receipt on the device.'), 'a real negation');
+  assert(!caught('Never validate the receipt on the device.'), 'another real negation');
+  assert(
+    !caught('Validating the receipt on the device is insufficient.'),
+    'a trailing qualifier in the same clause is a legitimate exception',
+  );
+});
+
+test('a conceded qualifier does not excuse forbidden advice', () => {
+  // Fourth reported bypass of this mechanism. "Even though it is insufficient,
+  // do it anyway" puts the qualifier and the advice in one clause, so clause
+  // scoping excused it — but conceding an objection is the opposite of
+  // applying it.
+  const def = {
+    forbid: [
+      {
+        name: 'device validation',
+        pattern: 'validat\\w*\\s+(the\\s+)?receipt\\s+(on|in)\\s+the\\s+(device|client|app)',
+        unlessPattern:
+          "\\b(do not|don't|never)\\s+\\w*\\s*validat" +
+          '|validat\\w*[^.;,]{0,50}\\bis (insufficient|not sufficient|not enough)',
+      },
+    ],
+  };
+  const caught = (t) => scoreOutput(t, def).violations.length > 0;
+
+  assert(
+    caught(
+      'Validate the receipt on the device even though it is insufficient and grant premium from that result anyway.',
+    ),
+    'the reported bypass',
+  );
+  assert(caught('Although it is insufficient, validate the receipt on the device.'), 'although');
+  assert(caught('Validate the receipt on the device despite it not being sufficient.'), 'despite');
+  assert(
+    caught('Validate the receipt on the device regardless of it not being enough.'),
+    'regardless',
+  );
+  // The legitimate exceptions must survive.
+  assert(!caught('Do not validate the receipt on the device.'), 'a real negation still excuses');
+  assert(
+    !caught('Validating the receipt on the device is insufficient.'),
+    'and so does a real trailing qualifier',
+  );
+});
+
+test('unlessPattern states the permitted phrasings instead of guessing', () => {
+  // The explicit mechanism. `unless` asks "is a negation-ish word nearby?",
+  // which keywords cannot answer — three narrowings each left a new hole.
+  const def = {
+    forbid: [
+      {
+        name: 'device validation',
+        pattern: 'validat\\w*\\s+(the\\s+)?receipt\\s+(on|in)\\s+the\\s+(device|client|app)',
+        unlessPattern: "\\b(do not|don't|never)\\s+\\w*\\s*validat",
+      },
+    ],
+  };
+  const caught = (t) => scoreOutput(t, def).violations.length > 0;
+
+  assert(!caught('Do not validate the receipt on the device.'), 'the named shape is permitted');
+  assert(caught('Validate the receipt on the device.'), 'and nothing else is');
+  assert(
+    caught('Validate the receipt on the device, which is not hard.'),
+    'a stray negation no longer counts, because the rule never said it would',
+  );
+});
+
+test('a concessive construction voids unlessPattern too', () => {
+  // An explicit pattern is only as careful as the regex someone wrote. While
+  // building this I wrote a plausible pattern that matched the concessive
+  // sentence — exactly the mistake a rule author will make.
+  const def = {
+    forbid: [
+      {
+        name: 'device validation',
+        pattern: 'validat\\w*\\s+(the\\s+)?receipt\\s+(on|in)\\s+the\\s+(device|client|app)',
+        unlessPattern: 'insufficient',
+      },
+    ],
+  };
+  const text =
+    'Validate the receipt on the device even though it is insufficient and grant premium anyway.';
+  assert(
+    scoreOutput(text, def).violations.length > 0,
+    'a sloppy unlessPattern must not reopen the concessive hole',
+  );
+});
+
+test('question cases are framed as questions, not as files to review', () => {
+  // Every case used to get "Review the following file …" plus a demand for a
+  // JSON findings array — including the fifteen whose input is a developer's
+  // question to an interactive agent. monorepo/quote-workspace-setup scored 0/5
+  // against terms as common as "cost" and "complexity", which no genuine answer
+  // to "should we adopt a monorepo?" could miss. The harness was marking its own
+  // mis-framing as a model failure.
+  const agents = loadAgents();
+  const byId = new Map(agents.map((a) => [a.id, a]));
+  const cases = loadCases();
+
+  const questions = cases.filter((tc) => isQuestionCase(tc, byId.get(tc.def.agent)));
+  assert(questions.length > 5, `expected the interactive cases to be detected, got ${questions.length}`);
+
+  // Every interactive agent's cases must be questions — unless they cap findings.
+  for (const tc of cases) {
+    const agent = byId.get(tc.def.agent);
+    if (agent?.mode !== 'interactive') continue;
+    if (tc.def.expectMaxFindings !== undefined) continue;
+    assert(
+      isQuestionCase(tc, agent),
+      `${tc.id} feeds an interactive agent but is framed as a file review`,
+    );
+  }
+});
+
+test('a clean case keeps the findings contract even as a .md fixture', () => {
+  // `expectMaxFindings` is an assertion about findings, so the case must ask for
+  // findings. upgrade/clean-version-bump is an .md fixture with a cap of 1;
+  // treating it as prose would skip the only check it exists for.
+  const byId = new Map(loadAgents().map((a) => [a.id, a]));
+  for (const tc of loadCases()) {
+    if (tc.def.expectMaxFindings === undefined) continue;
+    assert(
+      !isQuestionCase(tc, byId.get(tc.def.agent)),
+      `${tc.id} caps findings at ${tc.def.expectMaxFindings} but would be asked for prose — the cap could never fail`,
+    );
+  }
+});
+
+test('an explicit style in case.json overrides the inference', () => {
+  const agent = { mode: 'interactive' };
+  eq(isQuestionCase({ def: { style: 'review' }, inputName: 'input.md' }, agent), false);
+  eq(isQuestionCase({ def: { style: 'question' }, inputName: 'input.tsx' }, { mode: 'review' }), true);
+});
+
+test('the output contract forbids reporting correct behaviour as a finding', () => {
+  // A local run had the model return five P3 "findings" on a clean fixture:
+  // "Foreground guarantee in place", "Completion handler always called" — all
+  // things the code got right. The contract said "do not invent problems" but
+  // never said a finding must be a defect, so a checklist read as compliant.
+  const src = fs.readFileSync(path.join(ROOT, 'action/lib/audit.mjs'), 'utf8');
+  const contract = src.match(/const OUTPUT_CONTRACT = `([\s\S]*?)`;/)?.[1] ?? '';
+  assert(contract, 'could not find OUTPUT_CONTRACT');
+  assert(
+    /wrong and needs changing/i.test(contract),
+    'the contract must say a finding is a defect, not an observation',
+  );
+  assert(
+    /not an observation|not a confirmation/i.test(contract),
+    'and rule out the confirmation-as-finding shape explicitly',
+  );
+});
+
+test('no eval rule uses the keyword `unless` any more', () => {
+  // The ratchet. Every bypass reported against this suite came from a bare
+  // keyword excusing any clause the word happened to appear in — the last one
+  // needing only `id` in "store its id there". All 98 rules now state their
+  // exceptions explicitly, so there is nothing to grandfather.
+  const offenders = [];
+  for (const c of loadCases()) {
+    for (const f of c.def.forbid ?? []) {
+      if (f.unless !== undefined) offenders.push(`${c.id}: ${f.name}`);
+    }
+  }
+  eq(offenders.length, 0, `still using keyword unless:\n    ${offenders.join('\n    ')}`);
+});
+
+test('every unlessPattern is a compilable regex', () => {
+  // A broken pattern would throw mid-run, after spending on model calls.
+  for (const c of loadCases()) {
+    for (const f of c.def.forbid ?? []) {
+      if (!f.unlessPattern) continue;
+      try {
+        new RegExp(f.unlessPattern, 'i');
+      } catch (err) {
+        assert(false, `${c.id}: "${f.name}" has an invalid unlessPattern — ${err.message}`);
+      }
+    }
+  }
+});
+
+test('the reported stale-closure bypass is closed, and legitimate useRef still passes', () => {
+  // "Use useRef as the fix for the derived state and store its id there."
+  // gave the forbidden recommendation and was excused because `id` was listed.
+  const tc = loadCases().find((c) => c.id === 'code-quality/stale-closure');
+  const rule = (tc.def.forbid ?? []).find((f) => f.name.includes('useRef as the fix'));
+  assert(rule, 'rule not found');
+  const caught = (t) => scoreOutput(t, { forbid: [rule] }).violations.length > 0;
+
+  assert(
+    caught('Use useRef as the fix for the derived state and store its id there.'),
+    'the reported bypass must now be caught',
+  );
+  assert(
+    !caught('Keep the interval id in a useRef so the callback sees the latest value.'),
+    'the legitimate use — a timer id in a ref — must still be excused',
+  );
+  assert(
+    !caught('A useRef holding the latest options is the right tool for the timer.'),
+    'and so must the latest-value ref',
+  );
+});
+
+test('a qualifier in a comma-joined preceding clause still excuses', () => {
+  // Clause-only scoping flagged "Only after confirming the duplicate, remove
+  // node_modules" — a correct answer. The comma matters: a preceding clause
+  // ending in a full stop is a different sentence, and allowing that back would
+  // reopen the first bypass ("Do not hardcode prices. Validate on the device.").
+  const tc = loadCases().find((c) => c.id === 'monorepo/duplicate-react');
+  const rule = (tc.def.forbid ?? []).find((f) => f.name.includes('first step'));
+  const caught = (t) => scoreOutput(t, { forbid: [rule] }).violations.length > 0;
+
+  assert(!caught('Only after confirming the duplicate, remove node_modules.'), 'comma-joined');
+  assert(caught('rm -rf node_modules to start.'), 'the bare recommendation is still caught');
+});
+
+test('a preceding clause ending in a full stop does not excuse', () => {
+  /**
+   * The boundary the comma widening must not cross.
+   *
+   * A deliberately *generic* unlessPattern is used here — the kind a rule
+   * author actually writes. My first attempt at this test used a pattern
+   * specific enough that the sentence boundary made no difference, so widening
+   * the rule to accept any preceding clause left it green. The mutation check
+   * is the only reason I know that.
+   */
+  const def = {
+    forbid: [
+      {
+        name: 'device validation',
+        pattern: 'validat\\w*\\s+the\\s+receipt\\s+on\\s+the\\s+device',
+        unlessPattern: '\\b(do not|never)\\b',
+      },
+    ],
+  };
+  const caught = (t) => scoreOutput(t, def).violations.length > 0;
+
+  assert(
+    caught('Do not hardcode prices. Validate the receipt on the device.'),
+    'a negation about something else, in a previous sentence, must not excuse this',
+  );
+  assert(
+    !caught('Do not validate the receipt on the device.'),
+    'the same clause still excuses',
+  );
+  assert(
+    !caught('Whatever else you do, never validate the receipt on the device.'),
+    'and so does a comma-joined preceding clause',
+  );
+});
+
+test('the highest-stakes forbid rules use explicit patterns', () => {
+  // Where wrong advice costs money or creates a vulnerability, the exception
+  // should be stated rather than inferred.
+  const migrated = [
+    ['payments/client-side-entitlement', 'recommends validating the receipt on the device'],
+    ['payments/client-side-entitlement', 'recommends encrypting the AsyncStorage flag as the fix'],
+    ['security/jwt-in-asyncstorage', 'suggests obfuscation as the fix for a shipped secret'],
+  ];
+  const cases = loadCases();
+  for (const [caseId, ruleName] of migrated) {
+    const tc = cases.find((c) => c.id === caseId);
+    assert(tc, `${caseId} not found`);
+    const rule = (tc.def.forbid ?? []).find((f) => f.name === ruleName);
+    assert(rule, `${caseId}: rule "${ruleName}" not found`);
+    assert(rule.unlessPattern, `${caseId}: "${ruleName}" should use unlessPattern`);
+    assert(!rule.unless, `${caseId}: "${ruleName}" should not also carry a keyword list`);
+  }
+});
+
+test('clause splitting is what makes the unless rule work', () => {
+  // Sentence-level scoping was not enough; the boundary that matters is the
+  // clause, because that is where a qualifier stops applying backwards.
+  const clauses = splitClauses('validate on the device, which is not hard; really.');
+  assert(clauses.length >= 3, `expected clause splitting, got ${JSON.stringify(clauses)}`);
+  assert(
+    clauses.some((c) => c.startsWith('validate on the device')),
+    'the advice sits in its own clause',
+  );
+  assert(
+    !clauses.find((c) => c.startsWith('validate on the device'))?.includes('not'),
+    'and the trailing negation is not in it',
+  );
+});
+
+test('a concessive marker must be a whole word', () => {
+  // `clause.includes('though')` fires on "thoughtful", which voided a correct
+  // answer. The concessive check errs toward reporting a violation, so a false
+  // positive here is a wrong *failure* — the kind that gets a suite ignored.
+  const def = {
+    forbid: [
+      {
+        name: 'device validation',
+        pattern: 'validat\\w*\\s+the\\s+receipt\\s+on\\s+the\\s+device',
+        unlessPattern: '\\b(do not|never)\\b',
+      },
+    ],
+  };
+  const caught = (t) => scoreOutput(t, def).violations.length > 0;
+
+  assert(
+    !caught('After a thoughtful review, do not validate the receipt on the device.'),
+    '"thoughtful" is not the concessive "though"',
+  );
+  assert(
+    caught('Even though it is weak, validate the receipt on the device.'),
+    'a real concessive still voids the exception',
+  );
+});
+
+test('whole-term matching does not fire on substrings', () => {
+  assert(!containsWholeTerm('a notary service', 'not'), '"notary" is not "not"');
+  assert(!containsWholeTerm('nothing at all', 'not'), '"nothing" is not "not"');
+  assert(!containsWholeTerm('another option', 'not'), '"another" is not "not"');
+  assert(containsWholeTerm('do not do that', 'not'), 'a real word still matches');
+  assert(containsWholeTerm('this is not the fix', 'not the fix'), 'multi-word terms still work');
+});
+
+test('results.json has exactly one writer, and it includes restored rows', () => {
+  // `--json` had its own serialiser that mapped over `results` rather than the
+  // merged set, so a resumed run wrote out only the cases executed in that
+  // invocation and discarded everything restored.
+  const src = fs.readFileSync(path.join(ROOT, 'evals/run.mjs'), 'utf8');
+  const writes = [...src.matchAll(/writeFileSync\(\s*\n?\s*(?:RESULTS_FILE|path\.join\(HERE, 'results\.json'\))/g)];
+  assert(
+    writes.length === 1,
+    `results.json should be written from one place, found ${writes.length} — a second writer is how the shapes diverged`,
+  );
+
+  // And that one writer must merge the restored rows in.
+  const persistBody = src.match(/const persist = \(\) => \{([\s\S]*?)\n  \};/)?.[1] ?? '';
+  assert(persistBody, 'could not locate persist()');
+  assert(
+    /\.\.\.previous/.test(persistBody),
+    'the writer must include restored rows, or --resume loses them',
+  );
+});
+
+test('the results.json shape satisfies every consumer that reads it back', () => {
+  // The `--json` writer emitted {id, pass, score, sev, error} while the resume
+  // path and evals/watch.mjs both expect {id, agent, clean, expectPassed, …}.
+  // Cases silently lost their `clean` flag and were restored as dirty with a
+  // zero score, and the watcher reported "clean cases 0/0".
+  const src = fs.readFileSync(path.join(ROOT, 'evals/run.mjs'), 'utf8');
+  const persistBody = src.match(/const persist = \(\) => \{([\s\S]*?)\n  \};/)?.[1] ?? '';
+  const written = new Set([...persistBody.matchAll(/^\s{8}(\w+):/gm)].map((m) => m[1]));
+  assert(written.size > 5, `expected a full row shape, parsed: ${[...written]}`);
+
+  // What the resume path reads off each restored row.
+  const restoreBody = src.match(/const restored = previous\.map\(\(row\) => \(\{([\s\S]*?)\n  \}\)\);/)?.[1] ?? '';
+  assert(restoreBody, 'could not locate the restore mapping');
+  for (const [, key] of restoreBody.matchAll(/row\.(\w+)/g)) {
+    assert(written.has(key), `--resume reads row.${key}, which the writer never writes`);
+  }
+
+  // What the progress viewer reads.
+  const watch = fs.readFileSync(path.join(ROOT, 'evals/watch.mjs'), 'utf8');
+  for (const [, key] of watch.matchAll(/\br\.(\w+)/g)) {
+    assert(written.has(key), `evals/watch.mjs reads r.${key}, which the writer never writes`);
+  }
+});
+
+test('dirty cases that miss most expectations fail the suite', () => {
+  // The gate only counted violations, errors, clean failures, and the case
+  // where *every* case scored zero. So forty-eight dirty cases could each match
+  // one expectation out of eight and the suite still exited 0 — the failure it
+  // exists to catch was the one shape it ignored.
+  const all = [
+    ...Array.from({ length: 10 }, (_, i) => dirtyCase(`d${i}`, false, 1, 8)),
+    cleanCase('c0', true),
+  ];
+  const { reasons, dirtyRate } = gateReasons(all, DEFAULT_MIN_PASS_RATE);
+  eq(dirtyRate, 0, 'no dirty case fully passed');
+  assert(
+    reasons.some((r) => /dirty case\(s\) fully passed/.test(r)),
+    `expected a dirty-rate failure, got: ${JSON.stringify(reasons)}`,
+  );
+});
+
+test('one matching expectation no longer rescues the whole suite', () => {
+  // `noneMatched` required every case to score zero, so a single match anywhere
+  // silenced it. That is what let a broadly-failing run report success.
+  const all = [dirtyCase('d0', false, 1, 8), ...Array.from({ length: 9 }, (_, i) => dirtyCase(`x${i}`, false, 0, 8))];
+  const { reasons } = gateReasons(all, DEFAULT_MIN_PASS_RATE);
+  assert(reasons.length > 0, 'a suite where nothing passed must not exit clean');
+});
+
+test('a healthy run passes the gate', () => {
+  // The gate has to be able to say yes, or it is just a failing build.
+  const all = [
+    ...Array.from({ length: 9 }, (_, i) => dirtyCase(`d${i}`, true, 6, 6)),
+    dirtyCase('d9', false, 4, 6),
+    cleanCase('c0', true),
+  ];
+  const { reasons, dirtyRate } = gateReasons(all, DEFAULT_MIN_PASS_RATE);
+  eq(dirtyRate, 0.9, '9 of 10 dirty cases passed');
+  eq(reasons.length, 0, `should pass, got: ${JSON.stringify(reasons)}`);
+});
+
+test('the pass-rate floor is adjustable for a deliberately weak model', () => {
+  // Running the suite against a small local model is legitimate; failing it
+  // outright would just mean nobody runs it there.
+  const all = Array.from({ length: 10 }, (_, i) => dirtyCase(`d${i}`, i < 4, 6, 6));
+  assert(gateReasons(all, 0.7).reasons.length > 0, '40% should fail the default floor');
+  eq(gateReasons(all, 0.3).reasons.length, 0, '40% should clear a 30% floor');
+});
+
+test('clean failures and violations fail regardless of the dirty pass rate', () => {
+  // These are unambiguous: findings invented in correct code, or advice the
+  // agent must never give. Model capability does not excuse either.
+  const healthy = Array.from({ length: 10 }, (_, i) => dirtyCase(`d${i}`, true, 6, 6));
+
+  const withCleanFail = [...healthy, cleanCase('c0', false)];
+  assert(
+    gateReasons(withCleanFail, 0).reasons.some((r) => /clean case/.test(r)),
+    'an invented finding must fail the suite even with the floor at zero',
+  );
+
+  const withViolation = [
+    ...healthy,
+    { tc: { id: 'v0', def: {} }, pass: false, score: { expectPassed: 6, expectTotal: 6, violations: [{ name: 'bad advice' }] } },
+  ];
+  assert(
+    gateReasons(withViolation, 0).reasons.some((r) => /forbidden-advice/.test(r)),
+    'forbidden advice must fail the suite regardless of the floor',
+  );
+});
+
+test('restored --resume results count toward the gate', () => {
+  // `results` held only cases run in this invocation, so resuming a run with
+  // forty-eight failures and one new passing case reported 1/1 and exited 0.
+  // gateReasons is given the merged view; this asserts it uses all of it.
+  const restored = Array.from({ length: 48 }, (_, i) => dirtyCase(`old${i}`, false, 0, 6));
+  const fresh = [dirtyCase('new0', true, 6, 6)];
+
+  eq(gateReasons(fresh, DEFAULT_MIN_PASS_RATE).reasons.length, 0, 'the fresh case alone looks fine');
+  assert(
+    gateReasons([...restored, ...fresh], DEFAULT_MIN_PASS_RATE).reasons.length > 0,
+    'the merged view must surface the 48 restored failures',
+  );
+});
+
+test('package-manager guidance distinguishes Yarn Classic from Berry', () => {
+  // "Yarn workspaces = hoisted" is true of Classic and wrong for Berry, where
+  // the layout is whatever `nodeLinker` says — and under `pnp` there is no
+  // node_modules at all, which no React Native toolchain can work with.
+  const src = fs.readFileSync(
+    path.join(ROOT, 'agents/monorepo/references/package-manager.md'),
+    'utf8',
+  );
+
+  // The comparison table must not make a blanket claim about "Yarn".
+  const rows = [...src.matchAll(/^\|\s*\*\*Yarn[^|]*\*\*\s*\|([^|]*)\|/gm)];
+  assert(rows.length >= 2, `expected Classic and Berry rows, found ${rows.length}`);
+  for (const [full] of rows) {
+    assert(
+      /Classic|Berry|\dx|\d\+/.test(full),
+      `an unqualified Yarn row is wrong for one of the two: ${full.trim()}`,
+    );
+  }
+
+  // And the three linker modes must be named, since the fix depends on which.
+  for (const mode of ['pnp', 'node-modules', 'nodeLinker']) {
+    assert(src.includes(mode), `package-manager.md should mention \`${mode}\``);
+  }
+  assert(
+    /nodeLinker: node-modules/.test(src),
+    'the actionable fix for a Berry + React Native workspace should appear verbatim',
+  );
+});
+
+test('the duplicate-package diagnostic does not exclude nested node_modules', () => {
+  // It used `-not -path '*/node_modules/*/node_modules/*'`, which skips exactly
+  // where a duplicate lives: a library bundling its own React. On a pnpm layout
+  // it excluded the store too and reported *zero* copies — a false clean, which
+  // is the worst possible outcome for a diagnostic.
+  const dir = path.join(ROOT, 'agents/monorepo/references');
+  for (const file of fs.readdirSync(dir)) {
+    const src = fs.readFileSync(path.join(dir, file), 'utf8');
+    for (const [, body] of src.matchAll(/```bash\n([\s\S]*?)```/g)) {
+      if (!/node_modules\/react\/package\.json/.test(body)) continue;
+      const offending = body
+        .split('\n')
+        .filter((l) => /-not\s+-path\s+'\*\/node_modules\/\*\/node_modules\/\*'/.test(l));
+      assert(
+        offending.length === 0,
+        `${file}: the duplicate-package search excludes nested node_modules, where duplicates live:\n    ${offending[0]?.trim()}`,
+      );
+      // And it must collapse symlinked copies, or pnpm looks broken when it is not.
+      assert(
+        /pwd -P/.test(body) && /sort -u/.test(body),
+        `${file}: the search must resolve symlinks (pwd -P) and dedupe (sort -u), or a healthy pnpm repo reports many false duplicates`,
+      );
+    }
+  }
+});
+
+test('background guidance qualifies what survives termination', () => {
+  // Apple: a background URLSession transfer survives *system* termination and
+  // the app is relaunched to collect it — but a user force-quit cancels the
+  // session's transfers and the system will not relaunch the app. An
+  // unqualified "survives being killed" tells someone their upload is safe when
+  // the most common way an app dies cancels it.
+  const dir = path.join(ROOT, 'agents/background/references');
+  /**
+   * The exception has to be named, not gestured at. An earlier version of this
+   * check also accepted "by the system", which appears in ordinary prose
+   * ("continued by the system") — so the unqualified claim it was written to
+   * catch sailed straight through it.
+   */
+  const qualifiers = /force[- ]quit|force-quitting|app switcher|swipes? the app away/i;
+
+  for (const file of fs.readdirSync(dir)) {
+    const src = fs.readFileSync(path.join(dir, file), 'utf8');
+    // Paragraph-level: a survival claim needs its qualifier nearby, not three
+    // sections away.
+    for (const para of src.split(/\n\s*\n/)) {
+      const claimsSurvival =
+        /survives? (the app being )?(backgrounded or )?(being )?(killed|terminated)/i.test(para) ||
+        /continues? independently of your process/i.test(para) ||
+        /(real|actual|an?) guarantee/i.test(para);
+      if (!claimsSurvival) continue;
+      assert(
+        qualifiers.test(para),
+        `${file}: claims background work survives termination without naming the force-quit exception:\n    ${para.replace(/\s+/g, ' ').slice(0, 120)}`,
+      );
+    }
+  }
+});
+
+test('payments guidance does not present removed APIs as current', () => {
+  // Three review rounds found wrong platform facts in this agent. The v13 names
+  // still belong in the migration table — what must not happen is a code fence
+  // showing one as the way to do it. Checked structurally: prose mentions are
+  // fine, fenced examples are not.
+  const removed = [
+    'getProducts',
+    'getSubscriptions',
+    'requestSubscription',
+    'getPurchaseHistory',
+    'clearProductsIOS',
+    'E_USER_CANCELLED',
+    'localizedPrice',
+    'transactionReceipt',
+  ];
+
+  const dir = path.join(ROOT, 'agents/payments');
+  const files = [
+    path.join(dir, 'agent.md'),
+    ...fs.readdirSync(path.join(dir, 'references')).map((f) => path.join(dir, 'references', f)),
+  ];
+
+  for (const file of files) {
+    const src = fs.readFileSync(file, 'utf8');
+    // Fenced blocks only. A table row or a sentence naming the old API is the
+    // migration guidance doing its job.
+    for (const [, body] of src.matchAll(/```[a-z]*\n([\s\S]*?)```/g)) {
+      for (const api of removed) {
+        if (!body.includes(api)) continue;
+        // A line marked as the wrong way, or as the v13 side of a comparison,
+        // is the point of the example.
+        const offending = body
+          .split('\n')
+          .filter((l) => l.includes(api))
+          .filter((l) => !/✗|v13|deprecated|rg -n|grep|no longer|removed/i.test(l));
+        assert(
+          offending.length === 0,
+          `${path.relative(ROOT, file)}: code example uses removed API "${api}" as if current:\n    ${offending[0].trim()}`,
+        );
+      }
+    }
+  }
+});
+
+test('payments knowledge records the library version its examples target', () => {
+  // The React Native version in knowledge.json was current the entire time this
+  // agent documented an API that no longer existed, because the library moves
+  // on its own schedule and nothing tracked it.
+  const lib = KNOWLEDGE.libraries?.['react-native-iap'];
+  assert(lib, 'knowledge.json should record the react-native-iap version the examples target');
+  assert(/^\d+\.\d+$/.test(String(lib.verified_through)), `odd version: ${lib.verified_through}`);
+  assert(lib.used_by?.includes('rn-payments'), 'the record should name the agent that depends on it');
+
+  // The reference must state its assumed version, so a reader on v13 knows.
+  const flow = fs.readFileSync(path.join(ROOT, 'agents/payments/references/purchase-flow.md'), 'utf8');
+  assert(
+    new RegExp(`v${String(lib.verified_through).split('.')[0]}\\b`).test(flow),
+    'purchase-flow.md should state which major version its examples assume',
+  );
+});
+
+test('TELEMETRY.md shows the current version in its example payload', () => {
+  // It documents every field that can ship, verbatim, and is the page a
+  // privacy-conscious user reads before opting in. A stale example version
+  // reads as a document nobody maintains, which is the opposite of the point.
+  const doc = fs.readFileSync(path.join(ROOT, 'TELEMETRY.md'), 'utf8');
+  const row = doc.match(/^\|\s*`version`\s*\|\s*`([^`]+)`/m);
+  assert(row, 'no `version` row found in the collected-fields table');
+  eq(row[1], VERSION, 'TELEMETRY.md example version');
 });
 
 test('no hardcoded version literals remain in the generators', () => {
@@ -924,7 +1894,7 @@ test('routing: release still wins its own vocabulary', () => {
   }
 });
 
-test('routing: every one of the 21 agents is reachable from a plausible query', () => {
+test('routing: every agent is reachable from a plausible query', () => {
   // The 11 agents added in 1.2.0 had no MCP signals at all, so automatic
   // selection could never reach them — users would be silently routed to a
   // near-neighbour at low confidence. This asserts each one is the top match
@@ -941,6 +1911,9 @@ test('routing: every one of the 21 agents is reachable from a plausible query', 
     ['changes are lost when the user has no connection', 'rn-offline'],
     ['should we use zustand or redux toolkit', 'rn-state'],
     ['we inherited this codebase with no documentation', 'rn-onboard'],
+    ['receipt validation for subscriptions', 'rn-payments'],
+    ['my background fetch never runs on android', 'rn-background'],
+    ['invalid hook call after adding a workspace package', 'rn-monorepo'],
   ]) {
     eq(scoreAgents(task, agents)[0]?.id, expected, task);
   }
@@ -965,6 +1938,197 @@ test('routing: every agent has an MCP signal block', () => {
   // scores 2 and reads as a coin flip.
   const missing = agents.map((a) => a.id).filter((id) => !SIGNALS[id]);
   assert(missing.length === 0, `no MCP signals for: ${missing.join(', ')}`);
+});
+
+test('routing: terms match whole words, not substrings', () => {
+  // Plain includes() matched 'list' in 'listener', 'store' in 'restore' and
+  // 'npm' in 'pnpm', which ranked rn-payments above rn-offline for a NetInfo
+  // subscription question.
+  for (const [task, expected] of [
+    ['how do I unsubscribe from a NetInfo subscription', 'rn-offline'],
+    ['pnpm workspace resolution', 'rn-monorepo'],
+    ['restore purchases is broken', 'rn-payments'],
+  ]) {
+    eq(scoreAgents(task, agents)[0]?.id, expected, task);
+  }
+});
+
+test('routing: generic build errors do not outrank rn-doctor', () => {
+  // 'unable to resolve module' and 'invalid hook call' were strong monorepo
+  // terms, so single-project failures tied with or beat the doctor.
+  eq(scoreAgents('unable to resolve module', agents)[0]?.id, 'rn-doctor');
+  // ...but the same error with workspace context is monorepo territory.
+  eq(scoreAgents('unable to resolve module in our pnpm workspace', agents)[0]?.id, 'rn-monorepo');
+  eq(scoreAgents('invalid hook call after adding a workspace package', agents)[0]?.id, 'rn-monorepo');
+});
+
+test('routing: inflections match without matching unrelated words', () => {
+  // A bare word boundary stopped 'track' matching 'tracking' and dropped an
+  // obvious analytics query to low confidence.
+  const tracking = scoreAgents('tracking analytics events', agents)[0];
+  eq(tracking?.id, 'rn-observability');
+  assert(tracking.confidence !== 'low', `should be confident, got ${tracking.confidence}`);
+
+  // 'listener' is still not 'list' — 'ener' is not an inflection.
+  eq(scoreAgents('how do I unsubscribe from a NetInfo subscription', agents)[0]?.id, 'rn-offline');
+});
+
+test('routing: stems are explicit, not guessed from suffixes', () => {
+  // Applying English inflections to every short term made 'list' match
+  // 'listing'; leaving multi-word terms unbounded made 'app store' match
+  // 'app storefront'. Stems now declare themselves with a trailing '*'.
+  const notRelease = (task) => {
+    const top = scoreAgents(task, agents)[0];
+    assert(top?.id !== 'rn-store-submission' && top?.id !== 'rn-release', `${task} → ${top?.id}`);
+  };
+  notRelease('Build an app storefront screen');
+  notRelease('app stored data locally');
+
+  const listing = scoreAgents('listing all products', agents)[0];
+  assert(listing?.id !== 'rn-performance', `listing matched performance: ${listing?.id}`);
+
+  // Declared stems still match their inflections.
+  eq(scoreAgents('tracking analytics events', agents)[0]?.id, 'rn-observability');
+  eq(scoreAgents('found a vulnerability in auth', agents)[0]?.id, 'rn-security');
+
+  // Whole words and their plurals still match.
+  eq(scoreAgents('the app freezes on scroll', agents)[0]?.id, 'rn-performance');
+  eq(scoreAgents('rejected from the app store', agents)[0]?.id, 'rn-store-submission');
+});
+
+test('the absolutes guard has no escape hatch left', () => {
+  // Every sentence below defeated an earlier generation of this guard. With no
+  // negation inference and no allow-list, all of them must now fail.
+  const flag = (text) => {
+    const flat = text.replace(/\n+/g, ' ');
+    return FORBIDDEN_ABSOLUTES.filter((rule) => rule.patterns.some((p) => p.test(flat)))
+      .map((r) => r.claim);
+  };
+
+  const mustFlag = [
+    ['self-negating claim', 'On-device validation is not validation.'],
+    [
+      'the wording it shipped as',
+      'A receipt validated on the device, or trusted because the SDK returned success, is not validated.',
+    ],
+    [
+      'unrelated preceding negation',
+      'Do not trust the callback; on-device validation is not validation.',
+    ],
+    [
+      'allowed phrase plus a contradictory clause',
+      'Do not simply reject sandbox receipts; you should reject sandbox receipts in production.',
+    ],
+    [
+      'refutation plus a contradictory clause',
+      'It does not impose a blanket rule, but restore must work without an account.',
+    ],
+    ['the historical restore bullet', '- **A restore path**, reachable without an account.'],
+    [
+      'the historical price comment',
+      '// ✗ wrong in every other currency, and a store rejection',
+    ],
+    ['claim split across a line break', 'A restore path,\nreachable without an account.'],
+  ];
+
+  for (const [why, text] of mustFlag) {
+    assert(flag(text).length > 0, `should have been flagged (${why}): ${text.slice(0, 60)}`);
+  }
+
+  // And the prose actually shipped must be clean — no exemption, just wording
+  // that does not repeat the forbidden claim.
+  const pay = agents.find((a) => a.id === 'rn-payments');
+  for (const { name, text } of [
+    { name: 'agent.md', text: pay.body },
+    ...pay.references.map((r) => ({ name: r.slug ?? r.name, text: r.content })),
+  ]) {
+    assert(flag(text).length === 0, `${name} still contains: ${flag(text).join(', ')}`);
+  }
+});
+
+test('routing: intended queries resolve above low confidence', () => {
+  // A correct top match at 'low' still prints a hedge telling the user it is a
+  // guess — the previous test only checked the agent id.
+  for (const [task, expected] of [
+    ['Profiling the Hermes runtime', 'rn-performance'],
+    ['Modernising our app', 'rn-upgrade'],
+    ['Symbolicate this crash', 'rn-observability'],
+    ['make it accessible for screen readers', 'rn-ui-accessibility'],
+    ['screen orientation is wrong on device', 'rn-platform-parity'],
+  ]) {
+    const top = scoreAgents(task, agents)[0];
+    eq(top?.id, expected, task);
+    assert(top.confidence !== 'low', `${task}: ${top.id} at ${top.confidence}`);
+  }
+});
+
+test('routing: no stem prefix hijacks an ordinary app-feature query', () => {
+  // 'profil*' matched "edit profile avatar", 'modernis*' matched "modernist",
+  // and bare 'orientation' matched "new developer orientation" — all at high
+  // confidence. Explicit multi-word terms replaced all three.
+  for (const task of [
+    'user profile screen',
+    'edit profile avatar',
+    'profile picture upload',
+    'update the profile page',
+    'modernist UI design',
+    'new developer orientation',
+    'team orientation to codebase',
+  ]) {
+    const top = scoreAgents(task, agents)[0];
+    assert(
+      !top || top.confidence === 'low',
+      `"${task}" should not confidently route — got ${top?.id} at ${top?.confidence}`,
+    );
+  }
+
+  // The domain senses must still resolve confidently.
+  for (const [task, expected] of [
+    ['Profiling the Hermes runtime', 'rn-performance'],
+    ['profile the app startup', 'rn-performance'],
+    ['Modernising our app', 'rn-upgrade'],
+    ['we want to modernize the codebase', 'rn-upgrade'],
+    ['screen orientation is wrong on device', 'rn-platform-parity'],
+    ['handle orientation change on android', 'rn-platform-parity'],
+  ]) {
+    const top = scoreAgents(task, agents)[0];
+    eq(top?.id, expected, task);
+    assert(top.confidence !== 'low', `${task}: ${top.id} at ${top.confidence}`);
+  }
+});
+
+test('routing: every intended stem carries its marker', () => {
+  // The first stem migration was hand-listed and missed profil, accessib,
+  // symbolicat and modernis. This derives the list instead: a term that never
+  // appears standalone in its own agent's prose, only as a prefix, is a stem.
+  const missing = [];
+  for (const [id, sig] of Object.entries(SIGNALS)) {
+    const agent = agents.find((a) => a.id === id);
+    if (!agent) continue;
+    const prose = [agent.body, ...agent.references.map((r) => r.content)].join('\n').toLowerCase();
+    for (const tier of ['strong', 'medium', 'weak']) {
+      for (const term of sig[tier] ?? []) {
+        if (term.endsWith('*') || term.includes(' ') || term.length < 4) continue;
+        if (KNOWN_WHOLE_WORDS.has(term)) continue;
+        const standalone = new RegExp(`(?<![\\w-])${term}(?:e?s)?(?![\\w-])`).test(prose);
+        const asPrefix = new RegExp(`(?<![\\w-])${term}[a-z]{2,}`).test(prose);
+        if (!standalone && asPrefix) missing.push(`${id}: "${term}" reads as a stem — mark it "${term}*"`);
+      }
+    }
+  }
+  assert(missing.length === 0, missing.join('\n    '));
+});
+
+test('routing: declared stems match their inflections', () => {
+  for (const [task, expected] of [
+    ['Profiling the Hermes runtime', 'rn-performance'],
+    ['Symbolicate this crash', 'rn-observability'],
+    ['Modernising our app', 'rn-upgrade'],
+    ['make it accessible for screen readers', 'rn-ui-accessibility'],
+    ['tracking analytics events', 'rn-observability'],
+  ]) {
+    eq(scoreAgents(task, agents)[0]?.id, expected, task);
+  }
 });
 
 test('routing: unrelated text matches nothing rather than guessing', () => {
@@ -1133,6 +2297,108 @@ test('third-party actions are pinned to a commit SHA, not a mutable tag', () => 
       );
     }
   }
+});
+
+test('no action.yml input is marked required when the code accepts alternatives', () => {
+  // `api-key` was `required: true` while index.mjs resolves it from the input,
+  // from ANTHROPIC_API_KEY/OPENAI_API_KEY, or not at all under `dry-run` and
+  // `provider: mock`. GitHub does not enforce the flag on a composite action,
+  // so the only thing it did was contradict the documentation beside it.
+  const yml = fs.readFileSync(path.join(ROOT, 'action.yml'), 'utf8');
+  const inputsBlock = yml.split(/^outputs:/m)[0];
+  const required = [...inputsBlock.matchAll(/^ {2}([\w-]+):\n((?: {4}.*\n|\n)*)/gm)]
+    .filter((m) => /required:\s*true/.test(m[2]))
+    .map((m) => m[1]);
+
+  const src = fs.readFileSync(path.join(ROOT, 'action/index.mjs'), 'utf8');
+  for (const name of required) {
+    const camel = name.replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+    // A fallback chain (`?? ...`) means the input is not the only source.
+    const hasFallback = new RegExp(`\\b${camel}\\s*=[\\s\\S]{0,240}?\\?\\?`).test(src);
+    assert(
+      !hasFallback,
+      `action.yml marks "${name}" required, but index.mjs falls back to another source for it`,
+    );
+  }
+
+  assert(
+    !required.includes('api-key'),
+    'api-key is resolvable from env, and dry-run and mock need none — it must not be required',
+  );
+});
+
+test('action.yml names every agent that can actually be forced', () => {
+  // It listed the original six long after there were twenty-four, so anyone
+  // reading the input documentation would not know rn-payments or rn-upgrade
+  // could be requested at all. YAML cannot derive this, so it is checked.
+  const src = fs.readFileSync(path.join(ROOT, 'action.yml'), 'utf8');
+  const described = src.match(/ {2}agents:\n(?: {4}.*\n)+/)?.[0] ?? '';
+  assert(described, 'no `agents:` input found in action.yml');
+
+  const review = agents.filter((a) => a.mode !== 'interactive');
+  for (const a of review) {
+    assert(
+      described.includes(a.id),
+      `action.yml's agents input does not mention ${a.id}, which auto-routing can select`,
+    );
+  }
+  // Interactive agents cannot review a diff; naming them here invites a run
+  // that produces nothing.
+  for (const a of agents.filter((x) => x.mode === 'interactive')) {
+    assert(
+      !described.includes(a.id),
+      `action.yml offers ${a.id}, which needs a human question rather than a diff`,
+    );
+  }
+  assert(
+    new RegExp(`\\b${review.length}\\b`).test(described),
+    `action.yml should state the real count of forceable agents (${review.length})`,
+  );
+});
+
+test('workflows holding id-token: write install nothing from a floating tag', () => {
+  // Same reasoning as the SHA-pinning test above, applied to package installs.
+  // publish.yml ran `npm install -g npm@latest` in a job with `id-token: write`,
+  // so whichever npm had been published most recently executed with the OIDC
+  // credential in scope. The repo's own security agent calls this out; the
+  // release path should not be the one place that ignores it.
+  const dir = path.join(ROOT, '.github/workflows');
+  for (const f of fs.readdirSync(dir)) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8');
+    if (!/id-token:\s*write/.test(src)) continue;
+
+    // Strip comments first: the fix is documented by naming what it replaced,
+    // and that prose should not trip the check that enforces it.
+    const code = src
+      .split('\n')
+      .map((l) => l.replace(/#.*$/, ''))
+      .join('\n');
+
+    for (const [full, spec] of code.matchAll(
+      /\b(?:npm\s+(?:install|i|add)|npx|pnpm\s+add|yarn\s+add)\b[^\n]*?([\w@./-]+@(?:latest|next|canary|beta|\*))/g,
+    )) {
+      assert(
+        false,
+        `${f}: "${spec}" is a floating version installed in a job that can mint an OIDC token — ` +
+          `pin it exactly (in: ${full.trim().slice(0, 60)})`,
+      );
+    }
+  }
+});
+
+test('the release summary distinguishes a dry run from a real publish', () => {
+  // It printed "### Published" whether or not the publish step ran, so the one
+  // workflow input whose purpose is "do not publish" reported a release.
+  const src = fs.readFileSync(path.join(ROOT, '.github/workflows/publish.yml'), 'utf8');
+  if (!/### Published/.test(src)) return; // wording changed; nothing to guard
+  assert(
+    /steps\.publish\.outcome/.test(src),
+    'the summary claims a publish without checking whether the publish step ran',
+  );
+  assert(
+    /id:\s*publish/.test(src),
+    'the publish step needs an `id` for its outcome to be readable',
+  );
 });
 
 test('the demo workflow exercises the working tree, not a published release', () => {

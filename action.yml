@@ -13,7 +13,15 @@ inputs:
     description: >-
       Anthropic or OpenAI API key. Runs in your CI with your key — no data goes
       to any third party beyond your chosen model provider.
-    required: true
+
+      Not marked required, because there are three supported ways to supply it
+      and two cases that need no key at all. Passing it here is the usual one;
+      alternatively set ANTHROPIC_API_KEY or OPENAI_API_KEY in the job's `env`,
+      and the run picks up whichever matches the chosen provider. `dry-run: true`
+      makes no model call, and `provider: mock` calls nothing — both work with no
+      key. A real run with no key anywhere still fails, with a message naming the
+      variable it looked for.
+    required: false
 
   provider:
     description: 'anthropic | openai | mock'
@@ -27,8 +35,11 @@ inputs:
 
   agents:
     description: >-
-      Comma-separated agent ids to force (rn-performance, rn-security,
-      rn-code-quality, rn-ui-accessibility, rn-testing, rn-release).
+      Comma-separated agent ids to force. Any of the 17 review agents:
+      rn-background, rn-code-quality, rn-native-modules, rn-navigation,
+      rn-observability, rn-offline, rn-payments, rn-performance,
+      rn-permissions, rn-platform-parity, rn-push, rn-release, rn-security,
+      rn-state, rn-testing, rn-ui-accessibility, rn-upgrade.
       Leave empty to auto-route based on which files changed — recommended,
       and typically 60-70% cheaper.
     required: false
@@ -41,8 +52,14 @@ inputs:
 
   budget-usd:
     description: >-
-      Hard spend cap per run, in USD. The run stops cleanly and reports what it
-      managed to review rather than silently overspending.
+      Estimated preflight budget per run, in USD. Before each call the run
+      estimates its cost from token counts and published prices; when the
+      running estimate would exceed this, it stops cleanly and reports what it
+      managed to review. It is not a hard cap: token counts are estimated, an
+      in-flight call is not interrupted, and a model missing from the price
+      table is priced by a conservative fallback. Treat it as a brake, not a
+      guarantee — set provider-side spend limits for anything you must not
+      exceed.
     required: false
     default: '2'
 
@@ -98,6 +115,13 @@ outputs:
   agents-failed:
     description: 'Comma-separated ids of agents that errored.'
     value: ${{ steps.audit.outputs.agents-failed }}
+  coverage-gaps:
+    description: >-
+      Number of distinct reasons part of this pull request was not reviewed —
+      files GitHub returned no patch for, the 3,000-file listing cap, or files
+      dropped from a prompt at its size limit. Non-zero means the findings
+      describe only part of the diff.
+    value: ${{ steps.audit.outputs.coverage-gaps }}
   budget-hit:
     description: 'true when the budget cap stopped the run before every agent had run.'
     value: ${{ steps.audit.outputs.budget-hit }}

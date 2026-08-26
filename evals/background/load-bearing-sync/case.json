@@ -1,0 +1,100 @@
+{
+  "agent": "rn-background",
+  "title": "Drafts only persist via a background task registered inside a screen",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Six defects, and the reported symptom names the design error rather than a code bug. (1) The user's drafts exist only in memory until a background task uploads them — the work is load-bearing, so when the task does not run the user loses data. This is the P0 and the redesign is foreground sync plus durable local persistence. (2) BackgroundFetch.finish(taskId) is never called on any path, which on iOS causes the system to deprioritise future scheduling. (3) configure() runs inside a component's useEffect, so it only registers if the user visits Settings. (4) minimumFetchInterval: 15 is treated as a guarantee; both platforms treat it as a floor on a discretionary schedule. (5) The loop is not idempotent or resilient — one failed post aborts the rest, and a retry re-posts drafts already accepted. (6) 'Works fine on my Pixel' is the OEM-fragmentation tell: aggressive battery managers on other brands are a likely cause of the clustering. Tests whether the agent leads with the design problem rather than the missing finish() call.",
+  "expect": [
+    {
+      "name": "identifies that user data depends on the background task running",
+      "any": [
+        "load-bearing",
+        "depends on",
+        "data loss",
+        "lose",
+        "must not rely",
+        "design"
+      ]
+    },
+    {
+      "name": "recommends persisting locally and syncing on foreground",
+      "any": [
+        "persist",
+        "foreground",
+        "appstate",
+        "on open",
+        "durable",
+        "local"
+      ]
+    },
+    {
+      "name": "flags the missing completion handler",
+      "any": [
+        "finish",
+        "completion handler",
+        "taskid",
+        "never called"
+      ]
+    },
+    {
+      "name": "flags registration inside a component",
+      "any": [
+        "useeffect",
+        "component",
+        "module scope",
+        "entry",
+        "only registers"
+      ]
+    },
+    {
+      "name": "explains that the interval is not a guarantee",
+      "any": [
+        "not guaranteed",
+        "discretionary",
+        "minimum",
+        "hint",
+        "may not run",
+        "floor"
+      ]
+    },
+    {
+      "name": "raises OEM or device variation given the Pixel remark",
+      "any": [
+        "oem",
+        "manufacturer",
+        "device",
+        "brand",
+        "varies",
+        "battery manager"
+      ]
+    }
+  ],
+  "expectSeverity": [
+    {
+      "atLeast": "P0"
+    }
+  ],
+  "forbid": [
+    {
+      "name": "recommends a foreground service to make polling reliable",
+      "pattern": "foreground service",
+      "unlessPattern": "(?<![\\w-])not\\ appropriate(?![\\w-])|(?<![\\w-])not\\ for(?![\\w-])|rejection\\b|(?<![\\w-])only\\ for(?![\\w-])|(?:user-)?visible\\s+\\w+|\\bvisible to the user|(?<![\\w-])would\\ be\\ misuse(?![\\w-])"
+    },
+    {
+      "name": "recommends requesting a battery optimisation exemption",
+      "pattern": "(battery optimi[sz]ation|ignore_battery)",
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|(?<![\\w-])last\\ resort(?![\\w-])|(?<![\\w-])user\\-hostile(?![\\w-])|restricted\\b"
+    },
+    {
+      "name": "recommends shortening the interval to improve reliability",
+      "pattern": "(reduce|lower|shorten|decrease)\\s+.{0,20}interval",
+      "unlessPattern": "(?<![\\w-])will\\ not(?![\\w-])|(?<![\\w-])does\\ not\\ help(?![\\w-])|(?<![\\w-])not\\ honoured(?![\\w-])|(?<![\\w-])no\\ effect(?![\\w-])"
+    },
+    {
+      "name": "invents an execution rate",
+      "pattern": "\\b\\d+\\s?%\\s+of\\s+(the time|tasks|users|devices)"
+    }
+  ]
+}

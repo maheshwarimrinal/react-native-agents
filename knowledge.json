@@ -20,6 +20,38 @@
     "notes": "Concurrent features, React Compiler, and `use()` are all in scope."
   },
 
+  "libraries": {
+    "$comment": "Third-party libraries whose API the agents quote concretely. Tracked separately from the platform because they move on their own schedule, and because payments guidance went stale across three review rounds while the React Native version above was current.",
+    "react-native-iap": {
+      "package": "react-native-iap",
+      "verified_through": "14.7",
+      "verified_on": "2026-08-24",
+      "used_by": ["rn-payments"],
+      "notes": "v14 is a hard break, not a deprecation: getProducts, getSubscriptions, requestSubscription, getPurchaseHistory, clearProductsIOS, flushFailedPurchasesCachedAsPendingAndroid and setup were removed. StoreKit 2 (iOS 15+), Play Billing 7+, RN 0.71+. Error codes moved to the unified ErrorCode enum, so the old 'E_USER_CANCELLED' string silently stops matching. purchase-flow.md carries the full v13→v14 table."
+    }
+  },
+
+  "yarnBerry": {
+    "$comment": "Recorded because 'Yarn workspaces = hoisted' was true of Classic and wrong for Berry, and the monorepo agent stated it flatly.",
+    "verified_on": "2026-08-24",
+    "source": "https://yarnpkg.com/configuration/yarnrc#nodeLinker",
+    "notes": "Yarn 2+ has three nodeLinker modes: 'pnp' (single .pnp loader, no node_modules), 'pnpm' (node_modules of symlinks/hardlinks into a content-addressable store), and 'node-modules' (regular hoisted layout as in Classic/npm). React Native requires node-modules — Metro, autolinking, Gradle and CocoaPods all need real directories and none support PnP. nmHoistingLimits (none | workspaces | dependencies) still restricts hoisting under node-modules and can reintroduce duplicate copies. Do not state a Berry default; it has been contested between releases — read the project's .yarnrc.yml instead.",
+    "used_by": ["rn-monorepo"]
+  },
+
+  "appleBackground": {
+    "$comment": "Not an npm package, so the freshness job cannot check it. Recorded so the claim carries a date.",
+    "verified_on": "2026-08-24",
+    "source": "https://developer.apple.com/documentation/foundation/urlsessionconfiguration/background(withidentifier:)",
+    "notes": "A background URLSession transfer continues when the app is suspended or terminated BY THE SYSTEM, and the system relaunches the app so it can collect results using the same identifier. User force-quit from the app switcher is different: the system cancels all of that session's background transfers and does not automatically relaunch the app — the user must open it before transfers resume. Guidance must distinguish the two; 'survives being killed' unqualified is wrong."
+  },
+
+  "applePayments": {
+    "$comment": "Not an npm package, so the freshness job cannot check it — it is recorded here so the claim has a date attached rather than being implicitly current.",
+    "verified_on": "2026-08-24",
+    "notes": "verifyReceipt deprecated 2023-06-05. Still functional, no end-of-life date announced, receives no new features. Apple directs new work to the App Store Server API, to verifying StoreKit 2 signed JWS via the App Store Server Library, or to App Store Server Notifications V2. The 21007 production-then-sandbox retry is specific to verifyReceipt: the App Store Server API selects environment by base URL (api.storekit.itunes.apple.com vs api.storekit-sandbox.itunes.apple.com) and returns 401 for a cross-environment transaction id."
+  },
+
   "policy": {
     "review_window_days": 90,
     "on_new_minor": "Open a maintenance issue listing references that mention version-specific behaviour.",

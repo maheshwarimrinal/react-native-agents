@@ -1,55 +1,84 @@
 {
   "agent": "rn-onboard",
   "title": "Two days of repo access to price an upgrade plus an offline feature",
-  "context": { "language": "TypeScript" },
-
+  "context": {
+    "language": "TypeScript"
+  },
   "notes": "A scoping question where the honest answer is that the two requests have very different estimability. The upgrade can be priced with reasonable confidence in two days: current RN version, New Architecture status, the native dependency inventory and each one's New Arch support, custom native modules using the old API, and patches. Offline mode cannot be priced from the repo alone — it depends on which flows must work offline, whether the API supports idempotency keys and conflict detection, and what the client means by the phrase, none of which are in the code. The right output names that asymmetry and lists what to ask the client. The failure mode being tested is producing a confident single estimate, or worse, inventing day counts from a repo the agent has not seen. Also tests whether it routes the specialist work to rn-upgrade and rn-offline rather than answering everything itself.",
-
   "expect": [
     {
       "name": "distinguishes the upgrade as estimable from offline as not",
-      "any": ["different", "harder to estimate", "cannot price", "depends on", "asymmetr", "unlike"]
+      "any": [
+        "different",
+        "harder to estimate",
+        "cannot price",
+        "depends on",
+        "asymmetr",
+        "unlike"
+      ]
     },
     {
       "name": "lists the native dependency inventory as the upgrade cost driver",
-      "any": ["native depend", "new architecture support", "each dependency", "inventory", "blocking"]
+      "any": [
+        "native depend",
+        "new architecture support",
+        "each dependency",
+        "inventory",
+        "blocking"
+      ]
     },
     {
       "name": "flags custom native modules as an upgrade risk",
-      "any": ["custom native", "rctbridgemodule", "own native", "swift", "kotlin"]
+      "any": [
+        "custom native",
+        "rctbridgemodule",
+        "own native",
+        "swift",
+        "kotlin"
+      ]
     },
     {
       "name": "identifies questions for the client that the repo cannot answer",
-      "any": ["ask the client", "which flows", "what they mean", "requirements", "clarify"]
+      "any": [
+        "ask the client",
+        "which flows",
+        "what they mean",
+        "requirements",
+        "clarify"
+      ]
     },
     {
       "name": "raises server-side requirements for offline",
-      "any": ["idempoten", "conflict", "api support", "server", "backend"]
+      "any": [
+        "idempoten",
+        "conflict",
+        "api support",
+        "server",
+        "backend"
+      ]
     }
   ],
-
   "expectSeverity": [],
-
   "forbid": [
     {
       "name": "produces a day or cost estimate from a repo it has not seen",
       "pattern": "\\b\\d+\\s*(-|to)?\\s*\\d*\\s*(days?|weeks?|hours?)\\b",
-      "unless": ["depends", "cannot", "range would", "only after", "once you"]
+      "unlessPattern": "depends\\s+on|(?:cannot|can't|could not)\\s+\\w+|(?<![\\w-])range\\ would(?![\\w-])|(?<![\\w-])only\\ after(?![\\w-])|(?<![\\w-])once\\ you(?![\\w-])"
     },
     {
       "name": "asserts the upgrade is straightforward without evidence",
       "pattern": "(should be|will be)\\s+(straightforward|simple|easy|quick)",
-      "unless": ["may", "if", "cannot assume", "not"]
+      "unlessPattern": "\\b(may|might|could)\\s+(be|prove)\\b|\\bcannot assume\\b|\\b(is|are)\\s+not\\s+(necessarily|always)\\b|\\bif (nothing|there|the|no)\\b|\\bdepend\\w*\\s+on\\b"
     },
     {
       "name": "treats offline mode as a library choice",
       "pattern": "(just|simply)\\s+(add|use|install)\\s+.{0,25}(offline|sync|watermelon)",
-      "unless": ["not", "more than", "does not"]
+      "unlessPattern": "\\b(is|are)\\s+not\\s+(just|simply|only)\\s+a\\s+(library|package|dependency)\\b|\\b(more|bigger) than a (library|package)\\b|\\b(does|do) not\\s+(solve|handle|fix)\\b|\\bconflict resolution\\b"
     },
     {
       "name": "invents a dependency count",
       "pattern": "\\b\\d+\\s+(native\\s+)?dependencies\\b",
-      "unless": ["however many", "count", "for example", "if there are"]
+      "unlessPattern": "(?<![\\w-])however\\ many(?![\\w-])|\\bcount\\b|(?<![\\w-])for\\ example(?![\\w-])|(?<![\\w-])if\\ there\\ are(?![\\w-])"
     }
   ]
 }

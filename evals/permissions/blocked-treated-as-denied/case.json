@@ -1,50 +1,83 @@
 {
   "agent": "rn-permissions",
   "title": "Retry button calls request() when the status is BLOCKED",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "The reported symptom is the giveaway. Status is collapsed to a boolean, so BLOCKED and DENIED are indistinguishable. On iOS, once the user has declined, request() resolves immediately without showing a prompt — so the Allow button genuinely does nothing, forever. The fix is to branch on the status and offer Linking.openSettings() for BLOCKED. Three secondary issues: LIMITED is treated as not granted (an iOS user who granted limited photo access would be blocked from a feature they enabled — here it matters as a pattern), the status is never re-checked on AppState resume so a user who grants in Settings returns to a screen still saying denied, and the dead-end UI offers no alternative path. Tests whether the agent connects the symptom to the state collapse rather than proposing generic permission advice.",
-
   "expect": [
     {
       "name": "identifies that BLOCKED and DENIED are collapsed into a boolean",
-      "any": ["blocked", "boolean", "collapse", "distinguish", "different states"]
+      "any": [
+        "blocked",
+        "boolean",
+        "collapse",
+        "distinguish",
+        "different states"
+      ]
     },
     {
       "name": "explains that request() does nothing once blocked",
-      "any": ["does nothing", "resolves immediately", "no prompt", "will not show", "silently"]
+      "any": [
+        "does nothing",
+        "resolves immediately",
+        "no prompt",
+        "will not show",
+        "silently"
+      ]
     },
     {
       "name": "recommends openSettings for the blocked case",
-      "any": ["opensettings", "open settings", "settings"]
+      "any": [
+        "opensettings",
+        "open settings",
+        "settings"
+      ]
     },
     {
       "name": "flags the missing re-check when returning from Settings",
-      "any": ["appstate", "resume", "re-check", "recheck", "when they return", "foreground"]
+      "any": [
+        "appstate",
+        "resume",
+        "re-check",
+        "recheck",
+        "when they return",
+        "foreground"
+      ]
     },
     {
       "name": "flags the dead end with no alternative path",
-      "any": ["alternative", "dead end", "upload", "fallback", "way forward", "without the camera"]
+      "any": [
+        "alternative",
+        "dead end",
+        "upload",
+        "fallback",
+        "way forward",
+        "without the camera"
+      ]
     }
   ],
-
-  "expectSeverity": [{ "atLeast": "P1" }],
-
+  "expectSeverity": [
+    {
+      "atLeast": "P1"
+    }
+  ],
   "forbid": [
     {
       "name": "recommends re-requesting on mount or on every launch",
       "pattern": "request.{0,30}(on mount|on launch|every time|useEffect)",
-      "unless": ["do not", "avoid", "instead", "not"]
+      "unlessPattern": "\\b(do not|don't|avoid|never|not)\\s+\\w{0,20}\\s*(re-?request|request)|\\binstead\\b|\\bonly (when|after|in response)\\b|\\bin response to\\b"
     },
     {
       "name": "claims the Info.plist string is missing without having seen it",
       "pattern": "(missing|no)\\s+NSCameraUsageDescription",
-      "unless": ["verify", "check", "confirm", "if", "cannot see"]
+      "unlessPattern": "\\b(verify|check|confirm)\\b|\\bcannot see\\b|\\bnot (visible|included|shown) (in|here)\\b|\\bif (the|it|this)\\b|\\bunable to (see|read|inspect)\\b"
     },
     {
       "name": "treats LIMITED as a denial",
       "pattern": "limited.{0,30}(is|means)\\s+(denied|not granted)",
-      "unless": ["is not", "should not", "do not"]
+      "unlessPattern": "(?<![\\w-])is\\ not(?![\\w-])|(?<![\\w-])should\\ not(?![\\w-])|(?<![\\w-])do\\ not(?![\\w-])"
     },
     {
       "name": "invents a grant-rate statistic",

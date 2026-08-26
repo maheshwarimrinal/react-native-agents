@@ -10,6 +10,8 @@
  * agent's frontmatter, so there is no second source of truth to maintain.
  */
 
+import { REVIEW_MODES, isReviewAgent } from '../../scripts/lib/source.mjs';
+
 // Minimal glob matching (no dependencies). Supports the subset used in agent
 // frontmatter: `**` for any depth, `*` within a segment, `?`, and `{a,b}`
 // alternation. Examples: `**/*.tsx`, `**/*.{ts,tsx}`, `**/AndroidManifest.xml`,
@@ -172,6 +174,31 @@ export const SIGNALS = {
     'index.ts',
     'index.tsx',
   ],
+  'rn-payments': [
+    '**/*{purchase,Purchase,billing,Billing,subscription,Subscription,paywall,Paywall,iap,IAP}*.{ts,tsx,js,jsx}',
+    '**/*{entitlement,Entitlement,receipt,Receipt,storekit,StoreKit,revenuecat,RevenueCat}*.{ts,tsx,js,jsx}',
+    '**/{payments,billing,purchases,subscriptions}/**',
+  ],
+  'rn-background': [
+    '**/*{background,Background,headless,Headless,workmanager,WorkManager,bgtask,BGTask}*.{ts,tsx,js,jsx}',
+    '**/*{geofenc,Geofenc}*.{ts,tsx,js,jsx}',
+    // 'tracking' removed: src/analytics/tracking.ts is analytics, not background
+    // location, and rn-observability already owns it.
+    // Native declarations are the whole point of this agent — adding
+    // UIBackgroundModes or a foregroundServiceType is exactly the change it
+    // should review, and it was reaching none of them.
+    '**/Info.plist',
+    '**/AndroidManifest.xml',
+    '**/*.entitlements',
+    // Expo declares background capability through config plugins, so these are
+    // native declarations too — the agent's own globs already listed them.
+    '**/app.json',
+    '**/app.config.*',
+    // NOT '**/{tasks,jobs,workers}/**'. Those directories hold ordinary code —
+    // validateForm.ts, formatInvoice.ts, imageResize.ts all matched and each
+    // wasted a model call. A directory name is not evidence of background
+    // execution; the diff keywords below carry that.
+  ],
   'rn-state': [
     // Anchored to the END of the name. The previous infix pattern matched
     // StorefrontScreen.tsx, Storybook files, and anything else beginning
@@ -272,18 +299,12 @@ export const SIGNALS = {
 };
 
 /**
- * Agents that review a changeset, versus ones that need a human to bring a
- * question, an error log, or a request.
- *
- * `rn-doctor` needs a build failure; `rn-build` needs something to build. Firing
- * them at a diff spends tokens to produce a comment with nothing to say, and
- * noise is what gets review bots muted.
+ * Re-exported, not redefined. The MCP server needs the same answer, and while
+ * this module owned the only copy the MCP audit plan listed all twenty-four
+ * agents including the seven that cannot act on a diff. One definition, in
+ * `scripts/lib/source.mjs`, is what stops that recurring.
  */
-export const REVIEW_MODES = new Set(['review', 'both', undefined]);
-
-export function isReviewAgent(agent) {
-  return REVIEW_MODES.has(agent.mode);
-}
+export { REVIEW_MODES, isReviewAgent };
 
 /**
  * Files that never warrant an audit — routing them wastes tokens and produces
@@ -357,7 +378,70 @@ export function isIgnored(file) {
 const CORE_VERSION_KEYS =
   /["'](react-native|react|react-dom|expo|@react-native\/[\w.-]+|@react-native-community\/cli[\w.-]*|metro|metro-config|metro-react-native-babel-preset|@expo\/cli|@expo\/config|@expo\/metro-config|expo-modules-(core|autolinking))["']\s*:/;
 
+/**
+ * Background-specific keys. A native config file is only evidence for
+ * rn-background when one of these appears in the added lines — otherwise every
+ * camera-permission string and every unrelated manifest edit pulled the agent
+ * in and spent a model call.
+ */
+const BACKGROUND_KEYS = new RegExp(
+  [
+    // ---- iOS -------------------------------------------------------------
+    'UIBackgroundModes',
+    'BGTaskSchedulerPermittedIdentifiers',
+    // The *values* under UIBackgroundModes. A diff that adds a mode to an
+    // existing array shows only the <string> line, never the key.
+    '<string>\\s*(location|audio|fetch|processing|remote-notification|voip|bluetooth-central|bluetooth-peripheral|external-accessory|location-push)\\s*</string>',
+
+    // ---- Android ---------------------------------------------------------
+    'ACCESS_BACKGROUND_LOCATION',
+    'RECEIVE_BOOT_COMPLETED',
+    'SCHEDULE_EXACT_ALARM',
+    'USE_EXACT_ALARM',
+    'WAKE_LOCK',
+    'FOREGROUND_SERVICE',
+    'foregroundServiceType',
+    // A <service> only matters when it is a background worker. Matching every
+    // <service> pulled the agent onto payment and auth services with nothing
+    // to say about them.
+    'android:name="[^"]*(BackgroundService|SyncService|LocationService|HeadlessJsTaskService|JobService|BootReceiver|Worker)"',
+
+    // ---- Expo config plugins --------------------------------------------
+    // Plugins that ARE background execution by definition.
+    'expo-background-fetch',
+    'expo-background-task',
+    'expo-task-manager',
+    // expo-location alone is a foreground permission. It only becomes a
+    // background concern via these documented properties, so gate on them
+    // rather than on the plugin name.
+    'isIosBackgroundLocationEnabled',
+    'isAndroidBackgroundLocationEnabled',
+    'isAndroidForegroundServiceEnabled',
+    'UIBackgroundModes.*location',
+
+    // ---- Library / API surface ------------------------------------------
+    'react-native-background',
+    'BGTaskScheduler',
+    'headlessTask',
+    'registerHeadlessTask',
+    'startLocationUpdatesAsync',
+    'defineTask',
+  ].join('|'),
+  'i',
+);
+
 export const REFINEMENTS = {
+  'rn-background': (file, diffText) => {
+    // Only native config files are gated; source-file signals are specific
+    // enough already.
+    if (!/(Info\.plist|AndroidManifest\.xml|\.entitlements|app\.json|app\.config\.[jt]s)$/.test(file))
+      return true;
+    if (!diffText) return true; // fail open
+    const added = addedLinesForFile(diffText, file);
+    if (added.length === 0) return true;
+    return BACKGROUND_KEYS.test(added.join('\n'));
+  },
+
   'rn-upgrade': (file, diffText) => {
     if (!/(^|\/)package\.json$/.test(file)) return true;
     if (!diffText) return true; // fail open
@@ -423,11 +507,30 @@ export function route(changedFiles, agents, opts = {}) {
     // e.g. AsyncStorage token writes inside a generically-named file.
     let keywordHits = [];
     if (opts.diffText && agent.triggers?.length) {
-      const added = addedLines(opts.diffText).join('\n').toLowerCase();
-      keywordHits = agent.triggers.filter(
-        (t) => String(t).length > 4 && added.includes(String(t).toLowerCase()),
-      );
+      const lowerTriggers = agent.triggers
+        .map((t) => String(t).toLowerCase())
+        .filter((t) => t.length > 4);
+
+      // Per file, not across the whole diff. Scoring only needed "did any
+      // trigger appear?", but the audit sends each agent ONLY its matchedFiles
+      // — so a file that matched on a keyword and not on a filename was
+      // scored, routed, and then silently excluded from the prompt. The agent
+      // ran on the wrong evidence and reported clean.
+      const seen = new Set(hits);
+      for (const file of files) {
+        const added = addedLinesForFile(opts.diffText, file).join('\n').toLowerCase();
+        if (!added) continue;
+        const matched = lowerTriggers.filter((t) => added.includes(t));
+        if (!matched.length) continue;
+        keywordHits.push(...matched);
+        if (!seen.has(file)) {
+          seen.add(file);
+          hits.push(file);
+        }
+      }
+      keywordHits = [...new Set(keywordHits)];
       if (keywordHits.length) why.push(`diff mentions: ${keywordHits.slice(0, 4).join(', ')}`);
+      matchedFiles[agent.id] = hits;
     }
 
     const score = hits.length + keywordHits.length * 2;
@@ -461,6 +564,12 @@ export function route(changedFiles, agents, opts = {}) {
  * package.json only added lodash.
  */
 export function addedLinesForFile(diffText, filePath) {
+  // A diff without any `diff --git` framing cannot be attributed per file —
+  // a raw --diff-file, or a hunk pasted by hand. Falling back to every added
+  // line is the fail-open choice: mis-attributing a keyword is recoverable,
+  // losing every keyword signal is not.
+  if (!/^diff --git /m.test(diffText)) return addedLines(diffText);
+
   const out = [];
   let inFile = false;
 

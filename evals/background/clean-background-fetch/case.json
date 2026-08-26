@@ -1,0 +1,36 @@
+{
+  "agent": "rn-background",
+  "title": "Background fetch as an optimisation, with foreground sync as the guarantee",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Clean case. Configuration is at module scope in the entry file. The completion handler is called in a finally so it cannot be skipped on the error path. Work is bounded to one unit rather than a full sync. Outcomes are instrumented, so whether the task ran at all is observable. Critically, syncIfStale also runs on every foreground transition, so the app is correct even if the task never fires — the background work is an optimisation, not the guarantee. The failure mode being tested is manufacturing findings: objecting to minimumFetchInterval: 15 (correctly commented as a floor, not a promise), demanding a foreground service, or claiming the error path is unhandled.",
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+  "forbid": [
+    {
+      "name": "claims the completion handler is missing",
+      "pattern": "(missing|no|never|fails? to)\\s+.{0,20}(finish|completion)"
+    },
+    {
+      "name": "claims registration is in the wrong place",
+      "pattern": "(should|must)\\s+be\\s+(registered|moved)\\s+(in|inside|to)\\s+.{0,20}(component|useEffect)"
+    },
+    {
+      "name": "objects to the fetch interval",
+      "pattern": "(interval|15 minutes).{0,40}(too|should be|increase|decrease)",
+      "unlessPattern": "\\b(15 minutes|the interval)\\b[^.;,]{0,60}\\b(is|are|remains?)\\s+(a )?(floor|minimum|correct|fine|appropriate)|\\bnot a guarantee\\b|\\bios (decides|chooses|controls)\\b|\\bcorrectly (set|configured|chosen)\\b"
+    },
+    {
+      "name": "recommends a foreground service",
+      "pattern": "foreground service",
+      "unlessPattern": "(?<![\\w-])not\\ needed(?![\\w-])|(?<![\\w-])not\\ appropriate(?![\\w-])|(?<![\\w-])would\\ be(?![\\w-])"
+    },
+    {
+      "name": "claims there is no fallback when the task does not run",
+      "pattern": "(no|missing|lacks?)\\s+.{0,25}(fallback|foreground sync|guarantee)"
+    }
+  ]
+}

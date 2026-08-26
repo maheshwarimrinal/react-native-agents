@@ -66,6 +66,33 @@ export function plan(srcRoot, destRoot, { filter } = {}) {
   return entries.sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
+/**
+ * A backup path that does not already exist.
+ *
+ * `${dest}.bak` unconditionally was silent data loss on the second install:
+ * run one, and the user's original AGENTS.md moves to AGENTS.md.bak; run it
+ * again, and that same path is overwritten with the *generated* file from run
+ * one. The thing the backup existed to protect is gone, and the user is told
+ * "backed up" both times.
+ *
+ * Falls back to `.bak.2`, `.bak.3`, … so the first backup — the one that holds
+ * the user's own work — is always the one that survives.
+ *
+ * A dry run calls this too: it reports what *would* happen, so it has to
+ * predict the same name rather than naming a path that is already taken.
+ */
+export function freeBackupPath(dest, exists = fs.existsSync) {
+  const first = `${dest}.bak`;
+  if (!exists(first)) return first;
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${dest}.bak.${n}`;
+    if (!exists(candidate)) return candidate;
+  }
+  // A thousand backups of one file means something is very wrong; a timestamp
+  // is still better than clobbering.
+  return `${dest}.bak.${Date.now()}`;
+}
+
 function sameContent(a, b) {
   try {
     return fs.readFileSync(a, 'utf8') === fs.readFileSync(b, 'utf8');
@@ -100,7 +127,7 @@ export function apply(entries, { onConflict = 'skip', dryRun = false } = {}) {
       // User-authored files always get a backup, even under --force. Losing
       // someone's AGENTS.md because they passed a flag is still data loss.
       if (onConflict === 'backup' || isUserOwned(e.rel)) {
-        const bak = `${e.dest}.bak`;
+        const bak = freeBackupPath(e.dest);
         if (!dryRun) fs.copyFileSync(e.dest, bak);
         result.backedUp.push(path.relative(process.cwd(), bak));
       }

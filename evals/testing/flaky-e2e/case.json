@@ -1,40 +1,76 @@
 {
   "agent": "rn-testing",
   "title": "Flaky E2E — sleep-based waits, shared state between tests, no state reset",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Every flakiness cause in one file: three arbitrary sleeps totalling 16 seconds, `launchApp` without clearing state so runs contaminate each other, and a second test that depends on data created by the first — so it fails in isolation, fails under parallelism, and fails on re-run. Also hardcoded credentials. The trap being tested is recommending a retry: retries hide race conditions, which are usually real bugs in the app rather than the test.",
-
   "expect": [
     {
       "name": "flags the arbitrary sleeps as the primary flakiness cause",
-      "any": ["settimeout", "sleep", "arbitrary", "fixed", "hard-coded wait", "5000", "8000"]
+      "any": [
+        "settimeout",
+        "sleep",
+        "arbitrary",
+        "fixed",
+        "hard-coded wait",
+        "5000",
+        "8000"
+      ]
     },
     {
       "name": "recommends waiting on a condition instead",
-      "any": ["waitfor", "tobevisible().withtimeout", "withtimeout", "condition"]
+      "any": [
+        "waitfor",
+        "tobevisible().withtimeout",
+        "withtimeout",
+        "condition"
+      ]
     },
     {
       "name": "flags shared state between tests",
-      "any": ["depends on", "shared state", "isolation", "previous test", "order-dependent", "in isolation"]
+      "any": [
+        "depends on",
+        "shared state",
+        "isolation",
+        "previous test",
+        "order-dependent",
+        "in isolation"
+      ]
     },
     {
       "name": "recommends clearing state on launch",
-      "any": ["clearstate", "delete: true", "reloadreactnative", "fresh", "reset"]
+      "any": [
+        "clearstate",
+        "delete: true",
+        "reloadreactnative",
+        "fresh",
+        "reset"
+      ]
     },
     {
       "name": "notes the credentials in the test file",
-      "any": ["credential", "password", "hardcoded", "secret", "env"]
+      "any": [
+        "credential",
+        "password",
+        "hardcoded",
+        "secret",
+        "env"
+      ]
     }
   ],
-
-  "expectSeverity": ["P1", "P2"],
-
+  "expectSeverity": [
+    "P1",
+    "P2"
+  ],
   "forbid": [
     {
       "name": "recommends retries to mask flakiness",
-      "all": ["retr"],
-      "unless": ["not", "avoid", "instead", "hide", "mask", "rather than", "do not"]
+      "all": [
+        "retr"
+      ],
+      "unlessPattern": "\\b(do not|don't|avoid|never|not)\\s+\\w{0,20}\\s*(retry|retries|retrying)|\\b(mask|hide|paper over)\\w*\\b|\\brather than\\b|\\binstead of\\b|\\bfix the (root|cause|underlying)\\b"
     },
     {
       "name": "recommends simply increasing the timeouts",

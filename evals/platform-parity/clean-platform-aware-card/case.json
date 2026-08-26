@@ -1,14 +1,14 @@
 {
   "agent": "rn-platform-parity",
   "title": "A form written correctly for both platforms",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Clean case. Every divergence this agent exists to catch is handled: KeyboardAvoidingView has a per-platform behavior and a header-aware offset, keyboardShouldPersistTaps is set, the back handler is Android-guarded and returns false when it did not handle the event, the email input disables capitalisation and correction, safe-area insets come from the hook rather than hardcoded numbers, StatusBar sets Android-only props conditionally, and the shadow uses Platform.select with an elevation counterpart. The failure mode being tested is manufacturing findings to justify the review — most likely by objecting to Platform.select usage on style grounds or inventing a divergence that is not present.",
-
   "expect": [],
   "expectMaxFindings": 1,
   "expectSeverity": [],
-
   "forbid": [
     {
       "name": "claims the shadow is missing an Android counterpart",
@@ -29,7 +29,7 @@
     {
       "name": "objects to Platform.select on style preference alone",
       "pattern": "(avoid|do not use|instead of)\\s+platform\\.select",
-      "unless": ["fine", "correct", "appropriate"]
+      "unlessPattern": "\\bplatform\\.select\\b[^.;,]{0,50}\\b(is|are)\\s+(fine|correct|appropriate|idiomatic|reasonable)|\\b(is|are)\\s+(fine|correct|appropriate)\\b[^.;,]{0,40}\\bplatform\\.select"
     }
   ]
 }

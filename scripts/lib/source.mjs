@@ -130,6 +130,35 @@ function quoteIfNeeded(v) {
 
 const REQUIRED_FIELDS = ['id', 'name', 'description', 'version'];
 
+/**
+ * Agents that can review a changeset unprompted, versus ones that need a human
+ * to bring a question, an error log, or a request.
+ *
+ * `rn-doctor` needs a build failure; `rn-build` needs something to build. Firing
+ * them at a diff — or listing them in an automated audit plan — spends tokens to
+ * produce a section with nothing in it, and noise is what gets a review bot
+ * muted.
+ *
+ * `undefined` counts as reviewable: the six original agents predate the `mode`
+ * field and are all review agents, so absence means "review" rather than
+ * "unclassified".
+ *
+ * This lives here, next to the loader, rather than in either consumer. The
+ * GitHub Action and the MCP server both need the same answer, and when the
+ * Action had the only copy the MCP server's audit plan quietly listed all
+ * twenty-four agents, seven of which cannot act on a diff.
+ */
+export const REVIEW_MODES = new Set(['review', 'both', undefined]);
+
+export function isReviewAgent(agent) {
+  return REVIEW_MODES.has(agent.mode);
+}
+
+/** The reviewable subset, in load order. */
+export function reviewAgents(agents) {
+  return agents.filter(isReviewAgent);
+}
+
 export function loadSharedContext() {
   const file = path.join(SHARED_DIR, 'rn-context.md');
   if (!fs.existsSync(file)) return '';

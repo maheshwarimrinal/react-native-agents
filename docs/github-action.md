@@ -51,7 +51,7 @@ Add the matching key under repository **Settings → Secrets and variables → A
 | `fail-on-error` | `true` | Fail the check when an agent errors or the budget cap stops the run early. An audit where agents failed reviewed nothing, so a pass would be misleading. Set `false` to accept partial coverage. |
 | `agents` | auto | Comma-separated forced agent IDs |
 | `max-agents` | `6` | Maximum agents per run |
-| `budget-usd` | `2` | Hard estimated spend cap |
+| `budget-usd` | `2` | Estimated preflight budget — a brake, not a hard cap. See below. |
 | `fail-on` | `never` | `P0`, `P1`, `P2`, `P3`, or `never` |
 | `dry-run` | `false` | Route without model calls |
 
@@ -61,7 +61,22 @@ The Action exposes finding counts, estimated cost, the agents that ran, and JSON
 
 ## Routing and cost control
 
-The Action routes changed files to relevant specialists. For example, `eas.json` routes to release, authentication changes route to security, and list components route to performance and UI/accessibility. A hard budget is checked before each model call.
+The Action routes changed files to relevant specialists. For example, `eas.json` routes to release, authentication changes route to security, and list components route to performance and UI/accessibility.
+
+### What `budget-usd` actually does
+
+Before each model call, the run estimates that call's cost from an approximate token count and a table of published prices. If adding it would push the running estimate past `budget-usd`, the call is not made: the run stops, reports what it reviewed, and marks `budget-hit`.
+
+**It is an estimate, not a guarantee.** Four things keep it from being a hard cap:
+
+- Token counts are approximated from text length, not tokenized.
+- The check happens *before* a call. A call already in flight is not interrupted.
+- Prices change. The table is dated in [`action/lib/llm.mjs`](../action/lib/llm.mjs) and can go stale.
+- A model absent from that table is priced at the most expensive known rate — deliberately pessimistic, so an unknown model stops the run early rather than overspending quietly. The run warns when this happens.
+
+Local models (an `OPENAI_BASE_URL` pointing at localhost) are treated as free and are not budgeted at all.
+
+If you need a spend limit you can rely on, set one with your provider. This one is a brake on runaway routing, not a billing control.
 
 Start with `fail-on: never` while calibrating. Tighten to `P1` or `P0` only after the team trusts the signal.
 

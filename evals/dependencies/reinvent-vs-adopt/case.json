@@ -1,46 +1,69 @@
 {
   "agent": "rn-dependencies",
   "title": "Relative timestamps — write a helper, or take the dependency?",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Tests the agent's own stated rule against itself. Its evaluation reference says to try writing it yourself first, but explicitly carves out dates as a category where the naive implementation is wrong in ways you will not discover for a year. The correct answer is neither reflex: Intl.RelativeTimeFormat and Intl.DateTimeFormat are platform APIs that cover both requirements with no dependency at all, which beats both moment.js and a hand-rolled helper. moment.js specifically is in maintenance mode and large. The failure mode being tested is applying the 'just write it' heuristic to a timezone- and locale-sensitive problem, or recommending a library without checking core first.",
-
   "expect": [
     {
       "name": "points at the built-in Intl APIs rather than a library or a hand-rolled helper",
-      "any": ["intl.relativetimeformat", "relativetimeformat", "intl.datetimeformat", "datetimeformat", "built-in", "intl"]
+      "any": [
+        "intl.relativetimeformat",
+        "relativetimeformat",
+        "intl.datetimeformat",
+        "datetimeformat",
+        "built-in",
+        "intl"
+      ]
     },
     {
       "name": "flags moment.js as the wrong choice for a new codebase",
-      "any": ["maintenance mode", "legacy", "no longer recommended", "large", "deprecated"]
+      "any": [
+        "maintenance mode",
+        "legacy",
+        "no longer recommended",
+        "large",
+        "deprecated"
+      ]
     },
     {
       "name": "treats locale-aware absolute dates as the harder half of the requirement",
-      "any": ["locale", "timezone", "time zone", "formatting rules"]
+      "any": [
+        "locale",
+        "timezone",
+        "time zone",
+        "formatting rules"
+      ]
     },
     {
       "name": "does not recommend hand-rolling date logic",
-      "any": ["do not write", "harder than", "deceptively", "not worth writing", "edge cases"]
+      "any": [
+        "do not write",
+        "harder than",
+        "deceptively",
+        "not worth writing",
+        "edge cases"
+      ]
     }
   ],
-
   "expectSeverity": [],
-
   "forbid": [
     {
       "name": "recommends writing a custom relative-time helper from scratch",
       "pattern": "(write|roll)\\s+(your|our)\\s+own\\s+(date|time|formatter)",
-      "unless": ["do not", "avoid", "would be", "not recommended"]
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|(?<![\\w-])would\\ be(?![\\w-])|(?<![\\w-])not\\ recommended(?![\\w-])"
     },
     {
       "name": "recommends moment.js",
       "pattern": "(use|adopt|keep)\\s+moment",
-      "unless": ["do not", "avoid", "instead of moment", "not recommended", "away from"]
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|(?<![\\w-])instead\\ of\\ moment(?![\\w-])|(?<![\\w-])not\\ recommended(?![\\w-])|(?<![\\w-])away\\ from(?![\\w-])"
     },
     {
       "name": "invents a bundle size number for moment",
       "pattern": "moment.{0,40}\\b\\d+\\s?(kb|mb)\\b",
-      "unless": ["measure", "unmeasured", "roughly", "approximately"]
+      "unlessPattern": "measur\\w+|unmeasured\\b|roughly\\b|approximately\\b"
     }
   ]
 }

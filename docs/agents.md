@@ -4,7 +4,7 @@ Each specialist has a compact playbook and an on-demand reference library. The s
 
 Agents fall into two groups. **Interactive** agents need something brought to them — an error log, a question, a rejection notice — so they are never selected for pull-request review. **Review** agents work from a diff and run in the GitHub Action.
 
-There are 21 agents: 6 interactive and 15 review. Routing is narrow by design, so a typical pull request reaches about three of them rather than all fifteen.
+There are 24 agents: 7 interactive and 17 review. Routing is narrow by design, so a typical pull request reaches about three of them rather than all seventeen.
 
 ## Doctor — `rn-doctor` (interactive)
 
@@ -53,6 +53,14 @@ Use when submitting to the App Store or Google Play, or when an app has been rej
 Rejection notices are written to be defensible rather than diagnostic — the guideline cited is a category, not a diagnosis. The agent's first job is deciding which artefact is at fault, because submitting a new build for a metadata rejection wastes a review cycle, and near a launch date that is the expensive part.
 
 Command: `/rn-submit`
+
+## Monorepo — `rn-monorepo` (interactive)
+
+Use for React Native inside a workspace: Metro resolution across packages, hoisting and `node-linker` settings, pnpm/Yarn/npm workspaces with Turborepo or Nx, sharing code with a web app, and native autolinking from a nested app directory.
+
+Its premise is that **most monorepo errors are one of four causes wearing the same message** — Metro cannot see the file, Metro cannot resolve its dependencies, there are two copies of a package, or autolinking did not run from the app directory. `Unable to resolve module` and `Invalid hook call` are the two most common symptoms and neither names its cause. The agent identifies which of the four before changing any configuration, and pushes back on adopting a monorepo at all without a concrete reason.
+
+Command: `/rn-monorepo`
 
 ## Performance — `rn-performance`
 
@@ -173,6 +181,22 @@ Use for state architecture: choosing between Zustand, Redux Toolkit, Jotai and C
 Its premise is that **most "state management problems" are server state kept in a client state library** — caching, refetching, loading flags and retry hand-rolled badly. The library choice matters far less than that split. Persistence bugs are weighted high because an unversioned schema change crashes on launch for existing users only, passing every fresh-install test.
 
 Command: `/rn-state`
+
+## Payments — `rn-payments`
+
+Use for in-app purchases and subscriptions: StoreKit and Play Billing, server-side receipt validation, subscription lifecycle, restore purchases, refunds, family sharing, grace periods, and the store rules governing external payment.
+
+Its premise is that **a purchase is not an event, it is a state you must be able to re-derive**. Code that unlocks a feature in the purchase callback is wrong even when it works, because entitlement also changes through renewal, restore on a new device, family sharing and refund — none of which that callback sees. This is the only area where a bug moves money directly, so findings are weighted by direction: granting entitlement without validation is revenue loss, taking payment without delivering is user harm, and both are P0.
+
+Command: `/rn-pay`
+
+## Background — `rn-background`
+
+Use for work that must happen while the app is not in the foreground: background fetch, headless JS, background location, uploads that outlive the screen, and scheduled tasks — plus the iOS and Android restrictions that decide whether any of it runs.
+
+Its premise is that **scheduled background work is a hint, so design as though it will not run**. Both platforms have tightened background execution for years, and a task may run late, rarely, or never for a given user — silently, with no error. The agent's most valuable question is what the user experiences if the task never fires until they next open the app; if the answer is "the feature is broken", the design needs changing rather than more background APIs.
+
+Command: `/rn-background`
 
 ## Full audit
 

@@ -36,11 +36,31 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       # OIDC trusted publishing needs npm >= 11.5.1. Older npm silently skips the
-      # token exchange and fails with ENEEDAUTH instead, so pin the floor here
-      # rather than relying on whichever npm the Node release happens to bundle.
+      # token exchange and fails with ENEEDAUTH instead.
+      #
+      # This used to be `npm install -g npm@latest`, which is a mutable
+      # dependency resolved at run time in a job that holds `id-token: write`.
+      # Whatever npm published most recently would have run with the OIDC
+      # credential in scope. Two changes:
+      #
+      #   1. Use the npm that setup-node already pinned via `node-version: 24`
+      #      whenever it meets the floor — on current Node 24 it does, so the
+      #      normal path installs nothing at all.
+      #   2. If it somehow does not, install one exact version rather than a
+      #      floating tag.
       - name: Ensure npm supports trusted publishing
+        env:
+          NPM_FLOOR: 11.5.1
+          NPM_PIN: 11.19.0
         run: |
-          npm install -g npm@latest
+          have=$(npm --version)
+          lowest=$(printf '%s\n%s\n' "$have" "$NPM_FLOOR" | sort -V | head -n1)
+          if [ "$lowest" = "$NPM_FLOOR" ]; then
+            echo "bundled npm $have meets the $NPM_FLOOR floor — not installing anything"
+          else
+            echo "bundled npm $have is below $NPM_FLOOR; installing pinned npm@$NPM_PIN"
+            npm install -g "npm@$NPM_PIN"
+          fi
           npm --version
 
       # No dependencies by design, so there is nothing to install.
@@ -49,6 +69,14 @@ jobs:
 
       - name: Run test suite
         run: node scripts/test.mjs
+
+      - name: Run Action tests
+        run: node action/test.mjs
+
+      - name: Validate eval definitions
+        # Catches fixtures that call helpers they never define — a gap that a
+        # tag-triggered publish could otherwise bypass entirely.
+        run: node evals/run.mjs --validate
 
       - name: Verify the tag matches package.json version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -78,20 +106,33 @@ jobs:
       # this package, using the id-token permission above. No NPM_TOKEN secret is
       # involved, and provenance is attested from the workflow identity.
       - name: Publish
+        id: publish
         if: ${{ github.event_name == 'push' || inputs.dry_run == false }}
         run: npm publish --provenance --access public
 
+      # The summary said "Published" unconditionally, so a manual dry run — whose
+      # whole purpose is to confirm nothing was published — reported a release
+      # that never happened. It now reads the publish step's own outcome.
       - name: Summary
         if: success()
         run: |
           V=$(node -p "require('./package.json').version")
           N=$(node -p "require('./package.json').name")
-          {
-            echo "### Published \`$N@$V\`"
-            echo ""
-            echo '```bash'
-            echo "npx $N@$V install"
-            echo '```'
-            echo ""
-            echo "https://www.npmjs.com/package/$N"
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.publish.outcome }}" = "success" ]; then
+            {
+              echo "### Published \`$N@$V\`"
+              echo ""
+              echo '```bash'
+              echo "npx $N@$V install"
+              echo '```'
+              echo ""
+              echo "https://www.npmjs.com/package/$N"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Dry run — \`$N@$V\` was **not** published"
+              echo ""
+              echo "Every check and the tarball inspection ran. Re-run with"
+              echo "\`dry_run: false\`, or push a \`v$V\` tag, to publish."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

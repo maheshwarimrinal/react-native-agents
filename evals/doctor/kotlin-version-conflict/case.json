@@ -1,45 +1,74 @@
 {
   "agent": "rn-doctor",
   "title": "Kotlin metadata conflict after adding Reanimated",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "The error names the cause exactly: metadata 2.0.0 vs compiler 1.9.24, and the project pins kotlinVersion 1.9.24. The fix is raising kotlinVersion. The interesting failure mode is an agent that recommends the nuclear reset — the developer has already said they tried node_modules deletion and gradlew clean, so repeating that ignores the evidence and wastes another 20 minutes.",
-
   "expect": [
     {
       "name": "identifies the Kotlin version conflict as the cause",
-      "any": ["kotlin", "metadata", "1.9.24", "2.0.0", "incompatible version"]
+      "any": [
+        "kotlin",
+        "metadata",
+        "1.9.24",
+        "2.0.0",
+        "incompatible version"
+      ]
     },
     {
       "name": "points at the kotlinVersion pin in android/build.gradle",
-      "any": ["kotlinversion", "build.gradle", "ext {", "pin"]
+      "any": [
+        "kotlinversion",
+        "build.gradle",
+        "ext {",
+        "pin"
+      ]
     },
     {
       "name": "gives the actual fix: raise the Kotlin version",
-      "any": ["raise", "bump", "update kotlin", "2.0", "increase"]
+      "any": [
+        "raise",
+        "bump",
+        "update kotlin",
+        "2.0",
+        "increase"
+      ]
     },
     {
       "name": "connects it to the newly added library",
-      "any": ["reanimated", "newly added", "new dependency", "the merge", "added"]
+      "any": [
+        "reanimated",
+        "newly added",
+        "new dependency",
+        "the merge",
+        "added"
+      ]
     },
     {
       "name": "offers a command to confirm the conflict",
-      "any": ["dependencies", "gradlew", "grep", "kotlin-stdlib", "verify", "confirm"]
+      "any": [
+        "dependencies",
+        "gradlew",
+        "grep",
+        "kotlin-stdlib",
+        "verify",
+        "confirm"
+      ]
     }
   ],
-
   "expectSeverity": [],
-
   "forbid": [
     {
       "name": "recommends the nuclear reset the developer already tried",
       "pattern": "(delete|remove|rm -rf)\\s+node_modules",
-      "unless": ["already tried", "you have already", "since you", "won't help", "will not help"]
+      "unlessPattern": "(?<![\\w-])already\\ tried(?![\\w-])|(?<![\\w-])you\\ have\\ already(?![\\w-])|(?<![\\w-])since\\ you(?![\\w-])|(?<![\\w-])won't\\ help(?![\\w-])|(?<![\\w-])will\\ not\\ help(?![\\w-])"
     },
     {
       "name": "recommends gradlew clean, which was already done",
       "pattern": "(run|try)\\s+`?\\./gradlew clean",
-      "unless": ["already", "after", "won't help", "will not help"]
+      "unlessPattern": "already\\s+(?:tried|done|ruled out|attempted|handled|covered|been)|after\\s+(?:you|the|it|confirming|identifying|fixing)|(?<![\\w-])won't\\ help(?![\\w-])|(?<![\\w-])will\\ not\\ help(?![\\w-])"
     },
     {
       "name": "blames a stale cache despite a clear version-mismatch error",
@@ -48,7 +77,7 @@
     {
       "name": "suggests downgrading the library instead of fixing the version",
       "pattern": "(downgrade|remove)\\s+reanimated",
-      "unless": ["last resort", "if that fails", "alternative", "otherwise"]
+      "unlessPattern": "(?<![\\w-])last\\ resort(?![\\w-])|(?<![\\w-])if\\ that\\ fails(?![\\w-])|alternativ\\w+|\\botherwise\\b"
     }
   ]
 }

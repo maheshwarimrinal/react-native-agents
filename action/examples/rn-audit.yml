@@ -9,21 +9,56 @@ on:
   pull_request:
     # Only run when code that matters actually changed — the action routes
     # further internally, but this avoids spinning up a runner for a README edit.
+    #
+    # A filter is a *second* gate in front of the router, and anything it omits
+    # is never audited at all. An earlier version of this list left out .java,
+    # .m, .entitlements, .xcprivacy, Podfile and gradle.properties — all of
+    # which route to a real specialist — so a PR touching only native or
+    # security-sensitive files was skipped silently while the workflow looked
+    # correctly configured.
+    #
+    # If you trim this, check what you are removing:
+    #   npx @maheshwarimrinal/react-native-agents audit --diff-file d.diff --dry-run
     paths:
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.js'
-      - '**/*.jsx'
-      - '**/*.kt'
-      - '**/*.swift'
-      - '**/*.mm'
+      # JavaScript and TypeScript
+      - '**/*.{ts,tsx,js,jsx,cjs,mjs}'
+      # Native sources — these route to rn-native-modules and rn-platform-parity
+      - '**/*.{kt,java,swift,m,mm,h,cpp}'
+      # iOS project and capability files
+      - '**/*.{plist,entitlements,xcprivacy,podspec,pbxproj}'
+      - '**/Podfile'
+      - '**/Podfile.lock'
+      # Android project files
       - '**/*.gradle'
-      - '**/Info.plist'
+      - '**/*.gradle.kts'
+      - '**/gradle.properties'
+      - '**/gradle-wrapper.properties'
       - '**/AndroidManifest.xml'
+      - '**/proguard-rules.pro'
+      - '**/network_security_config.xml'
+      # App, build and tooling config
       - '**/package.json'
       - '**/app.json'
       - '**/app.config.*'
       - '**/eas.json'
+      - '**/metro.config.js'
+      - '**/babel.config.js'
+      - '**/react-native.config.js'
+      - '**/tsconfig.json'
+      # Monorepo topology — changes here move what Metro can resolve
+      - '**/turbo.json'
+      - '**/nx.json'
+      - '**/pnpm-workspace.yaml'
+      # Secrets, signing and release surface
+      - '**/.env*'
+      - '**/*.{pem,key}'
+      - '**/google-services.json'
+      - '**/GoogleService-Info.plist'
+      - '**/sentry.properties'
+      - '**/.npmrc'
+      - 'fastlane/**'
+      # CI itself — a workflow change can leak a secret or ship an unsigned build
+      - '.github/workflows/**'
 
 permissions:
   contents: read
@@ -44,7 +79,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: maheshwarimrinal/react-native-agents@v1.1.0
+      - uses: maheshwarimrinal/react-native-agents@v1
         with:
           provider: anthropic
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}

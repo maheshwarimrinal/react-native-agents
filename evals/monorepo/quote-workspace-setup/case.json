@@ -1,0 +1,84 @@
+{
+  "agent": "rn-monorepo",
+  "title": "Should a 4-person team with one app adopt a monorepo now?",
+  "context": {
+    "language": "TypeScript"
+  },
+  "notes": "The honest answer is probably not yet, and the agent's own guidance says to push back on adopting a monorepo without a reason — 'we might share code later' is explicitly named as insufficient. The cost is real and ongoing: Metro configuration, package-manager linking mode, native autolinking from a nested app, CI changes, and a class of duplicate-package bugs that does not exist today. None of it is paid back until there is a second consumer. A good answer says so plainly, names what would change the recommendation (the web app becoming real, or a second app), and notes that the migration is not much harder later — which is the crux, because the usual argument for doing it now is that it gets harder. Tests whether the agent gives a recommendation rather than a balanced survey, and whether it resists recommending its own subject matter.",
+  "expect": [
+    {
+      "name": "recommends against adopting it yet",
+      "any": [
+        "not yet",
+        "wait",
+        "do not",
+        "premature",
+        "no reason",
+        "hold off"
+      ]
+    },
+    {
+      "name": "names the ongoing cost rather than only the setup cost",
+      "any": [
+        "ongoing",
+        "maintain",
+        "keeps breaking",
+        "cost",
+        "overhead",
+        "complexity"
+      ]
+    },
+    {
+      "name": "names specific costs, not generic complexity",
+      "any": [
+        "metro",
+        "autolink",
+        "hoist",
+        "node-linker",
+        "duplicate",
+        "ci"
+      ]
+    },
+    {
+      "name": "says what would change the answer",
+      "any": [
+        "when",
+        "once",
+        "if the web app",
+        "second app",
+        "actually shared",
+        "revisit"
+      ]
+    },
+    {
+      "name": "notes that migrating later is not much harder",
+      "any": [
+        "later",
+        "not harder",
+        "can migrate",
+        "no worse",
+        "same work"
+      ]
+    }
+  ],
+  "expectSeverity": [],
+  "forbid": [
+    {
+      "name": "recommends adopting a monorepo anyway",
+      "pattern": "(yes|go ahead|recommend|should)\\s+.{0,25}(adopt|move to|set up)\\s+.{0,15}monorepo",
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?<![\\w-])not\\ yet(?![\\w-])|(?<![\\w-])would\\ not(?![\\w-])|(?:advise|argue|recommend)\\w*\\s+against|\\bagainst\\s+(?:it|this|adopting)"
+    },
+    {
+      "name": "produces a setup guide instead of a recommendation",
+      "all": [
+        "pnpm-workspace.yaml"
+      ],
+      "unlessPattern": "(?<![\\w-])when\\ you\\ do(?![\\w-])|later(?:\\s+on)?\\b(?![\\w-])|(?<![\\w-])if\\ you\\ decide(?![\\w-])|(?<![\\w-])not\\ yet(?![\\w-])"
+    },
+    {
+      "name": "invents an effort estimate",
+      "pattern": "\\b\\d+\\s*(-|to)?\\s*\\d*\\s*(days?|weeks?|hours?)\\b",
+      "unlessPattern": "depends\\s+on|(?:cannot|can't|could not)\\s+\\w+|varies\\s+\\w+|\\bvaries\\b"
+    }
+  ]
+}

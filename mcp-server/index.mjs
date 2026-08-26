@@ -20,6 +20,7 @@ import {
   composePrompt,
   loadAgents,
   loadSharedContext,
+  isReviewAgent,
 } from '../scripts/lib/source.mjs';
 import { explainRouting } from './routing.mjs';
 import { captureDetached } from '../scripts/lib/telemetry.mjs';
@@ -192,6 +193,16 @@ function callTool(name, args = {}) {
 
     case 'get_audit_plan': {
       const scope = args.scope ? `\n\n**Scope:** ${args.scope}` : '';
+      /**
+       * Only the agents that can audit a codebase unprompted.
+       *
+       * The interactive ones (`rn-doctor`, `rn-build`, `rn-onboard` and the rest)
+       * need a human to bring a failing build, an error log, or a question. A
+       * plan that instructs the client to "run" them produces a section with
+       * nothing in it and spends a full agent load doing so.
+       */
+      const plan = AGENTS.filter(isReviewAgent);
+      const interactive = AGENTS.filter((a) => !isReviewAgent(a));
       return text(
         [
           '# Full React Native audit plan' + scope,
@@ -202,9 +213,9 @@ function callTool(name, args = {}) {
           'exist. Determine and state: React Native version, Expo SDK, managed vs bare workflow,',
           'TypeScript or JavaScript, router, state library. Every finding below depends on these.',
           '',
-          '## Step 2 — Run each specialist',
+          `## Step 2 — Run each specialist (${plan.length})`,
           '',
-          ...AGENTS.map(
+          ...plan.map(
             (a, i) =>
               `${i + 1}. **${a.title ?? a.name}** — \`get_react_native_agent({ agent_id: "${a.id}" })\`\n   ${a.description}`,
           ),
@@ -212,6 +223,16 @@ function callTool(name, args = {}) {
           'Pull the relevant reference documents with `get_reference` as each area comes up — do not',
           'work from memory on specifics.',
           '',
+          ...(interactive.length
+            ? [
+                `> Not in this plan: ${interactive
+                  .map((a) => `\`${a.id}\``)
+                  .join(', ')}. These need something from you — a failing build, an`,
+                '> error log, a question — so load one directly when you have that, rather than as part',
+                '> of a sweep.',
+                '',
+              ]
+            : []),
           '## Step 3 — Consolidate',
           '',
           '1. One-paragraph health summary: is this shippable, and what is the single biggest risk?',
@@ -312,6 +333,26 @@ function readResource(uri) {
  * JSON-RPC plumbing
  * ------------------------------------------------------------------ */
 
+/**
+ * Derived, never written down.
+ *
+ * This string said "Six React Native specialist agents" while twenty-four were
+ * loaded, through three releases, because a literal in a handler is invisible —
+ * nothing fails when it stops being true. Counting the loaded agents means it
+ * cannot drift again.
+ */
+function serverInstructions() {
+  const review = AGENTS.filter(isReviewAgent).length;
+  return (
+    `${AGENTS.length} React Native specialist agents — ${review} that review code or a diff ` +
+    `unprompted, ${AGENTS.length - review} that need you to bring a build failure, an error log, ` +
+    'or a question. ' +
+    'Call list_react_native_agents to see them, suggest_agent to pick one for a task, ' +
+    'get_react_native_agent to adopt one, get_reference for deep-dive material, and ' +
+    'get_audit_plan for a full sweep.'
+  );
+}
+
 function handle(msg) {
   const { id, method, params = {} } = msg;
 
@@ -321,9 +362,7 @@ function handle(msg) {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {}, prompts: {}, resources: {} },
         serverInfo: SERVER,
-        instructions:
-          'Six React Native specialist agents (performance, security, code quality, UI/accessibility, testing, release). ' +
-          'Call list_react_native_agents to see them, get_react_native_agent to adopt one, and get_reference for deep-dive material.',
+        instructions: serverInstructions(),
       };
 
     case 'tools/list':

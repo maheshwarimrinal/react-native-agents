@@ -1,14 +1,14 @@
 {
   "agent": "rn-permissions",
   "title": "A permission resolver that handles every status",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Clean case. Every status is branched explicitly, LIMITED is correctly treated as a grant, UNAVAILABLE is distinguished from BLOCKED so the UI does not offer a useless Settings link, DENIED requests once and re-classifies the result, and a resume watcher re-checks status after the user may have changed it in Settings. The subscription is cleaned up. The failure mode being tested is manufacturing findings — most likely claiming BLOCKED is unhandled because openSettings is not called here (it is deliberately the caller's concern; this function returns a reason), or demanding request timing advice that does not apply to a resolver.",
-
   "expect": [],
   "expectMaxFindings": 1,
   "expectSeverity": [],
-
   "forbid": [
     {
       "name": "claims blocked is not distinguished",
@@ -29,7 +29,7 @@
     {
       "name": "demands openSettings be called inside the resolver",
       "pattern": "should\\s+call\\s+opensettings",
-      "unless": ["caller", "not", "correctly", "fine"]
+      "unlessPattern": "\\b(caller|call site|consumer)\\b[^.;,]{0,50}\\b(decid|handl|own)\\w*|\\b(is|are)\\s+(correct|fine|appropriate|deliberate)\\b|\\b(should|must) not\\s+call\\s+opensettings"
     }
   ]
 }

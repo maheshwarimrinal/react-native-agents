@@ -1,46 +1,74 @@
 {
   "agent": "rn-store-submission",
   "title": "A metadata-only rejection where the team is preparing an unnecessary build",
-  "context": { "reactNative": "0.87", "language": "TypeScript" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
   "notes": "Clean-ish case with one decisive point: nothing here requires a new build. Both issues — the Android reference in the description and the outdated screenshots — are metadata, editable in App Store Connect and resolvable by replying to the rejection. The team is about to waste a review cycle on a build they do not need, three days before release. The correct answer leads with that, and it changes the timeline materially. The failure mode being tested is pattern-matching 'rejection' to 'ship a new build' and producing a generic pre-submission checklist instead of reading which artefact is at fault. Secondary: the screenshot issue means the screenshots must be regenerated from the current UI, which is asset work, not a binary change.",
-
   "expect": [
     {
       "name": "states clearly that no new build is required",
-      "any": ["no new build", "without a build", "metadata only", "do not need a build", "no binary"]
+      "any": [
+        "no new build",
+        "without a build",
+        "metadata only",
+        "do not need a build",
+        "no binary"
+      ]
     },
     {
       "name": "identifies both issues as metadata",
-      "any": ["metadata", "app store connect", "description", "screenshots"]
+      "any": [
+        "metadata",
+        "app store connect",
+        "description",
+        "screenshots"
+      ]
     },
     {
       "name": "explains the faster path — edit and reply",
-      "any": ["reply", "respond", "resolution center", "edit", "update the listing"]
+      "any": [
+        "reply",
+        "respond",
+        "resolution center",
+        "edit",
+        "update the listing"
+      ]
     },
     {
       "name": "addresses the timeline the team asked about",
-      "any": ["thursday", "faster", "quicker", "timeline", "review cycle", "sooner"]
+      "any": [
+        "thursday",
+        "faster",
+        "quicker",
+        "timeline",
+        "review cycle",
+        "sooner"
+      ]
     }
   ],
-
   "expectSeverity": [],
-
   "forbid": [
     {
       "name": "recommends uploading a new build",
       "pattern": "(upload|submit|prepare)\\s+(a\\s+)?new\\s+build",
-      "unless": ["do not", "not need", "unnecessary", "avoid", "without"]
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?<![\\w-])not\\ need(?![\\w-])|(?:is|are)\\s+unnecessary|unnecessary\\s+(?:here|step|work)|(?:do not|don't|avoid|never)\\s+\\w{0,15}|\\bwithout\\s+\\w+"
     },
     {
       "name": "produces a generic pre-submission checklist instead of triaging",
-      "any": ["demo account", "target api", "account deletion", "privacy manifest"],
-      "unless": ["not relevant", "separately", "for next time", "unrelated"]
+      "any": [
+        "demo account",
+        "target api",
+        "account deletion",
+        "privacy manifest"
+      ],
+      "unlessPattern": "(?<![\\w-])not\\ relevant(?![\\w-])|(?<![\\w-])separately(?![\\w-])|(?<![\\w-])for\\ next\\ time(?![\\w-])|(?<![\\w-])unrelated(?![\\w-])"
     },
     {
       "name": "claims the app binary must change",
       "pattern": "(rebuild|new version|increment the build number)",
-      "unless": ["not", "no need", "unnecessary"]
+      "unlessPattern": "\\b(no need|not necessary|unnecessary)\\b[^.;,]{0,40}\\b(rebuild|new (build|version|binary))|\\b(does|do|will) not\\s+(require|need)\\s+a?\\s*(rebuild|new build|new binary)|\\bwithout (a )?(rebuild|new build)\\b"
     }
   ]
 }
