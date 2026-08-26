@@ -40,7 +40,7 @@ dropped before the payload is built.
 | `tool` | `cursor`, `claude-code`, `windsurf` | Which editor the agents were installed for |
 | `agent_id` | `rn-performance` | Which specialist was loaded, from this repo's own ids |
 | `agent_count` | `3` | How many agents an audit ran |
-| `version` | `1.3.0` | This package's version |
+| `version` | `1.3.1` | This package's version |
 | `node_major` | `22` | Node major version only — not the full version string |
 | `os` | `darwin`, `linux`, `win32` | Platform only |
 | `ci` | `true` | Whether this was an automated environment |

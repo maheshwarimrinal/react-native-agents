@@ -9,8 +9,37 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { DIST_DIR, loadAgents, loadSharedContext, pruneStale, rmDir } from './lib/source.mjs';
+import { DIST_DIR, VERSION, loadAgents, loadSharedContext, pruneStale, rmDir } from './lib/source.mjs';
 import { TARGETS } from './lib/targets.mjs';
+
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+
+/**
+ * Keep the version in TELEMETRY.md's example payload in step with package.json.
+ *
+ * A test asserts these match, because that page documents every field this
+ * package can transmit and a stale example reads as a document nobody
+ * maintains. But nothing *updated* it, so the assertion turned every release
+ * into: bump, watch the gate fail, hand-edit a doc, re-tag. It blocked the
+ * 1.3.1 release it was written to protect.
+ *
+ * Generating it here means the `version` npm hook fixes it before the release
+ * commit is made, and the test goes back to being a guard rather than a chore.
+ *
+ * @returns {boolean} whether the file needed changing
+ */
+function syncTelemetryVersion({ dryRun = false } = {}) {
+  const file = path.join(ROOT, 'TELEMETRY.md');
+  if (!fs.existsSync(file)) return false;
+  const before = fs.readFileSync(file, 'utf8');
+  const after = before.replace(
+    /(\|\s*`version`\s*\|\s*`)[^`]+(`)/,
+    `$1${VERSION}$2`,
+  );
+  if (after === before) return false;
+  if (!dryRun) fs.writeFileSync(file, after);
+  return true;
+}
 
 const args = process.argv.slice(2);
 const check = args.includes('--check');
@@ -70,6 +99,10 @@ try {
     rmDir(tmp);
 
     const problems = [];
+    // --check must not write, but it must still notice.
+    if (syncTelemetryVersion({ dryRun: true })) {
+      problems.push(`stale:    TELEMETRY.md version row (run \`npm run build\`)`);
+    }
     for (const [file, content] of fresh) {
       if (!committed.has(file)) problems.push(`missing:  ${file}`);
       else if (committed.get(file) !== content) problems.push(`stale:    ${file}`);
@@ -103,6 +136,10 @@ try {
     warnings.push(
       `could not remove ${failed.length} stale file(s) (${failed[0].code}) — e.g. ${failed[0].file}`,
     );
+  }
+
+  if (syncTelemetryVersion()) {
+    warnings.push(`TELEMETRY.md version row updated to ${VERSION}`);
   }
 
   console.log(c.bold('\n  React Native Agents — build\n'));

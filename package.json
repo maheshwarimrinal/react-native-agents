@@ -1,6 +1,6 @@
 {
   "name": "@maheshwarimrinal/react-native-agents",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "24 expert React Native agents — upgrades and New Architecture migration, debugging, performance, security, offline sync, navigation and deep linking, push notifications, permissions, iOS/Android parity, state management, accessibility, testing, native modules, observability, release, store submission, dependency choices, codebase onboarding, in-app purchases, background execution, and monorepo setup — plus a deterministic bundle-size analyzer. Portable across Claude Code, Cursor, Windsurf, Copilot, Codex, MCP clients, and GitHub Actions.",
   "type": "module",
   "bin": {
@@ -17,7 +17,7 @@
     "install-agents": "node scripts/cli.mjs install",
     "mcp": "node mcp-server/index.mjs",
     "audit": "node action/index.mjs",
-    "version": "node scripts/build.mjs && git add dist",
+    "version": "node scripts/build.mjs && git add dist TELEMETRY.md",
     "prepublishOnly": "node scripts/build.mjs --check && node scripts/test.mjs && node action/test.mjs && node evals/run.mjs --validate",
     "evals": "node evals/run.mjs",
     "evals:validate": "node evals/run.mjs --validate",
