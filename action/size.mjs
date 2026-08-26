@@ -4,10 +4,20 @@
  *
  * No API key, no model call, no cost. Bundle composition is arithmetic.
  *
- *   npx rn-agents size                        analyse the current bundle
- *   npx rn-agents size --base main            compare against a base branch
- *   npx rn-agents size --budget-delta 100kb   fail if the PR grows it too much
- *   npx rn-agents size --json                 machine-readable, for trending
+ *   npx @maheshwarimrinal/react-native-agents size
+ *                                             analyse the current bundle
+ *   npx @maheshwarimrinal/react-native-agents size --base main
+ *                                             compare against a base branch
+ *   npx @maheshwarimrinal/react-native-agents size --budget-delta 100kb
+ *                                             fail if the PR grows it too much
+ *   npx @maheshwarimrinal/react-native-agents size --json
+ *                                             machine-readable, for trending
+ *
+ * Use the scoped name. Passing a bare bin name to npx resolves a *package* of
+ * that name from the registry rather than this one, and only appears to work
+ * once this package is installed locally and npx finds node_modules/.bin first.
+ * A command that works on your machine and fetches a stranger's code on someone
+ * else's is not worth the saved keystrokes.
  */
 import fs from 'node:fs';
 import os from 'node:os';

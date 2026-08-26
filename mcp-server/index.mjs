@@ -6,7 +6,10 @@
  * (Claude Desktop, Cursor, Windsurf, Zed, Continue, custom hosts).
  *
  * Deliberately zero-dependency: implements MCP's JSON-RPC 2.0 over stdio
- * directly, so `npx react-native-agents-mcp` works with no install step.
+ * directly, so `npx -p @maheshwarimrinal/react-native-agents rn-agents-mcp`
+ * works with no install step. The `-p` matters: npx resolves the *package*
+ * name, so passing the bin name alone would fetch an unscoped package of that
+ * name from the registry rather than this one.
  *
  * Transport: newline-delimited JSON on stdin/stdout (the stdio transport).
  * Never write anything but protocol frames to stdout — logs go to stderr.

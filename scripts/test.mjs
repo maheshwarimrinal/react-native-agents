@@ -2299,6 +2299,59 @@ test('third-party actions are pinned to a commit SHA, not a mutable tag', () => 
   }
 });
 
+test('every documented npx command resolves to this package', () => {
+  /**
+   * `npx <name>` resolves a **package** name from the registry, not a bin name.
+   * This package is scoped, so the bare bin names point somewhere else entirely:
+   *
+   *   npx react-native-agents   → an unrelated package that exists at 0.0.1
+   *   npx rn-agents             → an unscoped name nobody owns (squattable)
+   *   npx react-native-agents-mcp → not even a bin here; the bin is rn-agents-mcp
+   *
+   * All three were in the docs. The first is the serious one: a copy-pasted
+   * command that installs and runs a stranger's code.
+   */
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const scoped = pkg.name;
+  const bins = Object.keys(pkg.bin ?? {});
+
+  const files = [
+    'README.md',
+    ...fs.readdirSync(path.join(ROOT, 'docs')).map((f) => `docs/${f}`),
+    'action/size.mjs',
+    'action/index.mjs',
+    'scripts/cli.mjs',
+    'mcp-server/index.mjs',
+    'TELEMETRY.md',
+  ].filter((f) => fs.existsSync(path.join(ROOT, f)));
+
+  for (const rel of files) {
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    // Strip trailing markdown/comment punctuation from the captured token —
+    // `npx -p pkg bin\`` is the same command as `npx -p pkg bin`.
+    const clean = (t) => t.replace(/[`'",.;:)\]]+$/, '');
+    for (const [, raw] of src.matchAll(/npx\s+(-p\s+[^\s`'"]+\s+[^\s`'"]+|[@\w./-]+)/g)) {
+      const target = clean(raw);
+      // `npx -p <pkg> <bin>` is the correct way to run a named bin from a
+      // scoped package.
+      const withP = target.match(/^-p\s+(\S+)\s+(\S+)$/);
+      if (withP) {
+        eq(withP[1], scoped, `${rel}: npx -p names "${withP[1]}", not this package`);
+        assert(bins.includes(withP[2]), `${rel}: "${withP[2]}" is not a bin — have ${bins.join(', ')}`);
+        continue;
+      }
+      if (target === scoped) continue;                 // the correct plain form
+      if (!/^(@?[\w.-]+\/)?[\w.-]+$/.test(target)) continue;  // prose, not a command
+      // Anything that looks like one of our bins, used bare, is the bug.
+      assert(
+        !bins.includes(target) && target !== 'react-native-agents-mcp',
+        `${rel}: "npx ${target}" resolves a registry package of that name, not ${scoped}. ` +
+          `Use "npx ${scoped}" or "npx -p ${scoped} ${target}".`,
+      );
+    }
+  }
+});
+
 test('no action.yml input is marked required when the code accepts alternatives', () => {
   // `api-key` was `required: true` while index.mjs resolves it from the input,
   // from ANTHROPIC_API_KEY/OPENAI_API_KEY, or not at all under `dry-run` and
