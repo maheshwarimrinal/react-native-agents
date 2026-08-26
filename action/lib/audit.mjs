@@ -81,8 +81,14 @@ Rules that matter:
   the whole repository. If something is wrong in unchanged code, ignore it.
 - **The line number must come from the left gutter of the diff.** Do not guess.
   A finding pointing at the wrong line is worse than no finding.
+- **Every finding must be something that is wrong and needs changing.** Not an
+  observation, not a confirmation, not a note that something was done correctly.
+  "Completion handler always called" and "Registered at module scope" are things
+  the code got *right* — they do not belong in \`findings\` at any severity.
+  If you want to say the code handles something well, put it in \`summary\`.
 - **Do not invent problems to seem useful.** An empty findings array is a
   perfectly good answer for a clean diff, and is far better than noise.
+  Reviewers judge this tool by its false positives, not its coverage.
 - **Do not inflate severity.** Reserve P0 for things that genuinely must block
   a release. A console.log is P3.
 - **No duplicates.** One finding per distinct problem.

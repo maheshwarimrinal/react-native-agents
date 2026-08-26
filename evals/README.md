@@ -37,7 +37,7 @@ evals/<agent>/<case>/
 
   // Phrases that indicate a wrong or premature answer. Any hit fails the case.
   "forbid": [
-    { "name": "jumps to FlashList before measuring", "all": ["flashlist"], "unless": ["measure", "profil"] },
+    { "name": "jumps to FlashList before measuring", "all": ["flashlist"], "unlessPattern": "measur\\w+|profil\\w+" },
     { "name": "invents a benchmark", "pattern": "\\b\\d+%? (faster|fewer renders|wasted)" }
   ]
 }
@@ -70,9 +70,14 @@ node evals/run.mjs --case security/jwt-in-asyncstorage --verbose
 # Continue an interrupted run. Restored results still count toward the gate.
 node evals/run.mjs --resume
 
+# Only the cases a change touched — the full suite is ~542k prompt tokens.
+node evals/run.mjs --agent rn-payments,rn-background,rn-monorepo
+node evals/run.mjs --clean          # correct-code cases only, the cheapest signal
+
 # Against a deliberately weak or local model, lower the floor rather than
-# ignoring the result.
-OPENAI_BASE_URL=http://localhost:11434/v1 node evals/run.mjs --min-pass-rate 0.4
+# ignoring the result. Free, no API key — see LOCAL-MODEL.md.
+OPENAI_BASE_URL=http://localhost:11434/v1 \
+  node evals/run.mjs --provider openai --model qwen2.5-coder:7b --min-pass-rate 0.3
 ```
 
 ## Writing a `forbid` exception

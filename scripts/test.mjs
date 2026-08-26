@@ -25,7 +25,7 @@ const KNOWN_WHOLE_WORDS = new Set(['spec', 'orient', 'i18n', 'newarch', 'nx']);
 const { telemetryState, consentState, sanitise, capture, ALLOWED_PROPERTIES } = await import(
   path.join(ROOT, 'scripts/lib/telemetry.mjs')
 );
-const { loadCases, scoreOutput, gateReasons, DEFAULT_MIN_PASS_RATE, splitClauses, containsWholeTerm } = await import(
+const { loadCases, scoreOutput, gateReasons, DEFAULT_MIN_PASS_RATE, splitClauses, containsWholeTerm, isQuestionCase } = await import(
   path.join(ROOT, 'evals/run.mjs')
 );
 const os = await import('node:os');
@@ -1270,6 +1270,70 @@ test('a concessive construction voids unlessPattern too', () => {
   );
 });
 
+test('question cases are framed as questions, not as files to review', () => {
+  // Every case used to get "Review the following file …" plus a demand for a
+  // JSON findings array — including the fifteen whose input is a developer's
+  // question to an interactive agent. monorepo/quote-workspace-setup scored 0/5
+  // against terms as common as "cost" and "complexity", which no genuine answer
+  // to "should we adopt a monorepo?" could miss. The harness was marking its own
+  // mis-framing as a model failure.
+  const agents = loadAgents();
+  const byId = new Map(agents.map((a) => [a.id, a]));
+  const cases = loadCases();
+
+  const questions = cases.filter((tc) => isQuestionCase(tc, byId.get(tc.def.agent)));
+  assert(questions.length > 5, `expected the interactive cases to be detected, got ${questions.length}`);
+
+  // Every interactive agent's cases must be questions — unless they cap findings.
+  for (const tc of cases) {
+    const agent = byId.get(tc.def.agent);
+    if (agent?.mode !== 'interactive') continue;
+    if (tc.def.expectMaxFindings !== undefined) continue;
+    assert(
+      isQuestionCase(tc, agent),
+      `${tc.id} feeds an interactive agent but is framed as a file review`,
+    );
+  }
+});
+
+test('a clean case keeps the findings contract even as a .md fixture', () => {
+  // `expectMaxFindings` is an assertion about findings, so the case must ask for
+  // findings. upgrade/clean-version-bump is an .md fixture with a cap of 1;
+  // treating it as prose would skip the only check it exists for.
+  const byId = new Map(loadAgents().map((a) => [a.id, a]));
+  for (const tc of loadCases()) {
+    if (tc.def.expectMaxFindings === undefined) continue;
+    assert(
+      !isQuestionCase(tc, byId.get(tc.def.agent)),
+      `${tc.id} caps findings at ${tc.def.expectMaxFindings} but would be asked for prose — the cap could never fail`,
+    );
+  }
+});
+
+test('an explicit style in case.json overrides the inference', () => {
+  const agent = { mode: 'interactive' };
+  eq(isQuestionCase({ def: { style: 'review' }, inputName: 'input.md' }, agent), false);
+  eq(isQuestionCase({ def: { style: 'question' }, inputName: 'input.tsx' }, { mode: 'review' }), true);
+});
+
+test('the output contract forbids reporting correct behaviour as a finding', () => {
+  // A local run had the model return five P3 "findings" on a clean fixture:
+  // "Foreground guarantee in place", "Completion handler always called" — all
+  // things the code got right. The contract said "do not invent problems" but
+  // never said a finding must be a defect, so a checklist read as compliant.
+  const src = fs.readFileSync(path.join(ROOT, 'action/lib/audit.mjs'), 'utf8');
+  const contract = src.match(/const OUTPUT_CONTRACT = `([\s\S]*?)`;/)?.[1] ?? '';
+  assert(contract, 'could not find OUTPUT_CONTRACT');
+  assert(
+    /wrong and needs changing/i.test(contract),
+    'the contract must say a finding is a defect, not an observation',
+  );
+  assert(
+    /not an observation|not a confirmation/i.test(contract),
+    'and rule out the confirmation-as-finding shape explicitly',
+  );
+});
+
 test('no eval rule uses the keyword `unless` any more', () => {
   // The ratchet. Every bypass reported against this suite came from a bare
   // keyword excusing any clause the word happened to appear in — the last one
@@ -1491,7 +1555,7 @@ test('dirty cases that miss most expectations fail the suite', () => {
   const { reasons, dirtyRate } = gateReasons(all, DEFAULT_MIN_PASS_RATE);
   eq(dirtyRate, 0, 'no dirty case fully passed');
   assert(
-    reasons.some((r) => /dirty cases passed/.test(r)),
+    reasons.some((r) => /dirty case\(s\) fully passed/.test(r)),
     `expected a dirty-rate failure, got: ${JSON.stringify(reasons)}`,
   );
 });

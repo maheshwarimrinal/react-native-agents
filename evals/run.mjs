@@ -9,8 +9,12 @@
  *   ANTHROPIC_API_KEY=... node evals/run.mjs
  *   node evals/run.mjs --agent rn-security --verbose
  *   node evals/run.mjs --case security/jwt-in-asyncstorage
+ *   node evals/run.mjs --agent rn-payments,rn-background   # comma-separated
+ *   node evals/run.mjs --clean                     # correct-code cases only
  *   node evals/run.mjs --resume                    # continue an interrupted run
  *   node evals/run.mjs --min-pass-rate 0.4         # expect a weak local model
+ *
+ * For a free run against Ollama or LM Studio, see evals/LOCAL-MODEL.md.
  *
  * Exit code: 0 only if none of these happened —
  *   - an agent gave advice its case forbids
@@ -107,7 +111,7 @@ export function splitClauses(text) {
 }
 
 /**
- * Concessive constructions, which void a keyword `unless` exception.
+ * Concessive constructions, which void an `unlessPattern` exception.
  *
  * These are the grammar of "I acknowledge the objection and am doing it
  * anyway" — the shape of:
@@ -150,6 +154,30 @@ export function containsWholeTerm(haystack, term) {
   return new RegExp(`${left}${escaped}${right}`, 'i').test(haystack);
 }
 
+/**
+ * Is this case a question to answer, or a file to review?
+ *
+ * Exported so the decision can be tested. It used to be no decision at all —
+ * every case got "Review the following file …" plus a demand for JSON findings,
+ * including the fifteen whose input is a developer's question to an interactive
+ * agent. Those scored near zero against expectations no real answer could miss,
+ * and the harness recorded its own mis-framing as a model failure.
+ *
+ * `style: "question" | "review"` in case.json overrides the inference.
+ */
+export function isQuestionCase(tc, agent) {
+  if (tc.def.style) return tc.def.style === 'question';
+  /**
+   * A case that caps findings is asserting *about findings*, so it needs the
+   * structured contract whatever its file extension.
+   * `upgrade/clean-version-bump` is an .md fixture with `expectMaxFindings: 1`;
+   * framing it as prose would skip the only check it exists for, and a clean
+   * case that can no longer fail is worse than no clean case at all.
+   */
+  if (tc.def.expectMaxFindings !== undefined) return false;
+  return agent?.mode === 'interactive' || /\.(md|txt)$/.test(tc.inputName);
+}
+
 export function scoreOutput(text, def) {
   const haystack = text.toLowerCase();
   const expected = [];
@@ -190,25 +218,19 @@ export function scoreOutput(text, def) {
     }
 
     /**
-     * `unless` excuses a forbidden phrase only when the exception appears in
-     * the SAME CLAUSE as the evidence, as a whole word.
-     *
-     * This started as "anywhere in the response", which let a `not` three
-     * sentences away excuse forbidden advice. Narrowing it to the sentence was
-     * not enough — two bypasses survived, both verified against the scorer:
-     *
-     *   "Validate the receipt on the device, which is not hard to do."
-     *   "Validate the receipt on the device; this is not optional."
-     *
-     * Both give the forbidden advice and then *reinforce* it, and both were
-     * excused by the trailing `not`. Worse, substring matching meant `not`
-     * matched inside `notary`, `another` and `nothing`.
+     * `unlessPattern` excuses a forbidden phrase only within the CLAUSE holding
+     * the evidence.
      *
      * Clause boundaries (`, ; : —` as well as `. ! ?`) are where a qualifier
-     * stops applying to what came before it. "Do not validate ..." keeps its
-     * negation in the same clause; "..., which is not hard" does not. That also
+     * stops applying to what came before it. "Do not validate …" keeps its
+     * negation in the same clause; "…, which is not hard" does not. That also
      * preserves the legitimate trailing form, "Validating the receipt on the
      * device is insufficient", which sits in one clause with its qualifier.
+     *
+     * The scope narrowed three times before landing here, each time after a
+     * reported bypass — whole response, then sentence, then clause. See
+     * evals/README.md for the table; the short version is that the keyword form
+     * this replaced was asking a question keywords cannot answer.
      */
     if (triggered && evidence && f.unlessPattern) {
       const ev = String(evidence).toLowerCase();
@@ -330,9 +352,21 @@ export function gateReasons(all, minPassRate = DEFAULT_MIN_PASS_RATE) {
   if (cleanFailures) reasons.push(`${cleanFailures} clean case(s) failed`);
   if (noneMatched) reasons.push('no case matched any expectation — likely a provider failure');
   if (dirty.length && dirtyRate < minPassRate) {
+    /**
+     * Report cases, not just a percentage.
+     *
+     * On a filtered run the rate is coarse: with four dirty cases the only
+     * achievable values are 0, 25, 50, 75 and 100, so "25% against a floor of
+     * 30%" reads as a five-point near-miss when it is actually a whole case
+     * short. Naming the counts, and the number needed, stops the number being
+     * more precise than the measurement.
+     */
+    const passedCount = dirty.length - dirtyFailed.length;
+    const needed = Math.ceil(minPassRate * dirty.length);
     reasons.push(
-      `only ${(dirtyRate * 100) | 0}% of dirty cases passed (floor ${(minPassRate * 100) | 0}%) — ` +
-        `raise with --min-pass-rate if this model is expected to be weak`,
+      `${passedCount} of ${dirty.length} dirty case(s) fully passed — ` +
+        `need ${needed} for the ${(minPassRate * 100) | 0}% floor. ` +
+        `Lower it with --min-pass-rate if this model is expected to be weak`,
     );
   }
 
@@ -549,8 +583,31 @@ async function main() {
   const shared = loadSharedContext();
   let cases = loadCases();
 
-  if (args.agent) cases = cases.filter((tc) => tc.def.agent === args.agent);
-  if (args.case) cases = cases.filter((tc) => tc.id === args.case || tc.id.endsWith(args.case));
+  /**
+   * `--agent` and `--case` accept comma-separated lists.
+   *
+   * The full suite is ~542,000 prompt tokens across 49 cases — several hours
+   * against a local model, which is most of a working day of a laptop at full
+   * tilt. Running the subset a change actually touched is the difference
+   * between "we ran the evals" and "we meant to".
+   */
+  const list = (v) => String(v).split(',').map((s) => s.trim()).filter(Boolean);
+  if (args.agent) {
+    const want = new Set(list(args.agent));
+    cases = cases.filter((tc) => want.has(tc.def.agent));
+  }
+  if (args.case) {
+    const want = list(args.case);
+    cases = cases.filter((tc) => want.some((w) => tc.id === w || tc.id.endsWith(w)));
+  }
+  /**
+   * Clean cases only: correct code that must produce no findings.
+   *
+   * The cheapest meaningful signal there is. A model inventing problems in
+   * correct code is unambiguous — no amount of model weakness excuses it — and
+   * these cases fail the gate at any `--min-pass-rate`.
+   */
+  if (args.clean) cases = cases.filter((tc) => tc.def.expectMaxFindings !== undefined);
 
   if (cases.length === 0) {
     console.error(c.red('\n  No matching eval cases.\n'));
@@ -671,21 +728,57 @@ async function main() {
     const references = agent.references.map((r) => `<reference name="${r.slug}">\n${r.content}\n</reference>`).join('\n\n');
 
     const system = [agent.body, '---', shared, '---', '# Reference library', references].join('\n\n');
-    const user = [
-      'Review the following file and report what a competent React Native engineer would flag.',
-      '',
-      `## Project context`,
-      ...Object.entries(tc.def.context ?? {}).map(([k, v]) => `- ${k}: ${v}`),
-      '',
-      `## ${tc.inputName}`,
-      '',
-      '```',
-      tc.input,
-      '```',
-      '',
-      'Respond with a JSON object: {"findings":[{"severity","title","file","line","why","fix","verify"}],"summary"}.',
-      'Return only the JSON.',
-    ].join('\n');
+
+    /**
+     * Frame the case as what it actually is.
+     *
+     * Every case used to get "Review the following file …" plus a demand for a
+     * JSON findings array. That is right for a code fixture, and wrong for the
+     * fifteen cases — a third of the suite — whose input is a *question* to an
+     * interactive agent:
+     *
+     *   "We're a 4-person team with one React Native app … Should we do it now?"
+     *
+     * Asked to "review the file" and return findings, a model produces findings
+     * *about a markdown document*, and the expectations ("not yet", "ongoing
+     * cost", "revisit when") match nothing. `monorepo/quote-workspace-setup`
+     * scored 0/5 against terms as common as "cost" and "complexity", which no
+     * genuine answer to that question could miss. That was the harness marking
+     * its own mis-framing as a model failure.
+     */
+    const isQuestion = isQuestionCase(tc, agent);
+
+    const user = isQuestion
+      ? [
+          'Answer the following, as the specialist described above.',
+          '',
+          '## Project context',
+          ...Object.entries(tc.def.context ?? {}).map(([k, v]) => `- ${k}: ${v}`),
+          '',
+          `## From the developer (${tc.inputName})`,
+          '',
+          tc.input,
+          '',
+          'Answer in prose. Give a recommendation and the reasoning behind it —',
+          'do not return JSON, and do not pad the answer to look thorough.',
+        ].join('\n')
+      : [
+          'Review the following file and report what a competent React Native engineer would flag.',
+          '',
+          '## Project context',
+          ...Object.entries(tc.def.context ?? {}).map(([k, v]) => `- ${k}: ${v}`),
+          '',
+          `## ${tc.inputName}`,
+          '',
+          '```',
+          tc.input,
+          '```',
+          '',
+          'Respond with a JSON object: {"findings":[{"severity","title","file","line","why","fix","verify"}],"summary"}.',
+          'Every entry in "findings" must be something that is wrong and needs changing.',
+          'Do not list things the code does correctly — an empty array is the right',
+          'answer for a clean file. Return only the JSON.',
+        ].join('\n');
 
     process.stdout.write(`  ${tc.id.padEnd(46)}`);
 
@@ -699,10 +792,25 @@ async function main() {
       continue;
     }
 
-    const parsed = parseFindings(raw);
+    /**
+     * A prose answer has no findings array, and demanding one would fail every
+     * interactive case on a technicality. Severity and noise caps are checks on
+     * *findings*, so they only apply where findings were asked for.
+     */
+    let parsed = { findings: [], summary: '' };
+    if (!isQuestion) {
+      try {
+        parsed = parseFindings(raw);
+      } catch (err) {
+        console.log(c.red(`ERROR — ${err.message}`));
+        results.push({ tc, error: err.message, score: null });
+        persist();
+        continue;
+      }
+    }
     const score = scoreOutput(raw, tc.def);
-    const sev = checkSeverity(parsed.findings, tc.def);
-    const cap = checkMaxFindings(parsed.findings, tc.def);
+    const sev = isQuestion ? { ok: true } : checkSeverity(parsed.findings, tc.def);
+    const cap = isQuestion ? { ok: true } : checkMaxFindings(parsed.findings, tc.def);
     const pass = score.pass && sev.ok && cap.ok;
 
     results.push({ tc, raw, parsed, score, sev, cap, pass });
