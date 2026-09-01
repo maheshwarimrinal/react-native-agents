@@ -1,0 +1,5 @@
+# Renders the "Sponsor" button on the repository header.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+#
+# The button only appears once GitHub Sponsors is approved for this account.
+github: maheshwarimrinal

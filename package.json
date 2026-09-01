@@ -104,5 +104,9 @@
   },
   "bugs": {
     "url": "https://github.com/maheshwarimrinal/react-native-agents/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/maheshwarimrinal"
   }
 }

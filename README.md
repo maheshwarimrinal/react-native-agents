@@ -203,6 +203,13 @@ MIT — see [LICENSE](LICENSE).
 
 ## Support the project
 
-If React Native Agents saves you time, you can support its ongoing maintenance:
+If React Native Agents saves you time, you can support its ongoing maintenance. The agents are MIT
+and stay that way — sponsorship pays for the upkeep behind them: tracking React Native releases,
+refreshing the knowledge base, and adding specialists.
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/maheshwarimrinal)
+
+Recurring support goes through [GitHub Sponsors](https://github.com/sponsors/maheshwarimrinal).
+For a one-off, there is coffee:
 
 [![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/maheshwarimrinal)
