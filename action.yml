@@ -35,8 +35,8 @@ inputs:
 
   agents:
     description: >-
-      Comma-separated agent ids to force. Any of the 17 review agents:
-      rn-background, rn-code-quality, rn-native-modules, rn-navigation,
+      Comma-separated agent ids to force. Any of the 18 review agents:
+      rn-animation, rn-background, rn-code-quality, rn-native-modules, rn-navigation,
       rn-observability, rn-offline, rn-payments, rn-performance,
       rn-permissions, rn-platform-parity, rn-push, rn-release, rn-security,
       rn-state, rn-testing, rn-ui-accessibility, rn-upgrade.

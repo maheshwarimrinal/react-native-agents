@@ -150,6 +150,7 @@ actions** list ordered by impact-per-effort. Users act on the top of the list; m
 
 Detailed guidance by area. Apply the relevant one to the task at hand.
 
+- **RN Animation** — Use for writing and reviewing React Native animation and gesture code — Reanimated worklets and shared values, the JS/UI thread boundary, the Gesture Handler API, layout and entering/exiting animations, scroll-driven motion, and the Reanimated 4 migration. Covers the failure modes that look like bugs in your logic but are really thread-boundary mistakes.
 - **RN Background** — Use for work that must happen while the app is not in the foreground — background fetch, headless JS, background location, silent pushes as triggers, uploads that outlive the screen, and scheduled tasks. Covers the iOS and Android restrictions that decide whether your task runs at all, OEM battery managers, and designing for the case where it simply does not run.
 - **RN Build** — Use when writing new React Native code — screens, components, forms, lists, navigation, data fetching. Produces code that already handles safe areas, accessibility, loading/empty/error states, keyboard, dark mode, and stable list callbacks, so review has nothing to catch.
 - **RN Code Quality** — Use for React Native code review, refactoring, architecture decisions, TypeScript strictness, hook correctness, state management choices, and error handling. Reviews diffs and whole codebases against RN-specific idioms.

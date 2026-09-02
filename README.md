@@ -2,7 +2,7 @@
 
 # React Native Agents
 
-**24 expert AI agents for React Native — upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, store submission, payments, background execution, and monorepos.**
+**25 expert AI agents for React Native — upgrades, debugging, animation, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, store submission, payments, background execution, and monorepos.**
 
 Works with Claude Code, Cursor, Windsurf, GitHub Copilot, Codex, Zed, Aider, MCP clients, and GitHub Actions.
 
@@ -99,6 +99,7 @@ would rather accept partial coverage.
 
 | Agent | Focus | Command |
 |---|---|---|
+| 🎬 Animation | Reanimated worklets, gestures, layout animations | `/rn-animate` |
 | ⚡ Performance | Lists, rendering, startup, memory, bundles | `/rn-perf` |
 | 🔒 Security | Secrets, storage, auth, TLS, WebViews, deep links, supply chain | `/rn-security` |
 | 🧹 Code Quality | Architecture, TypeScript, hooks, state, errors, RN idioms | `/rn-review` |
@@ -122,7 +123,7 @@ Seven agents are deliberately excluded from pull-request routing — **Doctor, B
 
 Routing is narrow on purpose. A typical UI change reaches about three agents, not twenty-four — signals are scoped so that adding specialists does not raise the cost of an ordinary pull request.
 
-24 playbooks and 128 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
+25 playbooks and 133 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
 
 ## Bundle size, measured
 

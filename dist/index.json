@@ -1,6 +1,6 @@
 {
   "generatedAt": null,
-  "version": "1.3.1",
+  "version": "1.4.0",
   "knowledge": {
     "$comment": "Freshness metadata for the React Native knowledge in agents/ and shared/. This is the single source of truth for 'what have we actually checked?'. The scheduled freshness workflow compares these against the live npm registry and opens an issue when they fall behind. Update `last_verified` only after genuinely reviewing the affected references — bumping the date without reading is worse than leaving it stale, because it launders an unchecked claim as a verified one.",
     "last_verified": "2026-08-12",
@@ -30,6 +30,16 @@
         "notes": "v14 is a hard break, not a deprecation: getProducts, getSubscriptions, requestSubscription, getPurchaseHistory, clearProductsIOS, flushFailedPurchasesCachedAsPendingAndroid and setup were removed. StoreKit 2 (iOS 15+), Play Billing 7+, RN 0.71+. Error codes moved to the unified ErrorCode enum, so the old 'E_USER_CANCELLED' string silently stops matching. purchase-flow.md carries the full v13→v14 table."
       }
     },
+    "reanimated": {
+      "$comment": "Reanimated 4 is a larger break than its 'API is compatible' framing suggests. Verified against the official migration guide and glossary; the agent quotes these APIs directly.",
+      "verified_on": "2026-08-27",
+      "verified_through": "4.x",
+      "source": "https://docs.swmansion.com/react-native-reanimated/docs/guides/migration-from-3.x",
+      "used_by": [
+        "rn-animation"
+      ],
+      "notes": "New Architecture ONLY — Paper dropped. There is NO single React Native floor: support is a moving window per Reanimated minor, and newer minors DROP older RN versions. As of 2026-08-27 the table spans RN 0.78-0.87; 4.7.x supports 0.85-0.87 only (not 0.78), 4.1.x supports 0.78-0.82 (not 0.83+). react-native-worklets has its own matrix: 4.7.x needs worklets 0.13.x. Always read the official compatibility table, or compatibility.json inside the installed package — the table assumes the latest patch of each minor. Worklets moved to a separate react-native-worklets package; Babel plugin renamed react-native-reanimated/plugin -> react-native-worklets/plugin. Threading functions renamed AND un-curried: runOnJS -> scheduleOnRN(fn, args), runOnUI -> scheduleOnUI, executeOnUIRuntimeSync -> runOnUISync, runOnRuntime -> scheduleOnRuntime, makeShareableCloneRecursive -> createSerializable. REMOVED: useAnimatedGestureHandler, useWorkletCallback (gorhom/bottom-sheet needs >=5.1.8), combineTransition, react-native-v8 support. withSpring: rest thresholds -> single relative energyThreshold; duration is PERCEPTUAL (actual 1.5x); defaults changed (Reanimated3DefaultSpringConfig). useScrollViewOffset -> useScrollOffset. addWhitelisted*Props are no-ops. useAnimatedKeyboard deprecated. Shared Element Transitions experimental. New in 4: CSS animations/transitions. THREAD MODEL: the 'worklet' directive only makes a function serializable — the scheduling API decides placement, and useAnimatedStyle's callback runs on the JS thread first and then the UI thread (hence global._WORKLET). Gesture callbacks can be configured to run on JS. Captured props/state are NOT frozen forever: the hooks re-create their worklet when inferred dependencies change, so React-driven values refresh. Shared values are required for changes driven from the UI thread BETWEEN renders. Real staleness comes from a worklet pinned by an empty/incomplete dependency array."
+    },
     "yarnBerry": {
       "$comment": "Recorded because 'Yarn workspaces = hoisted' was true of Classic and wrong for Berry, and the monorepo agent stated it flatly.",
       "verified_on": "2026-08-24",
@@ -57,6 +67,91 @@
     }
   },
   "agents": [
+    {
+      "id": "rn-animation",
+      "name": "React Native Animation Agent",
+      "title": "RN Animation",
+      "description": "Use for writing and reviewing React Native animation and gesture code — Reanimated worklets and shared values, the JS/UI thread boundary, the Gesture Handler API, layout and entering/exiting animations, scroll-driven motion, and the Reanimated 4 migration. Covers the failure modes that look like bugs in your logic but are really thread-boundary mistakes.",
+      "version": "1.0.0",
+      "emoji": "🎬",
+      "color": "coral",
+      "command": "rn-animate",
+      "triggers": [
+        "reanimated",
+        "worklet",
+        "shared value",
+        "usesharedvalue",
+        "useanimatedstyle",
+        "useanimatedprops",
+        "usederivedvalue",
+        "useanimatedreaction",
+        "withtiming",
+        "withspring",
+        "withdecay",
+        "withsequence",
+        "withrepeat",
+        "runonjs",
+        "runonui",
+        "scheduleonrn",
+        "scheduleonui",
+        "react-native-worklets",
+        "gesture handler",
+        "gesturedetector",
+        "gesture.pan",
+        "useanimatedgesturehandler",
+        "layout animation",
+        "entering animation",
+        "exiting animation",
+        "fadein",
+        "slideinright",
+        "layouttransition",
+        "interpolate",
+        "usescrolloffset",
+        "useanimatedscrollhandler",
+        "animated.view",
+        "createanimatedcomponent",
+        "animated.timing",
+        "animated.spring",
+        "animated.sequence",
+        "animated.parallel",
+        "animated.decay",
+        "usenativedriver",
+        "layoutanimation",
+        "configurenext",
+        "panresponder",
+        "swipe to delete",
+        "drag gesture",
+        "pinch to zoom",
+        "bottom sheet animation"
+      ],
+      "globs": [
+        "**/*.{ts,tsx,js,jsx}",
+        "**/babel.config.js",
+        "**/package.json"
+      ],
+      "references": [
+        {
+          "slug": "gestures",
+          "title": "Gestures"
+        },
+        {
+          "slug": "layout-and-css",
+          "title": "Layout Animations and the CSS API"
+        },
+        {
+          "slug": "reanimated-4-migration",
+          "title": "Reanimated 3 → 4"
+        },
+        {
+          "slug": "reviewing-animation-code",
+          "title": "Reviewing Animation Code"
+        },
+        {
+          "slug": "worklets-and-threads",
+          "title": "Worklets and the Thread Boundary"
+        }
+      ]
+    },
     {
       "id": "rn-background",
       "name": "React Native Background Execution Agent",

@@ -1,57 +1,58 @@
 # Animations and Gestures
 
-The rule is simple: **animations must run on the UI thread.** If a frame's value has to make a
-round trip to the JS thread, any JS work — a render, a fetch callback, a JSON parse — drops
-frames. On a 120Hz display you have 8.3ms per frame; a single React commit can eat all of it.
+The goal is that **per-frame values are produced without a round trip to the JS
+thread.** When a frame's value has to make that trip, any JS work — a render, a
+fetch callback, a JSON parse — can delay it and drop frames. On a 120Hz display
+the budget is 8.3ms per frame; a single React commit can eat all of it.
+
+"Runs on the UI thread" is a property of the *API and how it was configured*, not
+of the library. Reanimated schedules worklets on the UI thread, but a
+`useAnimatedStyle` callback also runs once on the JS thread, gesture callbacks
+can be configured to run on JS, and core `Animated` runs natively only with
+`useNativeDriver: true`. Check the configuration before assuming the thread.
 
 ## Library choice
 
 | Library | Use |
 |---|---|
-| **Reanimated 3/4** | Default for anything non-trivial. Worklets run on the UI thread. |
-| **Gesture Handler** | Default for all touch handling. Runs on the UI thread, composes with Reanimated. |
+| **Reanimated 3/4** | Default for anything non-trivial. Worklets are scheduled on the UI thread by the animation APIs. |
+| **Gesture Handler** | Default for all touch handling. Recognition is native and callbacks are worklets by default, so they can be kept off JS; composes with Reanimated. |
 | `Animated` (core) | Fine for simple one-shot transitions **with `useNativeDriver: true`**. |
 | `LayoutAnimation` | Legacy; unreliable on Fabric. Prefer Reanimated layout animations. |
 | `PanResponder` | Legacy. JS-thread gesture handling — replace it. |
 
-## Reanimated correctness
+## Cost, not correctness
 
-```tsx
-const offset = useSharedValue(0);
+**Whether the animation code is *correct* — worklets, the thread boundary, the
+Gesture API, `scheduleOnRN` vs `runOnJS`, the Reanimated 4 migration — belongs to
+`rn-animation`.** That agent owns authoring and review; this one owns "why is it
+janky". Sending a stale-closure bug here produces a frame-budget answer to a
+correctness question.
 
-const style = useAnimatedStyle(() => ({
-  transform: [{ translateX: offset.value }],
-}));
-
-// driving it
-offset.value = withSpring(100, { damping: 15, stiffness: 120 });
-```
-
-Common mistakes:
-
-- **Reading `.value` during render.** `<View style={{ left: offset.value }} />` reads once and
-  never updates, and warns. Always go through `useAnimatedStyle`.
-- **`runOnJS` inside a per-frame callback.** Every call schedules work on the JS thread; in a
-  `useAnimatedReaction` or scroll handler that's 60–120 JS hops per second. Only call `runOnJS`
-  at gesture boundaries (start/end) or debounced.
-- **Capturing non-worklet values.** Worklets serialise their closure. Capturing a large object,
-  or a function that isn't a worklet, either throws or copies more than you expect. Capture
-  primitives and shared values.
-- **Missing the Babel plugin.** `react-native-reanimated/plugin` must be **last** in
-  `babel.config.js` plugins. Without it, worklets silently run on JS.
-- **Animating layout properties.** `width`, `height`, `top`, `left`, `margin`, `padding` trigger
-  layout on every frame. Animate `transform` and `opacity` — they're composited, not laid out.
+What matters *for performance* is which properties you animate:
 
 ```tsx
 // ✗ layout pass per frame
 useAnimatedStyle(() => ({ width: w.value, marginTop: m.value }))
 
-// ✓ composited
+// ✓ composited — no layout, no paint
 useAnimatedStyle(() => ({
   transform: [{ scaleX: sx.value }, { translateY: ty.value }],
   opacity: o.value,
 }))
 ```
+
+`width`, `height`, `top`, `left`, `margin` and `padding` trigger layout on every
+frame. `transform` and `opacity` are composited.
+
+Two other costs worth measuring before assuming:
+
+- **Scheduling back to the JS thread per frame.** In a scroll handler or a
+  `useAnimatedReaction`, that is 60–120 hops a second, and it puts the work back
+  on the thread the animation was moved off. Schedule at boundaries, not on
+  every update.
+- **Heavy work inside a worklet.** The UI thread also draws. A worklet doing
+  real computation every frame degrades exactly what it was meant to protect.
 
 ## Scroll-driven animation
 
@@ -80,23 +81,21 @@ Animated.timing(value, {
 find `useNativeDriver: false`, that animation is running frame-by-frame on the JS thread — either
 switch the animated property or move to Reanimated.
 
-## Gesture Handler
+## Gesture Handler — the performance angle
 
-```tsx
-const pan = Gesture.Pan()
-  .onUpdate((e) => { offset.value = e.translationX; })     // worklet, UI thread
-  .onEnd(() => { offset.value = withSpring(0); });
+The Gesture API itself, composition, cancellation and scroll-view relations are
+`rn-animation`'s. What matters here is that gesture recognition and the
+resulting updates stay on the UI thread:
 
-<GestureDetector gesture={pan}>
-  <Animated.View style={style} />
-</GestureDetector>
-```
-
-- Compose with `Gesture.Simultaneous`, `Gesture.Race`, `Gesture.Exclusive` instead of manual
-  flag juggling.
-- `Pressable`/`TouchableOpacity` are fine for taps; don't rebuild them with gestures.
-- Gestures nested inside scrollables need explicit relations (`.blocksExternalGesture`,
-  `.simultaneousWithExternalGesture`) or you get scroll-vs-drag fights.
+- A gesture callback is a worklet by default. Writing a shared value in
+  `.onUpdate` is cheap — it stays on the UI thread and does not re-render — but
+  it is not free: it still drives the style recomputation and whatever that
+  callback does. Scheduling back to JS there costs a hop per frame on top.
+- Gestures nested inside scrollables need explicit relations
+  (`.blocksExternalGesture`, `.simultaneousWithExternalGesture`) or both
+  recognisers stay alive and the list feels like it is sticking.
+- `Pressable`/`TouchableOpacity` are fine for taps. Rebuilding them with
+  gestures buys nothing and costs correctness.
 
 ## Navigation transitions
 
@@ -141,5 +140,7 @@ rg 'PanResponder'
 rg 'LayoutAnimation'
 rg 'runOnJS' -B 3                       # check the calling context
 rg 'onScroll=\{\(' --type tsx           # JS-thread scroll handlers
-rg 'reanimated/plugin' babel.config.js  # must be last in the list
+# Reanimated 4 renamed this to react-native-worklets/plugin; either way it must
+# be last in the list. A config with neither is a config where no worklet works.
+rg 'react-native-(reanimated|worklets)/plugin' babel.config.js
 ```

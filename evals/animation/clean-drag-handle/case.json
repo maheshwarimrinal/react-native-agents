@@ -1,0 +1,60 @@
+{
+  "agent": "rn-animation",
+  "title": "A correct drag handle — nothing to report",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Clean case. Only shared values cross the thread boundary. onDismiss is carried as the dismissal spring's completion callback and guarded on `finished`, so it fires when the sheet has actually left rather than while it is still on screen, and cancelAnimation on unmount runs it with finished === false — which is what makes the cleanup meaningful. scheduleOnRN is called once at that boundary rather than per frame, with un-curried arguments. onStart captures the starting offset so a second drag continues. Dismissal is judged on velocity as well as distance. onFinalize resets y only on cancellation, so it does not fight the dismissal spring. The style animates transform and opacity, both composited. Reduced motion is honoured and the gesture is not the only route to the action. The failure mode being tested is manufacturing findings: objecting to the inline opacity maths, demanding useDerivedValue, calling the velocity threshold a magic number, or claiming runOnJS should have been used.",
+  "expect": [],
+  "expectMaxFindings": 1,
+  "expectSeverity": [],
+  "forbid": [
+    {
+      "name": "claims a value is stale or captured when only shared values cross",
+      "pattern": "(stale|captured|frozen)\\s+\\w{0,12}\\s*(closure|value|state|prop)|(closure|value|state|prop)\\s+\\w{0,12}\\s*(is|are)\\s+(stale|captured|frozen)",
+      "unlessPattern": "(?:is|are)\\s+not\\s+(?:stale|captured|frozen)|correctly\\s+\\w+|no stale"
+    },
+    {
+      "name": "recommends runOnJS over the current scheduleOnRN",
+      "pattern": "(use|should use|switch to|replace with)\\s+runonjs",
+      "unlessPattern": "(?:do not|don't|avoid|never)\\s+\\w{0,15}\\s*use|\\bdeprecated\\b|\\bolder\\b"
+    },
+    {
+      "name": "claims the gesture has no cancellation path",
+      "pattern": "(missing|no|never|add)\\s+.{0,20}(onfinalize|cancellation|cleanup)",
+      "unlessPattern": "(?:is|are)\\s+(?:present|handled|correct)|already\\s+\\w+"
+    },
+    {
+      "name": "objects to animating transform or opacity",
+      "pattern": "(avoid|do not|should not)\\s+.{0,25}(transform|opacity)",
+      "unlessPattern": "(?:is|are)\\s+(?:correct|fine|composited|right)"
+    },
+    {
+      "name": "demands the inline interpolation be extracted",
+      "pattern": "(should|must|extract)\\s+.{0,30}(usederivedvalue|interpolate)",
+      "unlessPattern": "(?:is|are)\\s+(?:fine|correct|optional)|\\bnot (?:necessary|needed|required)\\b"
+    },
+    {
+      "name": "invents a frame rate or millisecond figure",
+      "pattern": "\\b\\d+\\s?(fps|ms|milliseconds)\\b",
+      "unlessPattern": "(?:for example|e\\.?g\\.?|such as|roughly|approximately|measure\\w*)"
+    },
+    {
+      "name": "asserts that captured props or state are always stale in a worklet",
+      "pattern": "(captured|worklet)\\w*[^.;,]{0,40}(always|never)\\s+(stale|updates?|refresh)",
+      "unlessPattern": "(?:re-?creat|refresh)\\w*[^.;,]{0,30}(?:dependenc|render)"
+    },
+    {
+      "name": "claims onDismiss fires before the animation completes",
+      "pattern": "(onDismiss|dismiss(al)?\\s+callback)[^.;]{0,60}(before|prematurely|too early|while)[^.;]{0,40}(spring|animation|complet|finish)",
+      "unlessPattern": "(?:is|are)\\s+(?:correctly|properly)|(?:completion|finished)\\s+callback|\\bnot\\b[^.;]{0,20}(?:before|early)"
+    },
+    {
+      "name": "calls the unmount cancelAnimation unnecessary",
+      "pattern": "(cancelanimation|cleanup|useeffect)[^.;]{0,50}(unnecessary|not needed|redundant|pointless|no-?op)",
+      "unlessPattern": "(?:is|are)\\s+(?:necessary|needed|correct|right)"
+    }
+  ],
+  "elidedHelpers": []
+}

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
-const { globToRegExp, matchesGlob, isIgnored, route, addedLines, addedLinesForFile, SIGNALS } =
+const { globToRegExp, matchesGlob, isIgnored, route, addedLines, addedLinesForFile, removedLinesForFile, SIGNALS, REFINEMENTS } =
   await import('./lib/router.mjs');
 const { parseDiff, renderForPrompt, findPosition, nearestChangedLine, changedFilePaths, unquoteGitPath, pathFromDiffHeader } =
   await import('./lib/diff.mjs');
@@ -524,6 +524,153 @@ test('upgrade refinement ignores routine Expo module adds', () => {
   ]) {
     const ids = route(['package.json'], agents, { diffText: hunk(toolchain) }).selected.map((a) => a.id);
     assert(ids.includes('rn-upgrade'), `${toolchain.trim()} should route: ${ids.join(', ')}`);
+  }
+});
+
+test('the animation refinement reads babel.config.js content, and only that file', () => {
+  // Asserted against the refinement directly rather than through route().
+  // Routing also re-adds files via keyword triggers, and "react-native-worklets"
+  // is itself a trigger word — so a route()-level positive assertion passes even
+  // when the refinement is hard-wired to reject, and proves nothing.
+  const refine = REFINEMENTS['rn-animation'];
+  assert(typeof refine === 'function', 'rn-animation should have a refinement');
+
+  const hunk = (file, line) => `diff --git a/${file} b/${file}\n+++ b/${file}\n+${line}`;
+
+  for (const relevant of [
+    "    'react-native-worklets/plugin',",
+    "    'react-native-reanimated/plugin',",
+    "    ['react-native-worklets/plugin', { processNestedWorklets: true }],",
+  ]) {
+    assert(
+      refine('babel.config.js', hunk('babel.config.js', relevant)) === true,
+      `should accept: ${relevant.trim()}`,
+    );
+  }
+
+  for (const unrelated of [
+    "    ['module-resolver', { alias: { '@': './src' } }],",
+    "    'transform-inline-environment-variables',",
+    "  presets: [['babel-preset-expo', { jsxRuntime: 'automatic' }]],",
+  ]) {
+    assert(
+      refine('babel.config.js', hunk('babel.config.js', unrelated)) === false,
+      `should reject: ${unrelated.trim()}`,
+    );
+  }
+
+  // Scoped to babel configs at any depth, and to nothing else.
+  assert(refine('apps/mobile/babel.config.js', hunk('apps/mobile/babel.config.js', 'x')) === false,
+    'nested babel config is in scope');
+  assert(refine('src/CardAnimation.tsx', hunk('src/CardAnimation.tsx', 'x')) === true,
+    'source files must pass through untouched');
+
+  // Fails open rather than suppressing a specialist we could not evidence.
+  assert(refine('babel.config.js', '') === true, 'no diff body should fail open');
+  assert(refine('babel.config.js', hunk('other.js', 'x')) === true, 'no hunk for the file fails open');
+});
+
+test('removing the worklets Babel plugin routes the animation agent', () => {
+  // The most destructive edit a Babel config can carry appears ONLY as a removed
+  // line. A refinement reading added lines saw an unrelated plugin going in and
+  // skipped the review of a change that breaks every worklet in the app.
+  const diff = [
+    'diff --git a/babel.config.js b/babel.config.js',
+    '+++ b/babel.config.js',
+    "-    'react-native-worklets/plugin',",
+    "+    'babel-plugin-transform-remove-console',",
+  ].join('\n');
+
+  assert(
+    REFINEMENTS['rn-animation']('babel.config.js', diff) === true,
+    'a removed worklets plugin must not be filtered out',
+  );
+  const ids = route(['babel.config.js'], agents, { diffText: diff }).selected.map((a) => a.id);
+  assert(ids.includes('rn-animation'), `should route: ${ids.join(', ')}`);
+});
+
+test('removedLinesForFile isolates one file and ignores the --- header', () => {
+  const diff = [
+    'diff --git a/a.json b/a.json',
+    '--- a/a.json',
+    '+++ b/a.json',
+    '-gone-from-a',
+    '+added-to-a',
+    'diff --git a/b.json b/b.json',
+    '--- a/b.json',
+    '+++ b/b.json',
+    '-gone-from-b',
+  ].join('\n');
+
+  eq(removedLinesForFile(diff, 'a.json').join(), 'gone-from-a');
+  eq(removedLinesForFile(diff, 'b.json').join(), 'gone-from-b');
+  eq(removedLinesForFile(diff, 'c.json').length, 0);
+  // The `--- a/<path>` header is a header, not a deletion.
+  assert(
+    !removedLinesForFile(diff, 'a.json').some((l) => l.includes('-- a/')),
+    'the --- header must not be read as removed content',
+  );
+});
+
+test('the legacy Animated and LayoutAnimation APIs route the animation agent', () => {
+  // Both live in generically-named files and mention neither Reanimated nor a
+  // gesture, so nothing in SIGNALS or the old trigger list could see them.
+  const cases = [
+    ['src/Toast.tsx', "    Animated.timing(fade, { toValue: 1, useNativeDriver: true }).start();"],
+    ['src/Panel.tsx', '    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);'],
+    ['src/Sheet.tsx', '    const responder = PanResponder.create({ onPanResponderMove: handle });'],
+  ];
+
+  for (const [file, line] of cases) {
+    const diff = `diff --git a/${file} b/${file}\n+++ b/${file}\n+${line}`;
+    const ids = route([file], agents, { diffText: diff }).selected.map((a) => a.id);
+    assert(ids.includes('rn-animation'), `${line.trim()} should route animation: ${ids.join(', ')}`);
+  }
+
+  // A generically-named file with no animation content stays out.
+  const inert = 'diff --git a/src/UserPanel.tsx b/src/UserPanel.tsx\n+++ b/src/UserPanel.tsx\n+  const name = user.displayName;';
+  const ids = route(['src/UserPanel.tsx'], agents, { diffText: inert }).selected.map((a) => a.id);
+  assert(!ids.includes('rn-animation'), `inert change should not route: ${ids.join(', ')}`);
+});
+
+test('an unrelated babel.config.js change does not route the animation agent', () => {
+  const diff = [
+    'diff --git a/babel.config.js b/babel.config.js',
+    '+++ b/babel.config.js',
+    "+    ['module-resolver', { alias: { '@': './src' } }],",
+  ].join('\n');
+
+  const { selected, matchedFiles } = route(['babel.config.js'], agents, { diffText: diff });
+  const ids = selected.map((a) => a.id);
+  assert(!ids.includes('rn-animation'), `should not route animation: ${ids.join(', ')}`);
+  assert(
+    !(matchedFiles['rn-animation'] ?? []).includes('babel.config.js'),
+    'babel.config.js should not be in the animation agent\'s file set',
+  );
+});
+
+test('an edit to an already-animated file routes on its filename', () => {
+  // Trigger matching sees only *added* lines. A one-line change to a file whose
+  // Reanimated import is untouched puts no animation vocabulary in the diff, so
+  // the filename signal is the only thing that can catch it. This is the case
+  // that broke when `Transition` was removed from SIGNALS.
+  const diff = [
+    'diff --git a/src/ScreenTransition.tsx b/src/ScreenTransition.tsx',
+    '+++ b/src/ScreenTransition.tsx',
+    '-    opacity: progress.value,',
+    '+    opacity: progress.value * 0.8,',
+  ].join('\n');
+
+  const ids = route(['src/ScreenTransition.tsx'], agents, { diffText: diff }).selected.map((a) => a.id);
+  assert(
+    ids.includes('rn-animation'),
+    `an opacity tweak in an animated file should route: ${ids.join(', ')}`,
+  );
+
+  // ...without dragging in every word that merely starts with "transition".
+  for (const unrelated of ['src/TransitionalAuth.tsx', 'src/transitional-state.ts']) {
+    const other = route([unrelated], agents).selected.map((a) => a.id);
+    assert(!other.includes('rn-animation'), `${unrelated} should not route: ${other.join(', ')}`);
   }
 });
 

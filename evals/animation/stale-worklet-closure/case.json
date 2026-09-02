@@ -1,0 +1,107 @@
+{
+  "agent": "rn-animation",
+  "title": "Swipe-to-delete: a gesture pinned by an empty dependency array, plus per-frame JS scheduling",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Six defects. The headline one is a dependency-array bug, not a Reanimated one: the gesture is built inside useMemo with an empty dependency array, so it is created on the first render and never rebuilt, pinning `isDeleting`, `item.id` and `onDelete` to their first values. Without the empty deps this would be fine — Reanimated hooks re-create their worklet when inferred dependencies change, so a captured state value normally refreshes on re-render. That distinction is the point of the case. (2) setIsDeleting is called directly from a gesture callback, which cannot reach the JS thread. (3) runOnJS in onUpdate schedules a JS hop on every frame of the drag. (4) The style animates `left` and `width`, both of which force a layout pass per frame, rather than transform/opacity. (5) No onFinalize, so a cancelled gesture strands the row mid-swipe. (6) No activeOffsetX, so a horizontal swipe fights the vertical list. Tests whether the agent identifies the dependency array as the cause rather than asserting that captured state is always stale.",
+  "expect": [
+    {
+      "name": "identifies the empty dependency array as what pins the captured values",
+      "any": [
+        "dependency array",
+        "usememo",
+        "deps",
+        "empty array",
+        "[]",
+        "pinned",
+        "never rebuilt",
+        "recreat"
+      ]
+    },
+    {
+      "name": "flags calling setState directly from a worklet",
+      "any": [
+        "setisdeleting",
+        "setstate",
+        "runonjs",
+        "scheduleonrn",
+        "js thread",
+        "cross"
+      ]
+    },
+    {
+      "name": "flags per-frame scheduling back to JS in onUpdate",
+      "any": [
+        "every frame",
+        "per frame",
+        "onupdate",
+        "60",
+        "hop",
+        "defeats"
+      ]
+    },
+    {
+      "name": "flags animating layout properties rather than transform",
+      "any": [
+        "transform",
+        "translatex",
+        "layout",
+        "left",
+        "width",
+        "composit"
+      ]
+    },
+    {
+      "name": "notes the missing cancellation path",
+      "any": [
+        "onfinalize",
+        "cancel",
+        "interrupt",
+        "stranded",
+        "mid-swipe"
+      ]
+    },
+    {
+      "name": "raises the scroll-view conflict or activation threshold",
+      "any": [
+        "activeoffset",
+        "failoffset",
+        "scroll",
+        "conflict",
+        "compete"
+      ]
+    }
+  ],
+  "expectSeverity": [
+    {
+      "atLeast": "P1"
+    }
+  ],
+  "forbid": [
+    {
+      "name": "invents a frame rate or millisecond figure",
+      "pattern": "\\b\\d+\\s?(fps|ms|milliseconds)\\b",
+      "unlessPattern": "(?:for example|e\\.?g\\.?|such as|roughly|approximately|measure\\w*)"
+    },
+    {
+      "name": "recommends switching animation library rather than fixing this code",
+      "pattern": "(use|switch to|migrate to|try)\\s+(moti|react-spring|framer|lottie|animated api)",
+      "unlessPattern": "(?:do not|don't|avoid|not)\\s+\\w{0,15}\\s*(?:use|switch|migrate)|\\bnot (?:the fix|necessary|needed)\\b"
+    },
+    {
+      "name": "claims the shared value itself is the problem",
+      "pattern": "(shared value|usesharedvalue)\\s+.{0,30}(is wrong|should not|incorrect|avoid)",
+      "unlessPattern": "(?:is|are)\\s+correct|correctly\\s+\\w+"
+    },
+    {
+      "name": "treats the wrong-item symptom as a list keying bug without the closure",
+      "all": [
+        "key"
+      ],
+      "unlessPattern": "stale|closure|captured|usestate|worklet|snapshot"
+    }
+  ],
+  "elidedHelpers": []
+}

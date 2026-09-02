@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Publish to npm and prepare Marketplace release
 
 # Publishes when a version tag is pushed:
 #   npm version patch && git push --follow-tags
@@ -136,3 +136,45 @@ jobs:
               echo "\`dry_run: false\`, or push a \`v$V\` tag, to publish."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # GitHub does not expose the "Publish this Action to the GitHub Marketplace"
+  # checkbox through its public Releases API. Prepare the exact draft release
+  # automatically after npm succeeds, then leave only the Marketplace checkbox,
+  # categories, and 2FA confirmation for the maintainer in the web UI.
+  prepare-marketplace-release:
+    name: Prepare Marketplace release
+    needs: publish
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create draft release with generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it unchanged."
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --generate-notes \
+              --title "React Native Agents $TAG"
+          fi
+
+          EDIT_URL="https://github.com/$GITHUB_REPOSITORY/releases/edit/$TAG"
+          {
+            echo "### Marketplace release prepared for \`$TAG\`"
+            echo ""
+            echo "npm was published successfully and the GitHub release draft is ready."
+            echo ""
+            echo "1. [Open the release editor]($EDIT_URL)."
+            echo '2. Select **Publish this Action to the GitHub Marketplace**.'
+            echo '3. Confirm the Marketplace categories and publish the release.'
+            echo ""
+            echo "GitHub requires this final web step and 2FA; its public Releases API"
+            echo "does not expose the Marketplace publication checkbox."
+          } >> "$GITHUB_STEP_SUMMARY"

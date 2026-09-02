@@ -427,7 +427,16 @@ export function undefinedCalls(src, inputName = '') {
   const known = new Set(JS_GLOBALS);
   const add = (n) => { if (/^[\w$]+$/.test(n)) known.add(n); };
 
-  for (const m of src.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s+from/g))
+  /**
+   * `import Default, { a, b } from '…'` counts too.
+   *
+   * The pattern used to require `import {` immediately, so the default-plus-named
+   * form — which is `import React, { useState } from 'react'`, the most common
+   * import in any React codebase — contributed none of its named bindings. Every
+   * one of them was then reported as an undefined call, and the fixture looked
+   * broken when the parser was.
+   */
+  for (const m of src.matchAll(/import\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s+from/g))
     for (const part of m[1].split(',')) add(part.trim().split(/\s+as\s+/).pop().replace(/^type\s+/, '').trim());
   for (const m of src.matchAll(/import\s+(?:type\s+)?([\w$]+)\s*(?:,|from)/g)) add(m[1]);
   for (const m of src.matchAll(/(?:function|class)\s+([\w$]+)/g)) add(m[1]);

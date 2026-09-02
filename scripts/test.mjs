@@ -178,10 +178,92 @@ for (const a of agents) {
   test(`${a.id}: no non-ASCII stray characters in prose`, () => {
     // Allow common typography and the agent emoji; catch accidental CJK etc.
     const all = [a.body, ...a.references.map((r) => r.content)].join('\n');
-    const stray = all.match(/[　-鿿가-힯]/g);
+    const stray = all.match(/[\u3000-\u9fff\uac00-\ud7af]/g);
     assert(!stray, `found: ${stray?.slice(0, 5).join(' ')}`);
   });
 }
+
+test('.gitignore does not hide any generated dist output', () => {
+  // `.claude/` was added to ignore the local skills directory. Unanchored, it
+  // also matches `dist/claude-code/.claude/` — so an entire target's generated
+  // output became invisible to `git add`, and a release would have shipped a
+  // dist tree missing the newest agent. Anchor root-level entries with a
+  // leading slash.
+  const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+  const offenders = gitignore
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#') && !l.startsWith('!'))
+    .filter((l) => !l.startsWith('/') && !l.includes('*'))
+    // A bare `foo/` or `foo` in .gitignore matches at every depth, so it can
+    // reach inside dist/. Anything that names a directory that exists under
+    // dist/ must be anchored.
+    .filter((l) => {
+      const bare = l.replace(/\/$/, '');
+      if (!bare || bare.includes('/')) return false;
+      let found = false;
+      const walk = (dir, depth) => {
+        if (found || depth > 4) return;
+        let entries;
+        try {
+          entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          if (e.name === bare) {
+            found = true;
+            return;
+          }
+          walk(path.join(dir, e.name), depth + 1);
+        }
+      };
+      walk(path.join(ROOT, 'dist'), 0);
+      return found;
+    });
+
+  assert(
+    offenders.length === 0,
+    `unanchored .gitignore entries that also match inside dist/: ${offenders.join(', ')} ` +
+      '— prefix with "/" to scope them to the repository root',
+  );
+});
+
+test('no stray CJK characters anywhere in the repository source', () => {
+  // The per-agent sweep above covers agent prose only. Twice now a stray CJK
+  // character has been typed into a *source* file instead — once into the
+  // `legacy architecture` regex in this very file, where it silently narrowed a
+  // guard and nothing could see it. Source is scanned too. (Both sweeps write
+  // their ranges as \\u escapes so they do not flag themselves.)
+  const roots = ['scripts', 'action', 'mcp', 'evals'];
+  const CJK = /[\u3000-\u9fff\uac00-\ud7af]/g;
+  const hits = [];
+
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === 'node_modules' || e.name === '.git') continue;
+        walk(full);
+        continue;
+      }
+      if (!/\.(mjs|js|ts|tsx|json)$/.test(e.name)) continue;
+      const text = fs.readFileSync(full, 'utf8');
+      const found = text.match(CJK);
+      if (found) hits.push(`${path.relative(ROOT, full)}: ${[...new Set(found)].slice(0, 5).join(' ')}`);
+    }
+  };
+
+  for (const r of roots) walk(path.join(ROOT, r));
+  assert(hits.length === 0, `stray CJK in source:\n    ${hits.join('\n    ')}`);
+});
 
 test('README documents every agent and states the right counts', () => {
   // The README said "Ten expert AI agents" and "57 reference documents" while
@@ -536,6 +618,91 @@ test('monorepo guidance prefers dependency resolution over resolver overrides', 
  * regular expression to recognise irony.
  */
 const FORBIDDEN_ABSOLUTES = [
+  {
+    claim: 'a fixed React Native floor for Reanimated 4',
+    patterns: [
+      /reanimated\s*4[^.]{0,50}(needs|requires|supports)[^.]{0,20}(react native\s*)?0\.7[0-7]/i,
+      /rn\s*(>=|≥)\s*0\.7[0-7]/i,
+      /(react native|rn)\s+0\.76\s+(or newer|and above|\+)/i,
+    ],
+    why: 'Support is a moving window per Reanimated minor, not a floor — 4.7.x drops RN 0.78. Read the compatibility table',
+  },
+  {
+    claim: 'captured React values frozen forever, with no mention of dependencies',
+    patterns: [
+      /(captured|capture)\s+by\s+copy[^.|]{0,30}frozen\s+at\s+creation/i,
+      /(usestate|state|props?)\s+(values?\s+)?(inside|in)\s+a?\s*worklet[^.|]{0,40}(always|permanently|forever)\s+stale/i,
+      /no\s+captured\s+component\s+state\b/i,
+      /captured\s+a\s+`?usestate`?\s+value\s+instead\s+of\s+a\s+shared\s+value/i,
+    ],
+    why: 'A Reanimated hook re-creates its worklet when its dependencies change, so the copy refreshes on re-render. What pins it is a frozen dependency list, a ref, or a value that must change between renders',
+  },
+  {
+    claim: 'a per-frame operation costing nothing',
+    patterns: [
+      /costs?\s+nothing\s+per\s+frame/i,
+      /(free|zero[- ]cost)\s+(per\s+frame|on\s+every\s+frame)/i,
+    ],
+    why: 'Nothing on a frame path is free. Say what it does and does not cost',
+  },
+  {
+    claim: 'the UI thread as an unconditional property of a library',
+    patterns: [
+      /animations?\s+must\s+run\s+on\s+the\s+ui\s+thread\b/i,
+      /worklets\s+run\s+on\s+the\s+ui\s+thread\s*\./i,
+      /\bgesture\s+handler\b[^.|]{0,30}runs\s+on\s+the\s+ui\s+thread\s*[,.]/i,
+    ],
+    why: 'Where code runs depends on the API and its configuration, not the library — useAnimatedStyle also runs once on JS, and core Animated needs useNativeDriver',
+  },
+  {
+    claim: 'the Babel plugin named only by its legacy path',
+    patterns: [
+      /rg\s+'reanimated\/plugin'/i,
+      /['"`]reanimated\/plugin['"`]\s+must\s+be\s+last/i,
+    ],
+    why: 'Reanimated 4 renamed it to react-native-worklets/plugin — a grep for the old name alone reports a correct config as broken',
+  },
+  {
+    claim: 'index keys remounting the tail of a list',
+    patterns: [
+      /(index|key=\{i\})[^.]{0,60}(whole tail|entire tail|tail)[^.]{0,30}(re-?mounts?|re-?animates?|re-?enters?)/i,
+      /(re-?mounts?|re-?animates?)[^.]{0,40}(every|all)\s+(items?|rows?)\s+after/i,
+      /items?\s+\d+\.\.n\s+["']?enter/i,
+    ],
+    why: 'React reuses the surviving positional keys; only the last index unmounts. The wrong row animates — the tail does not re-enter',
+  },
+  {
+    claim: 'Reanimated 4 on the legacy architecture',
+    patterns: [
+      /reanimated\s*4[^.]{0,60}(works|supported|runs)[^.]{0,30}(paper|legacy|old arch)/i,
+      /reanimated\s*4[^.]{0,60}supports?\s+(both|the legacy|paper)/i,
+    ],
+    why: 'Reanimated 4 is New Architecture only — it drops Paper entirely',
+  },
+  {
+    claim: 'runOnJS presented as current on 4.x',
+    patterns: [
+      /runOnJS\s+is\s+the\s+(current|recommended|correct)\s+/i,
+      /(use|prefer)\s+runOnJS\s+(in|on|with)\s+reanimated\s*4/i,
+    ],
+    why: 'runOnJS is deprecated in Reanimated 4 — scheduleOnRN, with un-curried arguments',
+  },
+  {
+    claim: 'worklets always run on the UI thread',
+    patterns: [
+      /worklets?\s+(always|automatically)\s+runs?\s+on\s+the\s+UI\s+thread/i,
+      /(guaranteed|always)\s+to\s+run\s+on\s+the\s+UI\s+thread/i,
+    ],
+    why: 'Without the Babel plugin a worklet silently runs on JS — that is the whole failure mode',
+  },
+  {
+    claim: 'a worklet sees current React state',
+    patterns: [
+      /worklets?\s+(can\s+)?(read|see|access)\s+(the\s+)?(current|latest)\s+(react\s+)?state/i,
+      /useState[^.]{0,40}(works|is fine|safe)\s+(inside|within)\s+a?\s*worklet/i,
+    ],
+    why: 'A worklet captures by copy at creation — captured state is frozen, which is the top bug in this area',
+  },
   {
     claim: 'sandbox receipts',
     patterns: [
