@@ -16,6 +16,30 @@
  * `weak` terms only break ties.
  */
 export const SIGNALS = {
+  'rn-animation': {
+    strong: [
+      'reanimated', 'worklet', 'worklets', 'shared value', 'useSharedValue',
+      'useAnimatedStyle', 'useAnimatedProps', 'useDerivedValue', 'useAnimatedReaction',
+      'runOnJS', 'runOnUI', 'scheduleOnRN', 'scheduleOnUI', 'react-native-worklets',
+      'useAnimatedGestureHandler', 'GestureDetector', 'gesture handler',
+      'withTiming', 'withSpring', 'withDecay', 'withSequence', 'withRepeat',
+      'layout animation', 'entering animation', 'exiting animation',
+      'swipe to delete', 'pinch to zoom', 'drag gesture', 'pan gesture',
+      // The legacy APIs route here too. An app still on core `Animated` or
+      // `LayoutAnimation` has the same authoring questions, and asking about
+      // them should not fall through to rn-performance.
+      'Animated.timing', 'Animated.spring', 'Animated.sequence',
+      'LayoutAnimation', 'useNativeDriver', 'PanResponder',
+    ],
+    medium: [
+      'animate', 'animating', 'animation', 'animated', 'gesture', 'gestures',
+      'swipe', 'swiping', 'drag', 'dragging', 'pinch', 'transition',
+      'interpolate', 'spring', 'easing', 'fade in', 'fade out', 'slide in',
+      'stale closure', 'ui thread', 'js thread',
+    ],
+    weak: ['motion', 'smooth', 'tween', 'keyframe', 'parallax'],
+  },
+
   'rn-performance': {
     strong: [
       // NOT 'profil*': 'profile' is a user-profile screen far more often than a

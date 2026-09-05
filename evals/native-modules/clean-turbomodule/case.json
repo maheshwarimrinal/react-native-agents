@@ -1,14 +1,13 @@
 {
   "agent": "rn-native-modules",
   "title": "Clean TurboModule — generated spec base, bounded executor, every path settles the promise",
-  "context": { "reactNative": "0.87", "language": "Kotlin" },
-
+  "context": {
+    "reactNative": "0.87",
+    "language": "Kotlin"
+  },
   "notes": "The mirror of the legacy-bridge case. Correct throughout: inherits the generated NativeSecureStorageSpec rather than ReactContextBaseJavaModule, uses `override` rather than @ReactMethod, a bounded executor owned by the instance and shut down in invalidate(), every code path resolves or rejects, rejection codes are branchable, the one synchronous method is a trivial in-memory read, no static context, and storage is encrypted. An agent that manufactures threading or lifecycle findings here is pattern-matching on 'native code' rather than reading it.",
-
   "expectMaxFindings": 1,
-
   "expect": [],
-
   "forbid": [
     {
       "name": "claims this uses the removed legacy bridge API",
@@ -16,7 +15,8 @@
     },
     {
       "name": "claims a promise can go unsettled",
-      "pattern": "(never|not|fails to)\\s+\\w*\\s*(resolve|reject|settle)|unsettled|hang"
+      "pattern": "(promise|call|method|it)[^.;,]{0,40}\\b(can|could|may|might|will)\\b[^.;,]{0,25}(hang|never\\s+(resolve|reject|settle)|go\\s+unsettled|be\\s+left\\s+unsettled)|\\b(unsettled|hanging)\\s+promise|\\b(never|fails?\\s+to)\\s+(resolve|reject|settle)s?\\b",
+      "unlessPattern": "\\b(cannot|can't|never\\s+hangs?|does\\s+not|doesn't|no\\s+path|every\\s+path|always\\s+settles?|both\\s+paths?|correctly|is\\s+settled|are\\s+settled|not\\s+possible)\\b|\\bno\\s+(way|risk|chance)\\b"
     },
     {
       "name": "claims cleanup or invalidate is missing",

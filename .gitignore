@@ -17,3 +17,8 @@ MONETIZATION.md
 
 # Eval run output — machine- and model-specific, never committed
 evals/results.json
+
+# Local agent tooling — personal skills and settings, not part of the package.
+# Anchored to the repository root: an unanchored `.claude/` also matches the
+# generated `dist/claude-code/.claude/` tree, which must stay tracked.
+/.claude/

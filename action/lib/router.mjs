@@ -112,9 +112,37 @@ export const SIGNALS = {
     '**/*{webview,WebView,deeplink,DeepLink,linking,Linking}*.{ts,tsx,js,jsx}',
     '**/*{api,Api,API,fetch,client,Client,http,Http}*.{ts,tsx,js,jsx}',
   ],
+  'rn-animation': [
+    '**/*{Animated,animated,Animation,animation,Reanimated,reanimated}*.{ts,tsx,js,jsx}',
+    // Whole words, not prefixes. `Pan` matched PanelHeader, Companion and Panda;
+    // `Motion` matched Promotion, Demotion, Emotion and Locomotion — the same
+    // shape as the `profil*` bug that routed "edit profile avatar" to
+    // rn-performance.
+    //
+    // Note that dropping a filename pattern is NOT free. Trigger matching runs
+    // against *added* lines only, so an existing animated file whose import
+    // block is untouched contributes no Reanimated text to the diff at all: a
+    // one-line opacity change in ScreenTransition.tsx has no `reanimated`
+    // anywhere in it. Filename signals are the only thing that catches edits to
+    // files that were already animated.
+    '**/*{Gesture,gesture,Swipe,swipe,Draggable,draggable,Pinch,pinch}*.{ts,tsx,js,jsx}',
+    '**/*{Carousel,carousel,Parallax,parallax,Skeleton,skeleton}*.{ts,tsx,js,jsx}',
+    // `Transition` as a whole word, anchored so it cannot match "Transitional".
+    // Dropping it entirely lost files like ScreenTransition.tsx, and the claim
+    // that diff-content triggers would catch them was wrong: the router only
+    // sees *added* lines, so editing one line of an existing animated file
+    // never re-adds its import.
+    '**/*Transition.{ts,tsx,js,jsx}',
+    '**/*Transitions.{ts,tsx,js,jsx}',
+    '**/babel.config.js',
+  ],
+
   'rn-performance': [
     '**/*{List,list,Feed,feed,Scroll,scroll,Grid,grid}*.{ts,tsx,js,jsx}',
-    '**/*{Animated,animation,Animation,gesture,Gesture,Reanimated}*.{ts,tsx,js,jsx}',
+    // The animation/gesture glob moved to rn-animation, which owns whether the
+    // code is *correct*. Performance still routes on the keyword signals below
+    // ("janky", "dropped frames"), so a genuine frame-budget question still
+    // reaches it — but a file named Reanimated*.tsx is an authoring question.
     '**/*{Image,image,Video,video,Media,media}*.{ts,tsx,js,jsx}',
     '**/metro.config.js',
     '**/babel.config.js',
@@ -430,7 +458,30 @@ const BACKGROUND_KEYS = new RegExp(
   'i',
 );
 
+/**
+ * Reanimated/Worklets mentions in a Babel config.
+ *
+ * `babel.config.js` is a signal for several agents, so an unrelated edit — a
+ * module-resolver alias, a env-specific plugin — used to wake the animation
+ * agent and spend a full review on it.
+ */
+const WORKLETS_BABEL_KEYS =
+  /react-native-(reanimated|worklets)|worklets\/plugin|reanimated\/plugin|processNestedWorklets|globals.*worklet/i;
+
 export const REFINEMENTS = {
+  'rn-animation': (file, diffText) => {
+    if (!/(^|\/)babel\.config\.[cm]?js$/.test(file)) return true;
+    if (!diffText) return true; // fail open
+    // Both signs. Deleting the worklets plugin is the single most destructive
+    // edit this file can carry, and it appears only as a removed line.
+    const changed = [
+      ...addedLinesForFile(diffText, file),
+      ...removedLinesForFile(diffText, file),
+    ];
+    if (changed.length === 0) return true;
+    return WORKLETS_BABEL_KEYS.test(changed.join('\n'));
+  },
+
   'rn-background': (file, diffText) => {
     // Only native config files are gated; source-file signals are specific
     // enough already.
@@ -563,12 +614,38 @@ export function route(changedFiles, agents, opts = {}) {
  * version string was enough to route rn-upgrade on a pull request whose
  * package.json only added lodash.
  */
+/**
+ * Lines *removed* from one file, by the same attribution rules as
+ * addedLinesForFile.
+ *
+ * Deletions carry signal that additions do not. Removing
+ * `react-native-worklets/plugin` from a Babel config silently breaks every
+ * worklet in the app, and a refinement reading only added lines sees an
+ * unrelated plugin being added and skips the review.
+ */
+export function removedLinesForFile(diffText, filePath) {
+  return diffLinesForFile(diffText, filePath, '-');
+}
+
 export function addedLinesForFile(diffText, filePath) {
   // A diff without any `diff --git` framing cannot be attributed per file —
   // a raw --diff-file, or a hunk pasted by hand. Falling back to every added
   // line is the fail-open choice: mis-attributing a keyword is recoverable,
   // losing every keyword signal is not.
-  if (!/^diff --git /m.test(diffText)) return addedLines(diffText);
+  return diffLinesForFile(diffText, filePath, '+');
+}
+
+function diffLinesForFile(diffText, filePath, sign) {
+  if (!diffText) return [];
+  if (!/^diff --git /m.test(diffText)) {
+    // Unframed diff: fall open for additions (see above). Deletions have no
+    // equivalent whole-diff helper, so scan every line of the same sign.
+    if (sign === '+') return addedLines(diffText);
+    return diffText
+      .split('\n')
+      .filter((l) => l.startsWith('-') && !l.startsWith('---'))
+      .map((l) => l.slice(1));
+  }
 
   const out = [];
   let inFile = false;
@@ -582,7 +659,7 @@ export function addedLinesForFile(diffText, filePath) {
     }
     if (!inFile) continue;
     if (line.startsWith('+++') || line.startsWith('---')) continue;
-    if (line.startsWith('+')) out.push(line.slice(1));
+    if (line.startsWith(sign)) out.push(line.slice(1));
   }
   return out;
 }

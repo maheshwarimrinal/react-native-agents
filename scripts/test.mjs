@@ -25,7 +25,7 @@ const KNOWN_WHOLE_WORDS = new Set(['spec', 'orient', 'i18n', 'newarch', 'nx']);
 const { telemetryState, consentState, sanitise, capture, ALLOWED_PROPERTIES } = await import(
   path.join(ROOT, 'scripts/lib/telemetry.mjs')
 );
-const { loadCases, scoreOutput, gateReasons, DEFAULT_MIN_PASS_RATE, splitClauses, containsWholeTerm, isQuestionCase } = await import(
+const { loadCases, scoreOutput, scannableText, classifyFailure, validate: validateCases, undefinedCalls, stripCommentsAndStrings, gateReasons, DEFAULT_MIN_PASS_RATE, splitClauses, containsWholeTerm, isQuestionCase } = await import(
   path.join(ROOT, 'evals/run.mjs')
 );
 const os = await import('node:os');
@@ -178,10 +178,434 @@ for (const a of agents) {
   test(`${a.id}: no non-ASCII stray characters in prose`, () => {
     // Allow common typography and the agent emoji; catch accidental CJK etc.
     const all = [a.body, ...a.references.map((r) => r.content)].join('\n');
-    const stray = all.match(/[　-鿿가-힯]/g);
+    const stray = all.match(/[\u3000-\u9fff\uac00-\ud7af]/g);
     assert(!stray, `found: ${stray?.slice(0, 5).join(' ')}`);
   });
 }
+
+test('.gitignore does not hide any generated dist output', () => {
+  // `.claude/` was added to ignore the local skills directory. Unanchored, it
+  // also matches `dist/claude-code/.claude/` — so an entire target's generated
+  // output became invisible to `git add`, and a release would have shipped a
+  // dist tree missing the newest agent. Anchor root-level entries with a
+  // leading slash.
+  const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf8');
+  const offenders = gitignore
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#') && !l.startsWith('!'))
+    .filter((l) => !l.startsWith('/') && !l.includes('*'))
+    // A bare `foo/` or `foo` in .gitignore matches at every depth, so it can
+    // reach inside dist/. Anything that names a directory that exists under
+    // dist/ must be anchored.
+    .filter((l) => {
+      const bare = l.replace(/\/$/, '');
+      if (!bare || bare.includes('/')) return false;
+      let found = false;
+      const walk = (dir, depth) => {
+        if (found || depth > 4) return;
+        let entries;
+        try {
+          entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const e of entries) {
+          if (!e.isDirectory()) continue;
+          if (e.name === bare) {
+            found = true;
+            return;
+          }
+          walk(path.join(dir, e.name), depth + 1);
+        }
+      };
+      walk(path.join(ROOT, 'dist'), 0);
+      return found;
+    });
+
+  assert(
+    offenders.length === 0,
+    `unanchored .gitignore entries that also match inside dist/: ${offenders.join(', ')} ` +
+      '— prefix with "/" to scope them to the repository root',
+  );
+});
+
+test('no stray CJK characters anywhere in the repository source', () => {
+  // The per-agent sweep above covers agent prose only. Twice now a stray CJK
+  // character has been typed into a *source* file instead — once into the
+  // `legacy architecture` regex in this very file, where it silently narrowed a
+  // guard and nothing could see it. Source is scanned too. (Both sweeps write
+  // their ranges as \\u escapes so they do not flag themselves.)
+  const roots = ['scripts', 'action', 'mcp', 'evals'];
+  const CJK = /[\u3000-\u9fff\uac00-\ud7af]/g;
+  const hits = [];
+
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === 'node_modules' || e.name === '.git') continue;
+        walk(full);
+        continue;
+      }
+      if (!/\.(mjs|js|ts|tsx|json)$/.test(e.name)) continue;
+      const text = fs.readFileSync(full, 'utf8');
+      const found = text.match(CJK);
+      if (found) hits.push(`${path.relative(ROOT, full)}: ${[...new Set(found)].slice(0, 5).join(' ')}`);
+    }
+  };
+
+  for (const r of roots) walk(path.join(ROOT, r));
+  assert(hits.length === 0, `stray CJK in source:\n    ${hits.join('\n    ')}`);
+});
+
+test('scoring reads the findings, not the JSON envelope they arrived in', () => {
+  // scoreOutput used to receive the raw response. For a structured case that is
+  // a fenced JSON document, so patterns matched key names and syntax rather than
+  // advice — one real run reported a violation whose evidence was a ```json blob.
+  const parsed = {
+    findings: [
+      { severity: 'P0', title: 'Token stored in plaintext', why: 'AsyncStorage is not encrypted', fix: 'Use Keychain' },
+    ],
+    summary: 'One critical issue.',
+  };
+  const raw = '```json\n' + JSON.stringify({ findings: parsed.findings }, null, 2) + '\n```';
+
+  const text = scannableText(raw, parsed, false);
+  assert(text.includes('Token stored in plaintext'), 'the title must be scored');
+  assert(text.includes('AsyncStorage is not encrypted'), 'the why must be scored');
+  assert(text.includes('Use Keychain'), 'the fix must be scored');
+  assert(text.includes('One critical issue.'), 'the summary must be scored');
+
+  // The envelope is gone.
+  for (const noise of ['```json', '"findings"', '"severity"', '"title":', '"fix":']) {
+    assert(!text.includes(noise), `envelope leaked into the haystack: ${noise}`);
+  }
+
+  // Concretely: an expect term naming a JSON field no longer passes for free.
+  const def = { expect: [{ name: 'mentions a severity field', any: ['"severity"'] }], forbid: [] };
+  assert(
+    scoreOutput(text, def).expectPassed === 0,
+    'a JSON field name must not satisfy an expectation',
+  );
+  assert(raw.includes('"severity"'), 'fixture sanity: the field name is in the envelope');
+  assert(
+    scoreOutput(raw.toLowerCase(), def).expectPassed === 1,
+    'sanity: the raw envelope is exactly what used to satisfy it',
+  );
+});
+
+test('a prose answer is still scored on its raw text', () => {
+  // Question-style cases have no findings array. Routing them through the
+  // findings extractor would score them against an empty string and pass
+  // everything vacuously.
+  const raw = 'You should migrate to TanStack Query, but it is not free.';
+  eq(scannableText(raw, { findings: [], summary: '' }, true), raw);
+});
+
+test('a structured response with no findings scores as empty, not as its envelope', () => {
+  // The clean-case path. If an empty findings array fell back to the raw text,
+  // every clean case would be scored against the JSON that says it found
+  // nothing — and `"findings": []` contains the word "findings".
+  const raw = '```json\n{"findings": [], "summary": "No issues found."}\n```';
+  const text = scannableText(raw, { findings: [], summary: 'No issues found.' }, false);
+  eq(text, 'No issues found.');
+  assert(!text.includes('findings'), 'the envelope must not leak on the empty path');
+});
+
+test('findings keep their order so "leads with" rules still work', () => {
+  const parsed = {
+    findings: [
+      { severity: 'P1', title: 'Server state in the client store' },
+      { severity: 'P0', title: 'Token stored in plaintext' },
+    ],
+    summary: '',
+  };
+  const text = scannableText('', parsed, false);
+  assert(
+    text.indexOf('Server state') < text.indexOf('Token stored'),
+    'order must be preserved for ordering-sensitive rules',
+  );
+});
+
+test('a failed case is classified by what actually went wrong', () => {
+  // Every failure used to be reported as "missed expected findings". One real
+  // run listed state/server-state-in-store at 6/6 under that heading — it had
+  // matched everything and failed on a forbid rule.
+  const mk = (o) => ({ pass: false, score: { expectPassed: 0, expectTotal: 0, violations: [] }, ...o });
+
+  eq(classifyFailure(mk({ error: 'invalid JSON' })), 'errored');
+
+  eq(
+    classifyFailure(mk({ score: { expectPassed: 6, expectTotal: 6, violations: [{ name: 'x' }] } })),
+    'violation',
+    'complete answer + forbidden advice is not a miss',
+  );
+
+  eq(
+    classifyFailure(mk({ score: { expectPassed: 3, expectTotal: 6, violations: [{ name: 'x' }] } })),
+    'violation-and-missed',
+    'incomplete AND forbidden is both, and must still appear in the missed list',
+  );
+
+  eq(
+    classifyFailure(mk({ score: { expectPassed: 3, expectTotal: 6, violations: [] } })),
+    'missed',
+  );
+
+  // A clean case has no expectations at all; a violation there is still a
+  // violation, not a miss of zero things.
+  eq(
+    classifyFailure(mk({ score: { expectPassed: 0, expectTotal: 0, violations: [{ name: 'x' }] } })),
+    'violation',
+  );
+
+  // An error outranks everything — nothing else was scored.
+  eq(
+    classifyFailure(mk({ error: 'timeout', score: { expectPassed: 0, expectTotal: 6, violations: [{ name: 'x' }] } })),
+    'errored',
+  );
+
+  eq(classifyFailure({ pass: true }), null, 'a passing case has no failure class');
+});
+
+test('unlessAnywhere excuses a document-scoped claim, and only that', () => {
+  // Two rules assert an absence across the WHOLE answer ("without mentioning
+  // migration at all"), but their exception was clause-scoped — so they fired on
+  // answers that discussed migration one sentence later.
+  const rule = {
+    name: 'recommends the swap without mentioning migration at all',
+    all: ['mmkv'],
+    unlessAnywhere: '\\bmigrat\\w+',
+  };
+  const caught = (t) => scoreOutput(t, { forbid: [rule] }).violations.length > 0;
+
+  assert(caught('Swap AsyncStorage for MMKV.'), 'a bare recommendation is still a violation');
+  assert(
+    !caught('Swap AsyncStorage for MMKV. Note that you must migrate the existing data first.'),
+    'the cost discussed a sentence later must excuse it',
+  );
+  // Clause scope would NOT have excused that — this is the whole point.
+  const clauseScoped = { ...rule, unlessAnywhere: undefined, unlessPattern: '\\bmigrat\\w+' };
+  assert(
+    scoreOutput('Swap AsyncStorage for MMKV. Note that you must migrate the existing data first.', {
+      forbid: [clauseScoped],
+    }).violations.length > 0,
+    'sanity: clause scope is what was producing the false positive',
+  );
+});
+
+test('unlessAnywhere cannot be bolted onto a specific pattern', () => {
+  // Document scope is a real widening. Combining it with an already-precise
+  // pattern is how "a legitimate word anywhere excuses everything" comes back —
+  // the exact failure `unless` was removed for.
+  // loadCases expects <root>/<agent>/<case>/case.json.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-scope-'));
+  const caseDir = path.join(dir, 'security', 'demo');
+  fs.mkdirSync(caseDir, { recursive: true });
+  fs.writeFileSync(path.join(caseDir, 'input.tsx'), 'export const A = 1;\n');
+  fs.writeFileSync(
+    path.join(caseDir, 'case.json'),
+    JSON.stringify({
+      agent: 'rn-security',
+      title: 'scope check',
+      expect: [],
+      forbid: [
+        { name: 'bad', pattern: 'store the token', unlessAnywhere: 'keychain' },
+        { name: 'both', all: ['mmkv'], unlessPattern: 'migrat', unlessAnywhere: 'migrat' },
+      ],
+    }),
+  );
+
+  const problems = validateCases(loadCases(dir), agents);
+  assert(
+    problems.some((p) => /combines a specific "pattern"/.test(p)),
+    `pattern + unlessAnywhere must be rejected: ${problems.join(' | ')}`,
+  );
+  assert(
+    problems.some((p) => /pick one scope/.test(p)),
+    `both scopes at once must be rejected: ${problems.join(' | ')}`,
+  );
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('tightened forbid rules still catch the advice they exist for', () => {
+  // Each of these fired against a correct answer in a real run. Tightening a
+  // rule is only safe if the bad advice is still caught — otherwise the fix is
+  // just the rule giving up.
+  const load = (c) => JSON.parse(fs.readFileSync(path.join(ROOT, 'evals', c, 'case.json'), 'utf8'));
+  const ruleOf = (c, n) => {
+    const r = load(c).forbid.find((f) => f.name === n);
+    assert(r, `${c}: rule "${n}" not found`);
+    return r;
+  };
+  const check = (rule, bad, good) => {
+    const caught = (t) => scoreOutput(t.toLowerCase(), { forbid: [rule] }).violations.length > 0;
+    assert(caught(bad), `should still catch: ${bad}`);
+    assert(!caught(good), `should no longer fire on: ${good}`);
+  };
+
+  check(
+    ruleOf('observability/proguard-strips-sdk', 'blames the iOS side when the failure is Android-only'),
+    'The missing dSYM upload is the cause of the empty crash list.',
+    // Deliberately carries NO qualifier the unlessPattern could catch: a bare,
+    // neutral mention of the iOS pipeline. The first version of this test used
+    // "iOS crash reporting is unaffected", which the widened unlessPattern
+    // excused all by itself — so reverting the pattern to `dsym|ios (crash|
+    // symbolicat)` left the test green and proved nothing.
+    'Compare the behaviour with the dSYM pipeline on iOS to see the difference.',
+  );
+
+  check(
+    ruleOf('release/missing-sourcemaps', 'treats attaching the map as an artifact as sufficient'),
+    'Source maps are handled — the workflow already attaches them.',
+    'The source maps are uploaded to Sentry as part of the release step, which is what symbolication needs.',
+  );
+
+  check(
+    ruleOf('permissions/blocked-treated-as-denied', 'recommends re-requesting on mount or on every launch'),
+    'You should call request() on mount so the user sees the prompt again.',
+    // Plain description of the existing code, with no qualifier for the
+    // unlessPattern to catch — so this isolates the pattern change. The earlier
+    // version said "is currently requested on launch", and `currently` in the
+    // exception list excused it whichever pattern was in force.
+    'The code requests the permission on mount.',
+  );
+
+  check(
+    ruleOf('monorepo/duplicate-react', 'recommends deleting node_modules as the first step'),
+    'Start by running rm -rf node_modules and reinstalling.',
+    'First confirm the duplicate with npm ls react and inspect the resolved paths. ' +
+      'That tells you which package pulled the second copy. '.repeat(12) +
+      'Only then rm -rf node_modules and reinstall.',
+  );
+
+  check(
+    ruleOf('background/load-bearing-sync', 'recommends a foreground service to make polling reliable'),
+    'Use a foreground service so the sync runs reliably.',
+    'A foreground service is only appropriate for work the user can see, such as navigation.',
+  );
+});
+
+test('the fixture scanner sees calls through a namespace object', () => {
+  // evals/state/clean-auth-store called SecureStore.deleteItemAsync with no
+  // import, and --validate passed it. The call scan skipped anything preceded by
+  // a dot — correct for the *method*, but it meant the receiver was never
+  // checked at all. A clean case asserts there is nothing to report, so a
+  // fixture that does not compile penalises every model that reads it properly.
+  const src = "export async function logout() {\n  await SecureStore.deleteItemAsync('t');\n}\n";
+  assert(undefinedCalls(src, 'input.ts').includes('SecureStore'), 'undefined namespace must be reported');
+
+  const withImport = `import * as SecureStore from 'expo-secure-store';\n${src}`;
+  eq(undefinedCalls(withImport, 'input.ts').length, 0, 'a namespace import must satisfy it');
+});
+
+test('the fixture scanner ignores call-shaped prose in comments and strings', () => {
+  // Nine of the fourteen findings on the first run of the member-call scan were
+  // English sentences: "…the sheet is gone. Cancelling on unmount (…" parses as
+  // gone.Cancelling(.
+  const src = [
+    '// The spring is gone. Cancelling on unmount (see below) is what matters.',
+    '/* Compare with Foo.bar() in the other file. */',
+    'const msg = "call Baz.qux() to reset";',
+    'export const ok = 1;',
+  ].join('\n');
+  eq(undefinedCalls(src, 'input.ts').join(), '', `no prose should be reported: ${undefinedCalls(src, 'input.ts')}`);
+
+  // Real code next to that prose is still checked.
+  eq(undefinedCalls(`${src}\nMissingNs.go();\n`, 'input.ts').join(), 'MissingNs');
+});
+
+test('stripping preserves line structure', () => {
+  // Replacing with spaces rather than deleting keeps offsets stable, so a
+  // reported identifier still lines up with the source.
+  const src = 'const a = 1; // note\nconst b = "x";\n';
+  const out = stripCommentsAndStrings(src);
+  eq(out.length, src.length, 'length must be preserved');
+  eq(out.split('\n').length, src.split('\n').length, 'line count must be preserved');
+  assert(out.includes('const a = 1;'), 'code survives');
+  assert(!out.includes('note'), 'comment text is gone');
+});
+
+test('destructured callback params and namespace imports both count as bindings', () => {
+  eq(undefinedCalls("Linking.addEventListener('url', ({ url }) => url.split('/'));\nconst Linking = {};\n", 'input.ts').join(), '');
+});
+
+test('a forbid rule does not fire on the correct answer naming the failure mode', () => {
+  // "claims a promise can go unsettled" triggered on the bare word `hang`, with
+  // no exception at all. A correct review of a correct TurboModule names the
+  // failure mode precisely in order to rule it out — so the suite was punishing
+  // the answer it wanted.
+  const rule = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'evals/native-modules/clean-turbomodule/case.json'), 'utf8'),
+  ).forbid.find((f) => f.name.includes('unsettled'));
+  const caught = (t) => scoreOutput(t.toLowerCase(), { forbid: [rule] }).violations.length > 0;
+
+  assert(caught('If the native side throws, the promise can hang forever.'), 'the real claim is caught');
+  assert(caught('This will never resolve when the bridge is busy.'), 'the paraphrase is caught');
+
+  for (const correct of [
+    'Every path settles the promise, so it cannot hang.',
+    'There is no path that leaves the promise unsettled.',
+    'Both the resolve and reject branches are covered; the promise never hangs.',
+  ]) {
+    assert(!caught(correct), `must not fire on a correct answer: ${correct}`);
+  }
+});
+
+test('an exception is no narrower than the expectation it mirrors', () => {
+  // dependencies/deprecated-storage-swap expects "raises data migration for
+  // existing users" and forbids "recommends the swap without mentioning
+  // migration at all" — the same concept, asserted twice. Their vocabularies had
+  // drifted: the model said "existing users", which satisfied the expectation
+  // and did NOT excuse the violation, so one case reported both that the model
+  // raised migration and that it never mentioned it.
+  //
+  // The pairs are listed explicitly. There are two, and inferring the link from
+  // rule names would be guesswork of exactly the kind this suite keeps removing.
+  const pairs = [
+    {
+      case: 'dependencies/deprecated-storage-swap',
+      expect: 'raises data migration for existing users',
+      forbid: 'recommends the swap without mentioning migration at all',
+    },
+    {
+      case: 'state/server-state-in-store',
+      expect: null, // no mirrored expectation; the exception stands alone
+      forbid: 'presents the server-state migration as free',
+    },
+    {
+      case: 'animation/stale-worklet-closure',
+      expect: 'identifies the empty dependency array as what pins the captured values',
+      forbid: 'treats the wrong-item symptom as a list keying bug without the closure',
+    },
+  ];
+
+  for (const pair of pairs) {
+    if (!pair.expect) continue;
+    const def = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'evals', pair.case, 'case.json'), 'utf8'),
+    );
+    const e = def.expect.find((x) => x.name === pair.expect);
+    const f = def.forbid.find((x) => x.name === pair.forbid);
+    assert(e && f, `${pair.case}: pair not found`);
+    const exception = new RegExp(f.unlessAnywhere ?? f.unlessPattern, 'i');
+
+    for (const term of e.any ?? []) {
+      assert(
+        exception.test(term),
+        `${pair.case}: "${term}" satisfies the expectation "${pair.expect}" but does not ` +
+          `excuse "${pair.forbid}" — the case would report both at once`,
+      );
+    }
+  }
+});
 
 test('README documents every agent and states the right counts', () => {
   // The README said "Ten expert AI agents" and "57 reference documents" while
@@ -536,6 +960,91 @@ test('monorepo guidance prefers dependency resolution over resolver overrides', 
  * regular expression to recognise irony.
  */
 const FORBIDDEN_ABSOLUTES = [
+  {
+    claim: 'a fixed React Native floor for Reanimated 4',
+    patterns: [
+      /reanimated\s*4[^.]{0,50}(needs|requires|supports)[^.]{0,20}(react native\s*)?0\.7[0-7]/i,
+      /rn\s*(>=|≥)\s*0\.7[0-7]/i,
+      /(react native|rn)\s+0\.76\s+(or newer|and above|\+)/i,
+    ],
+    why: 'Support is a moving window per Reanimated minor, not a floor — 4.7.x drops RN 0.78. Read the compatibility table',
+  },
+  {
+    claim: 'captured React values frozen forever, with no mention of dependencies',
+    patterns: [
+      /(captured|capture)\s+by\s+copy[^.|]{0,30}frozen\s+at\s+creation/i,
+      /(usestate|state|props?)\s+(values?\s+)?(inside|in)\s+a?\s*worklet[^.|]{0,40}(always|permanently|forever)\s+stale/i,
+      /no\s+captured\s+component\s+state\b/i,
+      /captured\s+a\s+`?usestate`?\s+value\s+instead\s+of\s+a\s+shared\s+value/i,
+    ],
+    why: 'A Reanimated hook re-creates its worklet when its dependencies change, so the copy refreshes on re-render. What pins it is a frozen dependency list, a ref, or a value that must change between renders',
+  },
+  {
+    claim: 'a per-frame operation costing nothing',
+    patterns: [
+      /costs?\s+nothing\s+per\s+frame/i,
+      /(free|zero[- ]cost)\s+(per\s+frame|on\s+every\s+frame)/i,
+    ],
+    why: 'Nothing on a frame path is free. Say what it does and does not cost',
+  },
+  {
+    claim: 'the UI thread as an unconditional property of a library',
+    patterns: [
+      /animations?\s+must\s+run\s+on\s+the\s+ui\s+thread\b/i,
+      /worklets\s+run\s+on\s+the\s+ui\s+thread\s*\./i,
+      /\bgesture\s+handler\b[^.|]{0,30}runs\s+on\s+the\s+ui\s+thread\s*[,.]/i,
+    ],
+    why: 'Where code runs depends on the API and its configuration, not the library — useAnimatedStyle also runs once on JS, and core Animated needs useNativeDriver',
+  },
+  {
+    claim: 'the Babel plugin named only by its legacy path',
+    patterns: [
+      /rg\s+'reanimated\/plugin'/i,
+      /['"`]reanimated\/plugin['"`]\s+must\s+be\s+last/i,
+    ],
+    why: 'Reanimated 4 renamed it to react-native-worklets/plugin — a grep for the old name alone reports a correct config as broken',
+  },
+  {
+    claim: 'index keys remounting the tail of a list',
+    patterns: [
+      /(index|key=\{i\})[^.]{0,60}(whole tail|entire tail|tail)[^.]{0,30}(re-?mounts?|re-?animates?|re-?enters?)/i,
+      /(re-?mounts?|re-?animates?)[^.]{0,40}(every|all)\s+(items?|rows?)\s+after/i,
+      /items?\s+\d+\.\.n\s+["']?enter/i,
+    ],
+    why: 'React reuses the surviving positional keys; only the last index unmounts. The wrong row animates — the tail does not re-enter',
+  },
+  {
+    claim: 'Reanimated 4 on the legacy architecture',
+    patterns: [
+      /reanimated\s*4[^.]{0,60}(works|supported|runs)[^.]{0,30}(paper|legacy|old arch)/i,
+      /reanimated\s*4[^.]{0,60}supports?\s+(both|the legacy|paper)/i,
+    ],
+    why: 'Reanimated 4 is New Architecture only — it drops Paper entirely',
+  },
+  {
+    claim: 'runOnJS presented as current on 4.x',
+    patterns: [
+      /runOnJS\s+is\s+the\s+(current|recommended|correct)\s+/i,
+      /(use|prefer)\s+runOnJS\s+(in|on|with)\s+reanimated\s*4/i,
+    ],
+    why: 'runOnJS is deprecated in Reanimated 4 — scheduleOnRN, with un-curried arguments',
+  },
+  {
+    claim: 'worklets always run on the UI thread',
+    patterns: [
+      /worklets?\s+(always|automatically)\s+runs?\s+on\s+the\s+UI\s+thread/i,
+      /(guaranteed|always)\s+to\s+run\s+on\s+the\s+UI\s+thread/i,
+    ],
+    why: 'Without the Babel plugin a worklet silently runs on JS — that is the whole failure mode',
+  },
+  {
+    claim: 'a worklet sees current React state',
+    patterns: [
+      /worklets?\s+(can\s+)?(read|see|access)\s+(the\s+)?(current|latest)\s+(react\s+)?state/i,
+      /useState[^.]{0,40}(works|is fine|safe)\s+(inside|within)\s+a?\s*worklet/i,
+    ],
+    why: 'A worklet captures by copy at creation — captured state is frozen, which is the top bug in this area',
+  },
   {
     claim: 'sandbox receipts',
     patterns: [

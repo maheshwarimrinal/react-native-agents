@@ -62,6 +62,14 @@ Its premise is that **most monorepo errors are one of four causes wearing the sa
 
 Command: `/rn-monorepo`
 
+## Animation — `rn-animation`
+
+Use for writing and reviewing Reanimated and Gesture Handler code — worklets, shared values, the JS/UI thread boundary, gestures, layout and entering/exiting animations, and the Reanimated 4 migration.
+
+Almost every animation bug is a thread-boundary bug wearing the costume of a logic bug, so the agent labels which thread each function runs on before anything else. It covers stale worklet closures, `scheduleOnRN` versus `runOnJS` and their differing call shapes, gesture composition and cancellation, index-keyed list flicker, and reduced motion. `rn-performance` owns "why is this janky"; this one owns "is this correct".
+
+Command: `/rn-animate`
+
 ## Performance — `rn-performance`
 
 Use for slow lists, dropped frames, startup/TTI, memory growth, bundle size, images, animations, and network work.

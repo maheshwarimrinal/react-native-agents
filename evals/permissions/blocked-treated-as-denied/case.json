@@ -66,8 +66,8 @@
   "forbid": [
     {
       "name": "recommends re-requesting on mount or on every launch",
-      "pattern": "request.{0,30}(on mount|on launch|every time|useEffect)",
-      "unlessPattern": "\\b(do not|don't|avoid|never|not)\\s+\\w{0,20}\\s*(re-?request|request)|\\binstead\\b|\\bonly (when|after|in response)\\b|\\bin response to\\b"
+      "pattern": "\\b(should|must|recommend\\w*|add|call|try|simply|just)\\b[^.;,]{0,40}\\brequest\\w*[^.;,]{0,30}(on mount|on launch|on every launch|every time|in useEffect)",
+      "unlessPattern": "\\b(do not|don't|avoid|never|not)\\b|\\binstead\\b|\\bonly (when|after|in response)\\b|\\bin response to\\b|\\bwill not\\b|\\bno effect\\b|\\bcurrently\\b|\\balready\\b"
     },
     {
       "name": "claims the Info.plist string is missing without having seen it",

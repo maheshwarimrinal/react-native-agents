@@ -97,6 +97,8 @@ export class LLM {
     budgetUsd = 2,
     maxOutputTokens = 8000,
     baseUrl,
+    temperature,
+    seed,
     log = () => {},
   }) {
     // A typo like 'opneai' previously selected the Anthropic key and the Claude
@@ -139,6 +141,23 @@ export class LLM {
     this.budgetUsd = budgetUsd;
     this.pricingKnown = this.isLocal || provider === 'mock' || PRICED_MODELS.has(model);
     this.maxOutputTokens = maxOutputTokens;
+
+    /**
+     * Sampling controls, sent only when set.
+     *
+     * Nothing set temperature at all, so every run used the provider's default
+     * — 0.8 on Ollama. Two eval runs over identical inputs produced 3/16 and
+     * 8/16 clean-case failures, and that spread was read as model capability
+     * when most of it was sampling noise.
+     *
+     * Sent conditionally rather than defaulted here, because it is not
+     * universally accepted: OpenAI's reasoning models reject any temperature
+     * other than 1, so a blanket `temperature: 0` would break them. The eval
+     * runner opts in for local endpoints, where determinism is both wanted and
+     * available.
+     */
+    this.temperature = temperature;
+    this.seed = seed;
     this.log = log;
     // Surfaced rather than silent: a budget computed from a guessed price is an
     // estimate with a wide error bar, and the caller should know which it has.
@@ -226,6 +245,8 @@ export class LLM {
       body: JSON.stringify({
         model: this.model,
         max_completion_tokens: this.maxOutputTokens,
+        ...(this.temperature === undefined ? {} : { temperature: this.temperature }),
+        ...(this.seed === undefined ? {} : { seed: this.seed }),
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: user },

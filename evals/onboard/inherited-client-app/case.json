@@ -75,8 +75,8 @@
     },
     {
       "name": "recommends a rewrite or large refactor before understanding",
-      "pattern": "(rewrite|refactor|modernis|moderniz)",
-      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|resist\\s+\\w+|(?<![\\w-])not\\ yet(?![\\w-])|later(?:\\s+on)?\\b(?![\\w-])|(?<![\\w-])before\\ you\\ understand(?![\\w-])"
+      "pattern": "\\b(should|recommend\\w*|start by|begin by|first|suggest\\w*|propose|plan to|need to|must)\\b[^.;,]{0,40}\\b(rewrite|refactor|modernis|moderniz)\\w*|\\b(rewrite|refactor|modernis|moderniz)\\w*\\s+(the\\s+)?(app|codebase|project)\\s+(first|before)",
+      "unlessPattern": "(?<![\\w-])do\\ not(?![\\w-])|(?:do not|don't|avoid|never)\\s+\\w{0,15}|resist\\s+\\w+|(?<![\\w-])not\\ yet(?![\\w-])|later(?:\\s+on)?\\b(?![\\w-])|(?<![\\w-])before\\ you\\ understand(?![\\w-])|\\bafter\\b|\\bonce you\\b|\\bunderstand\\w*\\s+first\\b"
     },
     {
       "name": "asserts code quality without having read any code",

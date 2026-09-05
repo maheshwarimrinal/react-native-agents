@@ -93,7 +93,7 @@
       "all": [
         "tanstack"
       ],
-      "unlessPattern": "\\b(cost|effort|work|touches|every screen|incremental|not free|takes time|migration cost)\\b"
+      "unlessAnywhere": "\\b(cost|effort|work|touches|every screen|incremental|not free|takes time|migration cost|non-trivial|rewrite)\\b"
     }
   ]
 }

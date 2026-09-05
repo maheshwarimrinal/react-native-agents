@@ -19,6 +19,7 @@ every agent depends on them.
 
 Run these subagents in parallel where possible:
 
+- **rn-animation** — RN Animation
 - **rn-background** — RN Background
 - **rn-build** — RN Build
 - **rn-code-quality** — RN Code Quality

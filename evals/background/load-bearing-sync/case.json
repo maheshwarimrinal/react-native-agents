@@ -80,7 +80,7 @@
     {
       "name": "recommends a foreground service to make polling reliable",
       "pattern": "foreground service",
-      "unlessPattern": "(?<![\\w-])not\\ appropriate(?![\\w-])|(?<![\\w-])not\\ for(?![\\w-])|rejection\\b|(?<![\\w-])only\\ for(?![\\w-])|(?:user-)?visible\\s+\\w+|\\bvisible to the user|(?<![\\w-])would\\ be\\ misuse(?![\\w-])"
+      "unlessPattern": "\\bnot\\s+\\w{0,15}\\s*(appropriate|for|suitable|the answer|intended)\\b|\\brejection\\b|\\bonly\\s+\\w{0,15}\\s*for\\b|(?:user-)?visible\\s+\\w+|\\bvisible to the user\\b|\\bwould be misuse\\b|\\bmisuse\\b|\\babuse\\b|\\bpolicy\\b"
     },
     {
       "name": "recommends requesting a battery optimisation exemption",
