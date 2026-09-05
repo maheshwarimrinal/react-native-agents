@@ -20,7 +20,7 @@ const { parseDiff, renderForPrompt, findPosition, nearestChangedLine, changedFil
   await import('./lib/diff.mjs');
 const { LLM, estimateTokens, estimateCost, BudgetExceededError, PRICING } = await import('./lib/llm.mjs');
 const awaitedAudit = await import('./lib/audit.mjs');
-const { parseFindings, dedupe, countBySeverity, gateFails, FAIL_ON_VALUES, DIFF_FENCE, UNTRUSTED_INPUT_NOTICE } = awaitedAudit;
+const { parseFindings, dedupe, countBySeverity, gateFails, FAIL_ON_VALUES, DIFF_FENCE, UNTRUSTED_INPUT_NOTICE, escapeControlCharsInStrings, stripTrailingCommas, backtickStringsToJson } = awaitedAudit;
 const { renderSummary } = await import('./lib/github.mjs');
 const { detectProject, firstNonEmpty } = await import('./index.mjs');
 const { loadAgents } = await import('../scripts/lib/source.mjs');
@@ -525,6 +525,151 @@ test('upgrade refinement ignores routine Expo module adds', () => {
     const ids = route(['package.json'], agents, { diffText: hunk(toolchain) }).selected.map((a) => a.id);
     assert(ids.includes('rn-upgrade'), `${toolchain.trim()} should route: ${ids.join(', ')}`);
   }
+});
+
+testAsync('sampling controls are sent only when set', async () => {
+  // Nothing set temperature, so every run used the provider default — 0.8 on
+  // Ollama. Two eval sweeps over identical inputs gave 3/16 and 8/16 clean-case
+  // failures, and that spread was read as model capability.
+  //
+  // Sent conditionally because it is not universally accepted: OpenAI's
+  // reasoning models reject any temperature other than 1, so a blanket default
+  // here would break them.
+  const bodies = [];
+  const server = http.createServer((req, res) => {
+    let b = '';
+    req.on('data', (c) => (b += c));
+    req.on('end', () => {
+      bodies.push(JSON.parse(b));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: '{"findings":[]}' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5 },
+      }));
+    });
+  });
+  await new Promise((r) => server.listen(0, r));
+  const base = `http://127.0.0.1:${server.address().port}/v1`;
+
+  try {
+    await new LLM({ provider: 'openai', apiKey: 'k', model: 'm', baseUrl: base })
+      .complete({ system: 's', user: 'u' });
+    assert(!('temperature' in bodies[0]), 'unset temperature must be omitted entirely');
+    assert(!('seed' in bodies[0]), 'unset seed must be omitted entirely');
+
+    await new LLM({ provider: 'openai', apiKey: 'k', model: 'm', baseUrl: base, temperature: 0, seed: 7 })
+      .complete({ system: 's', user: 'u' });
+    eq(bodies[1].temperature, 0);
+    eq(bodies[1].seed, 7);
+
+    // 0 is falsy — an `if (this.temperature)` guard would drop exactly the
+    // value that matters most.
+    assert(bodies[1].temperature === 0, 'temperature 0 must survive a falsy check');
+  } finally {
+    server.close();
+  }
+});
+
+test('a template literal used as a JSON value is converted', () => {
+  // Observed: a model writing a multi-line shell command reached for a template
+  // literal, because that is what the surrounding language uses.
+  const raw = '{"findings":[{"severity":"P2","title":"A","fix":`npx react-native run-android`}]}';
+  const { findings } = parseFindings(raw);
+  eq(findings.length, 1);
+  eq(findings[0].fix, 'npx react-native run-android');
+});
+
+test('a backtick inside an ordinary string is left alone', () => {
+  // Only backticks standing where a value belongs are converted. A backtick in
+  // prose — `useEffect`, say — is content, and rewriting it would corrupt a
+  // response that parsed perfectly well.
+  const src = '{"a":"call `useEffect` here"}';
+  eq(backtickStringsToJson(src), src);
+  eq(JSON.parse(backtickStringsToJson(src)).a, 'call `useEffect` here');
+});
+
+test('a trailing comma is dropped, but not one inside a string', () => {
+  eq(stripTrailingCommas('{"a":1,}'), '{"a":1}');
+  eq(stripTrailingCommas('{"a":[1,2,],}'), '{"a":[1,2]}');
+  eq(stripTrailingCommas('{"a":1 ,\n  }'), '{"a":1 \n  }');
+
+  const prose = '{"a":"one, two, three"}';
+  eq(stripTrailingCommas(prose), prose, 'commas in prose survive');
+
+  const raw = '{"findings":[{"severity":"P1","title":"A","fix":"do it",},],}';
+  eq(parseFindings(raw).findings.length, 1);
+});
+
+test('an unterminated backtick is not guessed at', () => {
+  // Repairs are structural. Inventing a closing delimiter means inventing
+  // content, and a review assembled from a guess is the false green this
+  // package exists to avoid.
+  let threw = false;
+  try {
+    parseFindings('{"findings":[{"severity":"P1","title":"A","fix":`oops}]}');
+  } catch {
+    threw = true;
+  }
+  assert(threw, 'an unterminated template literal must still fail');
+});
+
+test('a literal newline inside a JSON string is repaired, not discarded', () => {
+  // A model writing a multi-line `fix` routinely emits a raw newline inside the
+  // string. The document is complete; only characters JSON forbids unescaped are
+  // wrong. Throwing away a whole agent's review over that loses a valid answer.
+  const raw = '{"findings":[{"severity":"P1","title":"A","why":"line one\nline two","fix":"do it"}]}';
+  const { findings } = parseFindings(raw);
+  eq(findings.length, 1);
+  eq(findings[0].why, 'line one\nline two', 'the newline survives as a real newline');
+});
+
+test('the repair never touches characters outside string literals', () => {
+  // A regex cannot tell a newline inside a string from the newline formatting
+  // the document. Escaping the latter would corrupt a response that was valid.
+  const pretty = '{\n  "a": 1,\n  "b": "x"\n}';
+  eq(escapeControlCharsInStrings(pretty), pretty, 'formatting newlines are left alone');
+
+  // And an already-escaped sequence is not double-escaped.
+  const already = '{"a":"line\\nbreak"}';
+  eq(escapeControlCharsInStrings(already), already);
+  eq(JSON.parse(escapeControlCharsInStrings(already)).a, 'line\nbreak');
+});
+
+test('truncation and invalid-but-complete JSON are diagnosed differently', () => {
+  // They have different fixes — raise the context window versus tighten the
+  // prompt — and labelling everything "likely truncated" sent people to the
+  // wrong one. A local model hitting num_ctx and a model mis-escaping a quote
+  // are not the same failure.
+  let truncated = '';
+  try {
+    parseFindings('{"findings":[{"severity":"P1","title":"A"');
+  } catch (e) {
+    truncated = e.message;
+  }
+  assert(/truncated/.test(truncated), `expected a truncation diagnosis, got: ${truncated}`);
+
+  let complete = '';
+  try {
+    parseFindings('{"findings":[{"severity":"P1","title":"A" "why":"b"}]}');
+  } catch (e) {
+    complete = e.message;
+  }
+  assert(
+    /complete but not valid JSON/.test(complete),
+    `a complete document must not be called truncated, got: ${complete}`,
+  );
+});
+
+test('the repair does not rescue genuinely broken JSON', () => {
+  // Guessing at a missing brace means inventing content, and a review assembled
+  // from a guess is the false green this package exists to avoid.
+  let threw = false;
+  try {
+    parseFindings('{"findings":[{"severity":"P1"');
+  } catch {
+    threw = true;
+  }
+  assert(threw, 'an incomplete document must still fail');
 });
 
 test('the animation refinement reads babel.config.js content, and only that file', () => {

@@ -80,8 +80,8 @@
     },
     {
       "name": "recommends deleting node_modules as the first step",
-      "pattern": "(rm -rf|delete|remove)\\s+node_modules",
-      "unlessPattern": "\\b(after|once)\\b[^.;,]{0,50}\\b(confirm|identif|diagnos|understand)\\w*|\\b(not|never)\\s+(the\\s+)?first\\b|\\bdestroys\\b|\\bconfirm first\\b|\\bonly (after|once)\\b|\\b(do not|don't|avoid)\\s+\\w{0,10}\\s*(rm -rf|delet|remov)"
+      "pattern": "^[\\s\\S]{0,350}(rm -rf|delete|remove)\\s+node_modules",
+      "unlessPattern": "\\b(after|once)\\b[^.;,]{0,60}\\b(confirm|identif|diagnos|understand)\\w*|\\b(not|never)\\s+(the\\s+)?first\\b|\\bdestroys\\b|\\bconfirm first\\b|\\bonly (after|once)\\b|\\b(do not|don't|avoid)\\s+\\w{0,10}\\s*(rm -rf|delet|remov)"
     },
     {
       "name": "recommends switching package manager as the fix",

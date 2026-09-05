@@ -12,6 +12,7 @@
     "build": "node scripts/build.mjs",
     "check": "node scripts/build.mjs --check",
     "test": "node scripts/test.mjs && node action/test.mjs && node evals/run.mjs --validate",
+    "audit:local": "node scripts/audit-local.mjs",
     "test:agents": "node scripts/test.mjs",
     "test:action": "node action/test.mjs",
     "install-agents": "node scripts/cli.mjs install",

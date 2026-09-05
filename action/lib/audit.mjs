@@ -279,6 +279,157 @@ export class MalformedResponseError extends Error {
  * went green having learned nothing. Only a well-formed `{"findings": [...]}`
  * counts as a review; everything else is an error the run must surface.
  */
+/**
+ * Escape raw control characters that appear *inside* JSON string literals.
+ *
+ * JSON forbids unescaped characters below U+0020 in strings, and a model
+ * writing a multi-line `fix` routinely emits a literal newline there. The
+ * document is otherwise complete, so discarding the whole review over it throws
+ * away a valid answer.
+ *
+ * Tracks string state character by character rather than using a regex, because
+ * a regex cannot tell a newline inside a string from the newline that formats
+ * the document — and escaping the latter would corrupt a valid response.
+ * Characters outside strings are left exactly as they are.
+ */
+export function escapeControlCharsInStrings(text) {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+
+  for (const ch of text) {
+    if (escaped) {
+      out += ch;
+      escaped = false;
+      continue;
+    }
+    if (inString && ch === '\\') {
+      out += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+    if (inString && ch < ' ') {
+      const map = { '\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f' };
+      out += map[ch] ?? `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * Convert backtick-delimited values to JSON strings.
+ *
+ * A model writing a multi-line `fix` reaches for a template literal, because
+ * that is what the surrounding language uses:
+ *
+ *   "verify": `
+ *     npx react-native run-android
+ *   `
+ *
+ * The document is complete and its structure is unambiguous — only the quoting
+ * is wrong. Converting is mechanical: escape what JSON requires escaping and
+ * change the delimiters. Only backticks that sit where a *value* belongs are
+ * touched (after `:` or `[` or `,`), so a backtick inside an ordinary
+ * double-quoted string is left alone.
+ */
+export function backtickStringsToJson(text) {
+  let out = '';
+  let i = 0;
+  let inString = false;
+  let escaped = false;
+
+  while (i < text.length) {
+    const ch = text[i];
+
+    if (inString) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '`') {
+      // Find the closing backtick, honouring backslash escapes.
+      let j = i + 1;
+      let body = '';
+      while (j < text.length) {
+        if (text[j] === '\\' && j + 1 < text.length) {
+          body += text[j] + text[j + 1];
+          j += 2;
+          continue;
+        }
+        if (text[j] === '`') break;
+        body += text[j];
+        j += 1;
+      }
+      if (j >= text.length) {
+        // Unterminated — not something to guess at.
+        out += text.slice(i);
+        break;
+      }
+      out += JSON.stringify(body);
+      i = j + 1;
+      continue;
+    }
+
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * Remove a comma that immediately precedes `}` or `]`.
+ *
+ * Legal in JavaScript, not in JSON, and models trained on JavaScript emit it.
+ * Whitespace and newlines between the comma and the bracket are allowed for.
+ * String contents are skipped so a comma inside prose survives.
+ */
+export function stripTrailingCommas(text) {
+  let out = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === ',') {
+      const rest = text.slice(i + 1);
+      if (/^\s*[}\]]/.test(rest)) continue; // drop it
+    }
+    out += ch;
+  }
+  return out;
+}
+
 export function parseFindings(raw) {
   const empty = { findings: [], summary: '' };
   if (!raw || typeof raw !== 'string' || !raw.trim()) {
@@ -303,7 +454,66 @@ export function parseFindings(raw) {
   try {
     parsed = JSON.parse(text);
   } catch (error) {
-    throw new MalformedResponseError(`invalid JSON (${error.message}) — likely truncated`, raw);
+    /**
+     * One safe repair, then an honest diagnosis.
+     *
+     * A model writing a multi-line `fix` very often emits a literal newline
+     * inside the JSON string rather than `\n`. That is not truncation — the
+     * document is complete and well-formed apart from characters that JSON
+     * happens to forbid unescaped. Escaping control characters *inside string
+     * literals* is deterministic and cannot change the parsed values, so it is
+     * worth one attempt before discarding a whole agent's review.
+     *
+     * Nothing else is repaired. Guessing at a missing brace would mean
+     * inventing content, and a review assembled from a guess is exactly the
+     * false green this package exists to avoid.
+     */
+    /**
+     * Applied in order, each strictly structural. None of them can change a
+     * value that already parsed, and none invent content: a missing brace is
+     * still a hard failure, because assembling a review from a guess is the
+     * false green this package exists to avoid.
+     */
+    /**
+     * One composed repair, not a chain of alternatives.
+     *
+     * Each step is a no-op on input that does not contain its trigger, so
+     * applying all three is equivalent to trying them in turn — and a chain
+     * whose last entry is the composition of the others has entries that can
+     * never change the outcome. A mutation removing two of them left the suite
+     * green, which is how that was found.
+     *
+     * Every step is strictly structural: none can change a value that already
+     * parsed, and none invent content. A missing brace is still a hard failure,
+     * because assembling a review from a guess is the false green this package
+     * exists to avoid.
+     */
+    let candidate = text;
+    try {
+      candidate = stripTrailingCommas(backtickStringsToJson(escapeControlCharsInStrings(text)));
+    } catch {
+      candidate = text;
+    }
+    if (candidate !== text) {
+      try {
+        parsed = JSON.parse(candidate);
+      } catch {
+        /* fall through to the error below */
+      }
+    }
+
+    if (parsed === undefined) {
+      /**
+       * Truncation and bad escaping are different failures with different
+       * fixes — raise the context window versus tighten the prompt — and
+       * labelling everything "likely truncated" sent people to the wrong one.
+       */
+      const looksTruncated = !/\}\s*$/.test(text);
+      const cause = looksTruncated
+        ? 'likely truncated — the response does not end with a closing brace'
+        : 'the response is complete but not valid JSON';
+      throw new MalformedResponseError(`invalid JSON (${error.message}) — ${cause}`, raw);
+    }
   }
 
   if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.findings)) {

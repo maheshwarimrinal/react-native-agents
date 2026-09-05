@@ -97,10 +97,19 @@
     },
     {
       "name": "treats the wrong-item symptom as a list keying bug without the closure",
-      "all": [
-        "key"
+      "any": [
+        "key=",
+        "keyextractor",
+        "key extractor",
+        "list key",
+        "keyed by",
+        "index as a key",
+        "index as the key",
+        "wrong key",
+        "unstable key",
+        "key prop"
       ],
-      "unlessPattern": "stale|closure|captured|usestate|worklet|snapshot"
+      "unlessAnywhere": "stale|closure|captured|usestate|worklet|snapshot|dependency array|usememo|\\bdeps\\b|empty array|\\[\\]|pinned|never rebuilt|recreat"
     }
   ],
   "elidedHelpers": []

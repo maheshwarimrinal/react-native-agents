@@ -81,6 +81,38 @@ outage — the audit exits non-zero rather than reporting a pass with zero findi
 that means "we did not actually look" is worse than a red one. Set `fail-on-error: false` if you
 would rather accept partial coverage.
 
+### Run the audit locally, for free
+
+The audit speaks the OpenAI wire format, so any local server that does too —
+Ollama, LM Studio, llama.cpp — can drive it. No API key, no per-review cost.
+
+```bash
+ollama serve
+ollama pull qwen2.5-coder:14b
+
+npm run audit:local                      # your uncommitted changes
+npm run audit:local -- --base main       # this branch vs main
+npm run audit:local -- --repo ~/my-app --base main
+npm run audit:local -- --model qwen2.5-coder:32b
+```
+
+**Set the context window before you trust the result.** Ollama defaults
+`num_ctx` to 4096 for most models no matter what the model supports, and on
+overflow it does not error — it silently drops the oldest tokens, which are the
+agent's instructions. You get a confident, well-formatted review of nothing, and
+a green "Passed" that means nothing. Start the server with a real window:
+
+```bash
+OLLAMA_CONTEXT_LENGTH=32768 ollama serve
+```
+
+`audit:local` measures the prompt against the window and refuses to run rather
+than hand you a review it cannot stand behind.
+
+A 14B model finds the obvious defects and misses subtle ones — treat a local
+pass as a smoke test, not as the gate. The hosted providers remain the reference
+configuration for CI.
+
 ## The agents
 
 **Day to day** — these respond to a question, an error log, or a request:

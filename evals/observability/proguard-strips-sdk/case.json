@@ -88,8 +88,8 @@
     },
     {
       "name": "blames the iOS side when the failure is Android-only",
-      "pattern": "dsym|ios (crash|symbolicat)",
-      "unlessPattern": "(?<![\\w-])ios\\ is\\ fine(?![\\w-])|(?<![\\w-])not\\ the\\ issue(?![\\w-])|(?<![\\w-])already\\ working(?![\\w-])|(?<![\\w-])unaffected(?![\\w-])|(?<![\\w-])by\\ contrast(?![\\w-])"
+      "pattern": "(ios|dsym)[^.;,]{0,50}\\b(is|are|was|were)\\s+(the\\s+)?(problem|issue|cause|culprit|reason|at fault|broken|failing|misconfigured)|\\b(missing|upload)\\s+dsym",
+      "unlessPattern": "\\b(fine|unaffected|not affected|working|works|correct|already)\\b|\\bnot the (problem|issue|cause)\\b|\\bby contrast\\b|\\bandroid[- ]only\\b"
     }
   ]
 }

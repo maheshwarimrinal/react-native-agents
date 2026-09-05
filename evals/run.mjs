@@ -178,6 +178,62 @@ export function isQuestionCase(tc, agent) {
   return agent?.mode === 'interactive' || /\.(md|txt)$/.test(tc.inputName);
 }
 
+/**
+ * The text a case is actually scored against.
+ *
+ * `scoreOutput` used to receive the model's **raw** response, which for a
+ * structured case is a fenced JSON document. That put the envelope inside the
+ * haystack, and both directions were wrong:
+ *
+ * - False violations. `state/server-state-in-store` reported "leads with the
+ *   server-state split" with the evidence being a literal ```json blob — the
+ *   pattern had matched JSON syntax and key names, not advice.
+ * - False passes. An `expect` term like "file" or "line" is present in every
+ *   structured response ever emitted, because those are field names. The case
+ *   would score a match without the model having said anything.
+ *
+ * Scoring the human-readable fields — title, why, fix, plus the summary — keeps
+ * the assertion pointed at what the agent actually told the user. Ordering is
+ * preserved so "leads with X" rules can still reason about which finding came
+ * first. Prose/question cases have no envelope, so they keep the raw text.
+ */
+/**
+ * Why did this case fail?
+ *
+ * Every failure used to be reported as "missed expected findings", which was
+ * wrong for two whole categories. `state/server-state-in-store` was listed at
+ * **6/6** — it matched every expectation and failed on a forbid rule, so the
+ * label sent you hunting for a finding that was not missing. An errored case
+ * was listed as `0/0`, which reads as "matched nothing" rather than "never
+ * produced a response".
+ *
+ * Order matters: an error means nothing else was scored, and a complete answer
+ * that gives forbidden advice is a different defect from an incomplete one.
+ */
+export function classifyFailure(r) {
+  if (!r || r.pass) return null;
+  if (r.error) return 'errored';
+  const violated = Boolean(r.score?.violations?.length);
+  const complete =
+    (r.score?.expectTotal ?? 0) > 0 && r.score.expectPassed === r.score.expectTotal;
+  if (violated && (complete || (r.score?.expectTotal ?? 0) === 0)) return 'violation';
+  if (violated) return 'violation-and-missed';
+  return 'missed';
+}
+
+export function scannableText(raw, parsed, isQuestion) {
+  if (isQuestion) return raw;
+  const findings = parsed?.findings ?? [];
+  if (!findings.length) return parsed?.summary ? String(parsed.summary) : '';
+  const parts = findings.map((f) =>
+    [f.severity, f.title, f.why, f.fix, f.detail]
+      .filter((v) => typeof v === 'string' && v.trim())
+      .join('. '),
+  );
+  if (parsed.summary) parts.push(String(parsed.summary));
+  return parts.join('\n\n');
+}
+
 export function scoreOutput(text, def) {
   const haystack = text.toLowerCase();
   const expected = [];
@@ -193,11 +249,13 @@ export function scoreOutput(text, def) {
     let triggered = false;
     let evidence = null;
 
+    let matchEnd = -1;
     if (f.pattern) {
       const m = haystack.match(new RegExp(f.pattern, 'i'));
       if (m) {
         triggered = true;
         evidence = m[0];
+        matchEnd = m.index + m[0].length;
       }
     }
 
@@ -235,7 +293,36 @@ export function scoreOutput(text, def) {
     if (triggered && evidence && f.unlessPattern) {
       const ev = String(evidence).toLowerCase();
       const clauses = splitClauses(haystack);
-      const at = clauses.findIndex((part) => part.includes(ev));
+
+      /**
+       * Locate the clause by where the match *ended*, not by searching for the
+       * evidence text.
+       *
+       * A pattern anchored to the start of the response — `^[\s\S]{0,350}…`,
+       * which is how the suite expresses "as the first step" — matches a span
+       * covering many clauses. `clauses.findIndex(c => c.includes(evidence))`
+       * then finds nothing, `clause` falls back to '', and the exception can
+       * never match: a correct answer was reported as a violation purely
+       * because of how the rule was anchored.
+       *
+       * The forbidden advice is where the match *ends*; everything before it is
+       * positional context. Offsets also disambiguate a phrase that appears
+       * more than once, which the substring search silently got wrong.
+       */
+      let at = -1;
+      if (matchEnd >= 0) {
+        let cursor = 0;
+        for (let i = 0; i < clauses.length; i++) {
+          const found = haystack.indexOf(clauses[i], cursor);
+          if (found === -1) continue;
+          cursor = found + clauses[i].length;
+          if (matchEnd <= cursor) {
+            at = i;
+            break;
+          }
+        }
+      }
+      if (at === -1) at = clauses.findIndex((part) => part.includes(ev));
 
       /**
        * The evidence clause, plus a comma-joined clause immediately before it.
@@ -290,6 +377,28 @@ export function scoreOutput(text, def) {
        * how the old behaviour comes back.
        */
       triggered = conceded || !new RegExp(f.unlessPattern, 'i').test(clause);
+    }
+
+    /**
+     * `unlessAnywhere` — a document-scoped exception, for rules whose claim is
+     * itself document-scoped.
+     *
+     * Clause scope is the right default and was hard-won, but it cannot express
+     * every rule. Two rules here assert an *absence across the whole answer*:
+     * "recommends the swap without mentioning migration **at all**" and
+     * "presents the migration **as free**". Their trigger is a bare product
+     * name, so they fire on the mention and then look for their exception in
+     * the same clause — which is the one place a discussion of migration cost
+     * will almost never be. The rule name promised one scope and the mechanism
+     * enforced another, so both reported violations against answers that did
+     * discuss the cost, a sentence later.
+     *
+     * Deliberately a separate field rather than a widening of `unlessPattern`:
+     * a rule author has to choose the scope explicitly, and the narrow one
+     * stays the default.
+     */
+    if (triggered && f.unlessAnywhere && new RegExp(f.unlessAnywhere, 'i').test(haystack)) {
+      triggered = false;
     }
 
     forbidden.push({ name: f.name, violated: triggered, evidence });
@@ -415,15 +524,73 @@ const JS_GLOBALS = new Set([
   'Object','Array','String','Number','Boolean','Date','Math','Error','RegExp','Map','Set','Symbol',
   'require','process','parseInt','parseFloat','isNaN','encodeURIComponent','decodeURIComponent',
   'Buffer','structuredClone','queueMicrotask','AbortController','URL','TextEncoder','alert',
+  'Intl','globalThis','WeakMap','WeakSet','Proxy','Reflect','BigInt','performance',
   'useState','useEffect','useCallback','useMemo','useRef','useLayoutEffect','useContext','useReducer',
   'describe','it','test','expect','beforeEach','afterEach','beforeAll','afterAll','jest',
   'async','else','do','try','finally','yield','delete','void','in','of','if','for','while',
   'switch','catch','return','function','typeof','await','new','super','import',
 ]);
 
+/**
+ * Strip comments and string/template literals before scanning.
+ *
+ * The scan looks for call syntax, and English prose is full of things that look
+ * like it. "…the sheet is gone. Cancelling on unmount (…" parses as
+ * `gone.Cancelling(`; a comment mentioning `worklet.` before a parenthesis does
+ * the same. Nine of the fourteen findings on the first run of the member-call
+ * scan were sentences in comments.
+ *
+ * Replacing with spaces rather than deleting keeps offsets stable, so anything
+ * reported still lines up with the source.
+ */
+export function stripCommentsAndStrings(src) {
+  let out = '';
+  let i = 0;
+  const blank = (n) => ' '.repeat(n);
+
+  while (i < src.length) {
+    const two = src.slice(i, i + 2);
+
+    if (two === '//') {
+      const end = src.indexOf('\n', i);
+      const stop = end === -1 ? src.length : end;
+      out += blank(stop - i);
+      i = stop;
+      continue;
+    }
+    if (two === '/*') {
+      const end = src.indexOf('*/', i + 2);
+      const stop = end === -1 ? src.length : end + 2;
+      out += src.slice(i, stop).replace(/[^\n]/g, ' ');
+      i = stop;
+      continue;
+    }
+
+    const ch = src[i];
+    if (ch === '"' || ch === "'" || ch === '`') {
+      let j = i + 1;
+      while (j < src.length) {
+        if (src[j] === '\\') { j += 2; continue; }
+        if (src[j] === ch) { j += 1; break; }
+        j += 1;
+      }
+      out += src.slice(i, j).replace(/[^\n]/g, ' ');
+      i = j;
+      continue;
+    }
+
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
 export function undefinedCalls(src, inputName = '') {
   if (!/\.(ts|tsx|js|jsx)$/.test(inputName)) return [];
 
+  // Bindings are collected from the original (imports are unaffected by
+  // stripping), but call sites are read from code only.
+  const code = stripCommentsAndStrings(src);
   const known = new Set(JS_GLOBALS);
   const add = (n) => { if (/^[\w$]+$/.test(n)) known.add(n); };
 
@@ -439,6 +606,23 @@ export function undefinedCalls(src, inputName = '') {
   for (const m of src.matchAll(/import\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s+from/g))
     for (const part of m[1].split(',')) add(part.trim().split(/\s+as\s+/).pop().replace(/^type\s+/, '').trim());
   for (const m of src.matchAll(/import\s+(?:type\s+)?([\w$]+)\s*(?:,|from)/g)) add(m[1]);
+  /**
+   * Namespace imports — `import * as SecureStore from 'expo-secure-store'`.
+   *
+   * Not collected at all until the member-call scan started checking receivers,
+   * at which point every namespace import in the suite was reported as
+   * undefined. The binding is the alias after `as`.
+   */
+  for (const m of src.matchAll(/import\s+\*\s+as\s+([\w$]+)\s+from/g)) add(m[1]);
+  /**
+   * Destructured callback parameters — `({ url }) => …`.
+   *
+   * The existing parameter scan strips braces from the whole parameter list and
+   * keeps what is left, which works for `(a, b)` but throws away the names in
+   * `({ url })`. Those are bindings like any other.
+   */
+  for (const m of src.matchAll(/\(\s*\{([^}]*)\}\s*(?::[^)]*)?\)\s*=>/g))
+    for (const part of m[1].split(',')) add(part.trim().split(':').pop().trim().replace(/=.*$/, '').trim());
   for (const m of src.matchAll(/(?:function|class)\s+([\w$]+)/g)) add(m[1]);
   for (const m of src.matchAll(/(?:const|let|var)\s+([\w$]+)\s*[=:]/g)) add(m[1]);
   for (const m of src.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g))
@@ -450,8 +634,31 @@ export function undefinedCalls(src, inputName = '') {
     for (const part of m[1].split(',')) add(part.trim().split(':')[0].replace(/[{}[\].]/g, '').trim());
 
   const missing = new Set();
-  for (const m of src.matchAll(/(^|[^.\w$])\b([a-z_$][\w$]*)\s*\(/gm))
+  for (const m of code.matchAll(/(^|[^.\w$])\b([a-z_$][\w$]*)\s*\(/gm))
     if (!known.has(m[2])) missing.add(m[2]);
+
+  /**
+   * Calls through an undefined namespace object — `SecureStore.deleteItemAsync()`.
+   *
+   * The scan above deliberately skips anything preceded by a dot, so that
+   * `foo.bar()` is not reported as a missing `bar`. The consequence was that the
+   * *receiver* went unchecked entirely: `evals/state/clean-auth-store` called
+   * `SecureStore.deleteItemAsync` with no import of SecureStore, and the fixture
+   * validator passed it. A clean case is an assertion that there is nothing to
+   * report, so a fixture that does not compile makes the case fail against every
+   * model that reads it correctly — the suite was penalising the right answer.
+   *
+   * Capitalised roots are included here, unlike the call scan: a namespace
+   * import is conventionally capitalised, which is exactly the case being
+   * missed. `this`/`super` are receivers, not bindings, and a chained call
+   * (`foo().bar()`) has no identifier root to check.
+   */
+  for (const m of code.matchAll(/(^|[^.\w$])\b([A-Za-z_$][\w$]*)\s*\.\s*[\w$]+\s*\(/gm)) {
+    const root = m[2];
+    if (root === 'this' || root === 'super') continue;
+    if (!known.has(root)) missing.add(root);
+  }
+
   return [...missing];
 }
 
@@ -480,7 +687,7 @@ export function checkSeverity(findings, def) {
  * Validation — structural checks, no API key, no spend
  * ------------------------------------------------------------------ */
 
-function validate(cases, agents) {
+export function validate(cases, agents) {
   const agentIds = new Set(agents.map((a) => a.id));
   const problems = [];
 
@@ -553,6 +760,42 @@ function validate(cases, agents) {
           );
         }
       }
+      if (f.unlessAnywhere !== undefined) {
+        if (typeof f.unlessAnywhere !== 'string' || !f.unlessAnywhere.trim()) {
+          problems.push(`${id}: forbid "${f.name}" has an empty unlessAnywhere`);
+        } else {
+          try {
+            new RegExp(f.unlessAnywhere, 'i');
+          } catch (err) {
+            problems.push(
+              `${id}: forbid "${f.name}" has an invalid unlessAnywhere — ${err.message}`,
+            );
+          }
+        }
+        /**
+         * Document scope is a real widening, so it must be earned.
+         *
+         * A rule that already states a precise pattern does not need to search
+         * the whole answer for its exception — that combination is how you get
+         * back to "a legitimate word anywhere excuses everything", which is the
+         * exact failure `unless` was removed for. It is available only to the
+         * bare-term rules whose claim is genuinely about the whole response.
+         */
+        if (f.pattern) {
+          problems.push(
+            `${id}: forbid "${f.name}" combines a specific "pattern" with the ` +
+              `document-scoped "unlessAnywhere". Use "unlessPattern" (clause-scoped) ` +
+              `instead — whole-response exceptions are for bare-term rules only.`,
+          );
+        }
+        if (f.unlessPattern) {
+          problems.push(
+            `${id}: forbid "${f.name}" sets both unlessPattern and unlessAnywhere — ` +
+              `pick one scope.`,
+          );
+        }
+      }
+
       /**
        * `unless` is gone, and reintroducing it is an error.
        *
@@ -679,11 +922,41 @@ async function main() {
   const baseUrl = args['base-url'] ?? process.env.OPENAI_BASE_URL;
   if (baseUrl) console.log(c.dim(`  endpoint: ${baseUrl}\n`));
 
+  /**
+   * Deterministic sampling for local endpoints.
+   *
+   * Nothing set temperature, so runs used the provider default — 0.8 on Ollama.
+   * Two sweeps over identical inputs gave 3/16 and 8/16 clean-case failures,
+   * and that spread swamped any signal a change to a rule or an agent could
+   * produce: you cannot tell a fix from noise when the noise is that large.
+   *
+   * Local only, by default. OpenAI's reasoning models reject a temperature
+   * other than 1, so forcing 0 everywhere would break hosted runs — and a
+   * hosted run is the one place the default is worth keeping, because it is the
+   * configuration real users get. `--temperature` and `--seed` override, and
+   * `--temperature default` sends none at all.
+   */
+  const isLocalEndpoint = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/.test(
+    baseUrl ?? '',
+  );
+  let temperature;
+  if (args.temperature === 'default') temperature = undefined;
+  else if (args.temperature !== undefined) temperature = Number(args.temperature);
+  else if (isLocalEndpoint) temperature = 0;
+
+  const seed = args.seed !== undefined ? Number(args.seed) : isLocalEndpoint ? 7 : undefined;
+
+  if (temperature !== undefined) {
+    console.log(c.dim(`  sampling: temperature ${temperature}${seed === undefined ? '' : `, seed ${seed}`}\n`));
+  }
+
   const llm = new LLM({
     provider,
     apiKey,
     model,
     baseUrl,
+    temperature,
+    seed,
     budgetUsd: Number(args.budget ?? 5),
   });
   const results = [];
@@ -716,10 +989,19 @@ async function main() {
         id: r.tc.id,
         agent: r.tc.def.agent,
         clean: r.tc.def.expectMaxFindings !== undefined,
+        maxFindings: r.tc.def.expectMaxFindings ?? null,
         pass: r.pass ?? false,
         expectPassed: r.score?.expectPassed ?? 0,
         expectTotal: r.score?.expectTotal ?? 0,
-        violations: r.score?.violations?.map((v) => v.name) ?? [],
+        /**
+         * Name *and* evidence. Storing only the name meant a reported violation
+         * could not be triaged after the run: "matched \"ios crash\"" tells you
+         * whether the rule caught real advice or fired on the model quoting the
+         * symptom, and that distinction decides whether to fix the agent or the
+         * rule. Objects, not strings — restore below accepts both shapes.
+         */
+        violations:
+          r.score?.violations?.map((v) => ({ name: v.name, evidence: v.evidence ?? null })) ?? [],
         severity: r.sev?.ok ?? null,
         noise: r.cap?.ok ?? null,
         error: r.error ?? null,
@@ -817,7 +1099,8 @@ async function main() {
         continue;
       }
     }
-    const score = scoreOutput(raw, tc.def);
+    // Scored on what the agent said, not on the JSON it said it in.
+    const score = scoreOutput(scannableText(raw, parsed, isQuestion), tc.def);
     const sev = isQuestion ? { ok: true } : checkSeverity(parsed.findings, tc.def);
     const cap = isQuestion ? { ok: true } : checkMaxFindings(parsed.findings, tc.def);
     const pass = score.pass && sev.ok && cap.ok;
@@ -865,12 +1148,24 @@ async function main() {
    * reporting below expects rather than being special-cased at each use.
    */
   const restored = previous.map((row) => ({
-    tc: { id: row.id, def: { agent: row.agent, ...(row.clean ? { expectMaxFindings: 0 } : {}) } },
+    tc: {
+      id: row.id,
+      def: {
+        agent: row.agent,
+        // The real cap, not 0. Flattening every restored clean case to
+        // `expectMaxFindings: 0` made `--resume` describe a case that allows one
+        // finding as one that allows none, so a resumed summary disagreed with
+        // the run that produced it.
+        ...(row.clean ? { expectMaxFindings: row.maxFindings ?? 0 } : {}),
+      },
+    },
     pass: row.pass,
     score: {
       expectPassed: row.expectPassed ?? 0,
       expectTotal: row.expectTotal ?? 0,
-      violations: (row.violations ?? []).map((name) => ({ name })),
+      violations: (row.violations ?? []).map((v) =>
+        typeof v === 'string' ? { name: v, evidence: null } : v,
+      ),
     },
     sev: { ok: row.severity },
     cap: { ok: row.noise },
@@ -909,27 +1204,82 @@ async function main() {
   if (violated) {
     console.log(c.red(`  ${violated} forbidden-advice violation(s)`));
     for (const r of all.filter((x) => x.score?.violations.length)) {
-      for (const v of r.score.violations) console.log(c.red(`    ${r.tc.id} — ${v.name}`));
+      for (const v of r.score.violations) {
+        // Show what matched. Without it the only way to tell a real violation
+        // from a rule firing on the model quoting the symptom is to re-run.
+        const ev = v.evidence
+          ? c.dim(`  matched "${String(v.evidence).replace(/\s+/g, ' ').trim().slice(0, 70)}"`)
+          : '';
+        console.log(c.red(`    ${r.tc.id} — ${v.name}`) + ev);
+      }
     }
   }
 
   if (cleanFailed.length) {
-    console.log(c.red(`\n  ${cleanFailed.length}/${cleanResults.length} clean case(s) failed — the model reported problems in correct code`));
+    console.log(c.red(`\n  ${cleanFailed.length}/${cleanResults.length} clean case(s) failed`));
     for (const r of cleanFailed) {
-      console.log(c.red(`    ${r.tc.id}`) + c.dim(`  ${r.cap?.note ?? r.sev?.note ?? ''}`));
+      /**
+       * Print the reason this case actually failed.
+       *
+       * This used to print `cap.note` unconditionally, so a clean case that
+       * failed on a *forbid violation* reported "expected at most 1 finding(s),
+       * got 1" — a sentence that contradicts itself and hides the real cause.
+       * The cap note is only meaningful when the cap is what failed.
+       */
+      const why = [];
+      if (r.error) why.push(`errored: ${r.error}`);
+      if (r.score?.violations?.length) {
+        why.push(`forbidden advice: ${r.score.violations.map((v) => v.name).join('; ')}`);
+      }
+      if (r.cap && !r.cap.ok && r.cap.note) why.push(r.cap.note);
+      if (r.sev && !r.sev.ok && r.sev.note) why.push(r.sev.note);
+      console.log(c.red(`    ${r.tc.id}`) + c.dim(`  ${why.join('  ·  ') || 'failed'}`));
     }
   } else if (cleanResults.length) {
     console.log(c.green(`  all ${cleanResults.length} clean case(s) passed — no invented findings`));
   }
 
-  if (dirtyFailed.length) {
+  /**
+   * Partition by what actually went wrong.
+   *
+   * Everything that failed used to land under "missed expected findings",
+   * including `state/server-state-in-store` at **6/6** — it matched every
+   * expectation and failed on a forbid rule. Listing it as a miss sends you
+   * looking for an absent finding that is not absent. An errored case appeared
+   * here too, as a meaningless `0/0`.
+   */
+  const dirtyErrored = dirtyFailed.filter((r) => classifyFailure(r) === 'errored');
+  const dirtyViolated = dirtyFailed.filter((r) => classifyFailure(r) === 'violation');
+  const dirtyMissed = dirtyFailed.filter((r) =>
+    ['missed', 'violation-and-missed'].includes(classifyFailure(r)),
+  );
+
+  if (dirtyErrored.length) {
+    console.log(c.red(`\n  ${dirtyErrored.length} case(s) errored — no usable response, so nothing was scored`));
+    for (const r of dirtyErrored) console.log(c.red(`    ${r.tc.id}`) + c.dim(`  ${r.error}`));
+  }
+
+  if (dirtyViolated.length) {
     console.log(
-      c.yellow(`\n  ${dirtyFailed.length}/${dirtyResults.length} case(s) missed expected findings`) +
+      c.red(`\n  ${dirtyViolated.length} case(s) matched every expectation but gave forbidden advice`) +
+        c.dim(' — not a capability gap; the answer was complete and wrong'),
+    );
+    for (const r of dirtyViolated) {
+      console.log(
+        c.red(`    ${r.tc.id}  ${r.score.expectPassed}/${r.score.expectTotal}`) +
+          c.dim(`  ${r.score.violations.map((v) => v.name).join('; ')}`),
+      );
+    }
+  }
+
+  if (dirtyMissed.length) {
+    console.log(
+      c.yellow(`\n  ${dirtyMissed.length}/${dirtyResults.length} case(s) missed expected findings`) +
         c.dim(' — ambiguous on a small model; check whether the finding is genuinely absent'),
     );
     // Sorted worst-first: a case matching 1 of 8 is a different problem from one
     // matching 7 of 8, and the flat list gave no way to tell them apart.
-    for (const r of [...dirtyFailed].sort(
+    for (const r of [...dirtyMissed].sort(
       (a, b) => (a.score?.expectPassed ?? 0) / Math.max(1, a.score?.expectTotal ?? 1)
         - (b.score?.expectPassed ?? 0) / Math.max(1, b.score?.expectTotal ?? 1),
     )) {

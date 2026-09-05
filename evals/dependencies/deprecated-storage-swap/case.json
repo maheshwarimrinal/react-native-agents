@@ -79,7 +79,7 @@
       "all": [
         "mmkv"
       ],
-      "unlessPattern": "\\bmigrat\\w+\\b|\\bexisting data\\b|\\bupgrade path\\b|\\bdata already (stored|written|in)\\b"
+      "unlessAnywhere": "\\bmigrat|\\bexisting\\s+(data|users?)\\b|\\bupgrade\\s+path\\b|\\bdata\\s+already\\s+(stored|written|in)\\b|\\bport(ing)?\\s+the\\s+data\\b|\\bdata\\s+loss\\b|\\blose\\s+data\\b|\\bread\\b.{0,20}\\bold\\b.{0,20}(store|storage)"
     },
     {
       "name": "recommends storing auth tokens in plain key-value storage",

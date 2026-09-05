@@ -97,6 +97,28 @@ match:
 }
 ```
 
+**`unlessAnywhere` — document-scoped, for rules whose claim is document-scoped.**
+Clause scope is the right default, but it cannot express every rule. Two rules
+assert an *absence across the whole answer* — "recommends the swap without
+mentioning migration **at all**", "presents the migration **as free**" — and
+their trigger is a bare product name. Clause scope made them look for the
+exception in the one place a discussion of migration cost will almost never be,
+so both reported violations against answers that did discuss it a sentence
+later. The rule name promised one scope and the mechanism enforced another.
+
+```json
+{
+  "name": "recommends the swap without mentioning migration at all",
+  "all": ["mmkv"],
+  "unlessAnywhere": "\\bmigrat\\w+|\\bexisting data\\b|\\bupgrade path\\b"
+}
+```
+
+`--validate` **rejects** `unlessAnywhere` alongside a specific `pattern`, or
+alongside `unlessPattern`. Whole-response exceptions are for bare-term rules
+only; bolting one onto an already-precise pattern is how "a legitimate word
+anywhere excuses everything" comes back, which is the exact failure below.
+
 **`unless` — removed.** It took a list of keywords and excused the violation if
 any appeared nearby. That asks "does a negation-ish word appear?", which is a
 semantic question keywords cannot answer. Five bypasses were reported against
@@ -125,6 +147,12 @@ only as careful as the regex someone wrote:
   duplicate, remove `node_modules`" is a correct answer, and the qualifier is in
   its own clause. A preceding clause ending in a full stop does *not* count —
   allowing that would reopen the first bypass in the table.
+- **The clause is found by where the match ends,** not by searching for the
+  evidence text. A pattern anchored to the opening of the response —
+  `^[\s\S]{0,350}…`, which is how "as the first step" is expressed — matches a
+  span covering many clauses, so a substring search found none of them and the
+  exception could never apply. Everything before the match end is positional
+  context; the advice is where the match lands.
 
 ## What makes the suite fail
 
