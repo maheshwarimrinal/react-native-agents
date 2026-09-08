@@ -1,6 +1,6 @@
 {
   "name": "@maheshwarimrinal/react-native-agents",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "25 expert React Native agents — upgrades and New Architecture migration, debugging, animation and gestures, performance, security, offline sync, navigation and deep linking, push notifications, permissions, iOS/Android parity, state management, accessibility, testing, native modules, observability, release, store submission, dependency choices, codebase onboarding, in-app purchases, background execution, and monorepo setup — plus a deterministic bundle-size analyzer. Portable across Claude Code, Cursor, Windsurf, Copilot, Codex, MCP clients, and GitHub Actions.",
   "type": "module",
   "bin": {
