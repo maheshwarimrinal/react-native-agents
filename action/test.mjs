@@ -43,7 +43,24 @@ function test(name, fn) {
   if (testDepth > 0) nestedTests.push(name);
   testDepth += 1;
   try {
-    fn();
+    const returned = fn();
+    /**
+     * A synchronous `test()` given an async callback cannot fail.
+     *
+     * `fn()` returns a promise, the try/catch sees nothing thrown, the test is
+     * counted as passed, and every assertion inside resolves later as an
+     * unhandled rejection nobody reads. Six tests were in this state — one of
+     * them written to prove a regex change, which then survived a mutation that
+     * reverted the change entirely.
+     *
+     * Detected here rather than left to reviewers noticing `async` at a call
+     * site, because that is precisely what was missed.
+     */
+    if (returned && typeof returned.then === 'function') {
+      throw new Error(
+        'async callback passed to the synchronous test() — its assertions cannot fail. Use testAsync().',
+      );
+    }
     passed++;
     process.stdout.write('.');
   } catch (err) {
@@ -1471,7 +1488,7 @@ test('size: analyzer performs no model call', () => {
   assert(!/anthropic|openai|api[_-]?key|LLM\(/i.test(src), 'size analysis must stay deterministic');
 });
 
-test('size: parses human-readable budget strings', async () => {
+await testAsync('size: parses human-readable budget strings', async () => {
   const { parseSize } = await import('./size.mjs');
   eq(parseSize('100kb'), 102400);
   eq(parseSize('1.5mb'), 1572864);
@@ -1479,7 +1496,7 @@ test('size: parses human-readable budget strings', async () => {
   eq(parseSize(undefined), null);
 });
 
-test('size: a malformed budget throws instead of silently disabling the check', async () => {
+await testAsync('size: a malformed budget throws instead of silently disabling the check', async () => {
   // Returning null here would leave the run green with no budget enforced —
   // the exact outcome the budget exists to prevent.
   const { parseSize, parsePercent } = await import('./size.mjs');
@@ -1495,7 +1512,7 @@ test('size: a malformed budget throws instead of silently disabling the check', 
   }
 });
 
-test('size: a zero budget means "no increase allowed", not "unset"', async () => {
+await testAsync('size: a zero budget means "no increase allowed", not "unset"', async () => {
   const { parseSize } = await import('./size.mjs');
   eq(parseSize('0'), 0);
   const cmp = { totalAfter: 1100, totalDelta: 100, percent: 10 };
@@ -1576,7 +1593,7 @@ test('size: bundle build refuses to download a CLI it does not have', () => {
   assert(/--no-install/.test(src), 'npx must not silently fetch an unpinned CLI');
 });
 
-test('size: base comparison supports every common package manager', async () => {
+await testAsync('size: base comparison supports every common package manager', async () => {
   const { detectPackageManager } = await import('./size.mjs');
   for (const [file, expected] of [
     ['package-lock.json', 'npm'],

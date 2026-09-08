@@ -41,8 +41,11 @@ So the question is never "did the purchase succeed?" It is:
 than deprecating them, and replaced the `'E_USER_CANCELLED'` string with an `ErrorCode` enum. The
 same line of code is correct on v13 and broken on v14. Reporting a v14 shape against a v13 codebase
 is a false positive that costs you the reader's trust for every real finding below it. State the
-version you found; if there is no lockfile or manifest to read, say the advice assumes v14 rather
-than asserting it. `references/purchase-flow.md` has the full table.
+version you found; if there is no lockfile or manifest to read, say the advice assumes v14 or newer
+rather than asserting it. The v14 shapes still hold at 16.5.1, so the v13/v14 boundary is the one
+that matters for API shape — but v14+ also needs `react-native-nitro-modules` installed alongside
+it as a peer dependency, which is a build failure when missing and the first thing to check on
+"it stopped compiling after the upgrade". `references/purchase-flow.md` has the full table.
 
 **1 — Find where entitlement is decided.** If that is anywhere other than one function reading
 server-verified state, that is the finding. Trace every path that writes it.
@@ -120,11 +123,27 @@ a confident wrong citation is a rejected release; say what to verify against the
 
 # The Purchase Flow
 
-> **API versions in this document.** Examples use `react-native-iap` v14 (current: 14.7), which
-> moved to StoreKit 2 on iOS (iOS 15+) and Google Play Billing 7+ on Android. v14 **removed**
-> several v13 functions rather than deprecating them, so v13 code does not merely warn — it fails
-> to import. If you are reading a codebase still on v13, the shapes below will not match; see the
-> version table at the end.
+> **API versions in this document.** The shapes below were checked against
+> `react-native-iap` **16.5.1**'s published type definitions and still hold — the v14 call
+> signatures did not change through v16. v14 moved to StoreKit 2 on iOS (iOS 15+) and
+> **removed** several v13 functions rather than deprecating them, so v13 code does not merely
+> warn, it fails to import. If you are reading a codebase still on v13, the shapes below will
+> not match; see the version table at the end.
+>
+> **The package requires `react-native-nitro-modules`.** Since v14.0.0 `react-native-iap` is a
+> Nitro module, and `react-native-nitro-modules` is a *peer* dependency (`^0.36.5` at 16.5.1) —
+> it is not installed for you. An install without it fails to build rather than failing at
+> runtime, so this is the first thing to check when someone reports that the library "won't
+> compile after upgrading". v13.1.0 is the last pre-Nitro release.
+>
+> **The package moved.** It now lives in the `hyodotdev/openiap` monorepo, and the reference
+> documentation is at openiap.dev rather than the old `hyochan.github.io` site. Links in older
+> answers and Stack Overflow posts point at the retired docs.
+>
+> Read the installed version before quoting any of this. Android billing capability in
+> particular is a moving target: 16.5 exposes Play Billing 8.2.0+ features (billing programs,
+> external offers) and 9.1.0+ features (Billing Choice screens) that do not exist on the
+> Billing 7 clients earlier versions targeted.
 
 ## Register the listener at startup, not on the paywall
 
@@ -168,8 +187,11 @@ see `rn-push`.
 ```ts
 async function buy(sku: string) {
   // 1. Products must be fetched before purchase; prices are per-locale and per-store.
-  //    `type` is required: 'in-app' or 'subs'. One call covers both; there is no
-  //    separate subscriptions function any more.
+  //    `type` is optional and defaults to 'in-app'. Pass it anyway: the default is
+  //    silent, so a subscription SKU fetched without `type: 'subs'` comes back as an
+  //    empty array rather than an error, which reads as "product not configured".
+  //    'all' returns a mixed array when you genuinely want both. There is no
+  //    separate subscriptions function.
   const products = await fetchProducts({ skus: [sku], type: 'in-app' });
   if (!products.length) throw new Error('Product unavailable in this store');
 
@@ -316,6 +338,25 @@ is broken rather than merely dated.
 v14 also raises the floor: **iOS 15+**, Google Play Billing 7.0+, React Native 0.71+. An app that
 still supports iOS 14 cannot take v14 at all, which makes "upgrade the library" a scoping decision
 rather than a chore.
+
+## v14 → v16
+
+The v14 call signatures above are unchanged at 16.5.1 — verified against the published type
+definitions — so v14 code does not break on upgrade the way v13 code broke on v14. What changed is
+around the API rather than in it:
+
+| Change | Consequence |
+|---|---|
+| `react-native-nitro-modules` peer dependency | Not installed for you. A missing peer is a **build** failure, not a runtime one |
+| Package moved to `hyodotdev/openiap` | Old docs links are retired; issues live on the monorepo |
+| Play Billing 8.2.0+ / 9.1.0+ surface added | Billing programs, external offers and Billing Choice exist only on the newer clients |
+| `presentCodeRedemptionSheetIOS`, `openRedeemOfferCodeAndroid` | **Deprecated** in favour of the cross-platform `openRedeemOfferCode`; slated for removal in OpenIAP 4.0 |
+
+Do not treat the deprecated pair as an error in existing code — they still work. Flag them only in
+newly written code, and say what replaces them.
+
+> Verified against the type definitions published for 16.5.1, not against the v15/v16 release
+> notes. If a behavioural change landed that the types do not express, it is not captured here.
 
 ---
 
