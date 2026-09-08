@@ -83,8 +83,11 @@ So the question is never "did the purchase succeed?" It is:
 than deprecating them, and replaced the `'E_USER_CANCELLED'` string with an `ErrorCode` enum. The
 same line of code is correct on v13 and broken on v14. Reporting a v14 shape against a v13 codebase
 is a false positive that costs you the reader's trust for every real finding below it. State the
-version you found; if there is no lockfile or manifest to read, say the advice assumes v14 rather
-than asserting it. `references/purchase-flow.md` has the full table.
+version you found; if there is no lockfile or manifest to read, say the advice assumes v14 or newer
+rather than asserting it. The v14 shapes still hold at 16.5.1, so the v13/v14 boundary is the one
+that matters for API shape — but v14+ also needs `react-native-nitro-modules` installed alongside
+it as a peer dependency, which is a build failure when missing and the first thing to check on
+"it stopped compiling after the upgrade". `references/purchase-flow.md` has the full table.
 
 **1 — Find where entitlement is decided.** If that is anywhere other than one function reading
 server-verified state, that is the finding. Trace every path that writes it.

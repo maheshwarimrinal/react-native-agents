@@ -36,7 +36,24 @@ const failures = [];
 
 function test(name, fn) {
   try {
-    fn();
+    const returned = fn();
+    /**
+     * A synchronous `test()` given an async callback cannot fail.
+     *
+     * `fn()` returns a promise, the try/catch sees nothing thrown, the test is
+     * counted as passed, and every assertion inside resolves later as an
+     * unhandled rejection nobody reads. Six tests across the two suites were in
+     * this state — one of them written to prove a regex change, which then
+     * survived a mutation that reverted the change entirely.
+     *
+     * Detected here rather than left to reviewers noticing `async` at a call
+     * site, because that is precisely what was missed.
+     */
+    if (returned && typeof returned.then === 'function') {
+      throw new Error(
+        'async callback passed to the synchronous test() — its assertions cannot fail. Use testAsync().',
+      );
+    }
     passed++;
     process.stdout.write('.');
   } catch (err) {
@@ -817,7 +834,7 @@ test('sanitise accepts only primitives', () => {
   assert(Object.keys(clean).length === 0, `expected nothing, got: ${JSON.stringify(clean)}`);
 });
 
-test('capture is a no-op when telemetry is disabled', async () => {
+await testAsync('capture is a no-op when telemetry is disabled', async () => {
   // If this ever performs a network call while disabled, it is a serious bug.
   const sent = await capture('test_event', { surface: 'cli' }, { env: { RN_AGENTS_TELEMETRY: '0' } });
   assert(sent === false, 'capture should not send while disabled');
@@ -1003,6 +1020,15 @@ const FORBIDDEN_ABSOLUTES = [
       /['"`]reanimated\/plugin['"`]\s+must\s+be\s+last/i,
     ],
     why: 'Reanimated 4 renamed it to react-native-worklets/plugin — a grep for the old name alone reports a correct config as broken',
+  },
+  {
+    claim: 'react-native-iap v14 presented as the current release',
+    patterns: [
+      /react-native-iap[^.]{0,30}\bcurrent(?:ly)?[^.]{0,15}\b(?:v?14|14\.\d+)\b/i,
+      /\(current:\s*14\.\d+\)/i,
+      /react-native-iap[^.]{0,20}\bv14\b[^.]{0,20}\b(?:is\s+the\s+)?latest\b/i,
+    ],
+    why: 'react-native-iap is at 16.5.1 and moved to the hyodotdev/openiap monorepo. The v14 call shapes still hold, but v14 is not current',
   },
   {
     claim: 'index keys remounting the tail of a list',
@@ -2270,7 +2296,20 @@ test('payments knowledge records the library version its examples target', () =>
   // on its own schedule and nothing tracked it.
   const lib = KNOWLEDGE.libraries?.['react-native-iap'];
   assert(lib, 'knowledge.json should record the react-native-iap version the examples target');
-  assert(/^\d+\.\d+$/.test(String(lib.verified_through)), `odd version: ${lib.verified_through}`);
+  // Two or three parts. The two-part form was all that existed while the library
+  // published 14.7; 16.5.1 is a patch-level pin and rejecting it would have made
+  // recording a *more* precise verification fail the gate.
+  assert(
+    /^\d+\.\d+(\.\d+)?$/.test(String(lib.verified_through)),
+    `odd version: ${lib.verified_through}`,
+  );
+  // A version claim without a date, or without saying what it was checked
+  // against, is the thing the freshness job exists to prevent.
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(String(lib.verified_on)), 'verified_on must be a date');
+  assert(
+    typeof lib.verified_against === 'string' && lib.verified_against.trim().length > 10,
+    'verified_against must say what evidence the claim rests on',
+  );
   assert(lib.used_by?.includes('rn-payments'), 'the record should name the agent that depends on it');
 
   // The reference must state its assumed version, so a reader on v13 knows.
@@ -2302,6 +2341,41 @@ test('no hardcoded version literals remain in the generators', () => {
 /* ---------------------------------------------------------------- *
  * Knowledge freshness
  * ---------------------------------------------------------------- */
+
+await testAsync('the version detector ignores decimals that are not versions', async () => {
+  // One freshness issue listed 23 documents to review, of which 22 were noise:
+  // `\b0\.\d{2}\b` matched every two-place decimal in the corpus. A check that
+  // cries wolf on 22 of 23 files teaches you to close it unread.
+  const { VERSION_MENTION } = await import(path.join(ROOT, 'scripts/freshness.mjs'));
+  const hit = (t) => {
+    VERSION_MENTION.lastIndex = 0;
+    return VERSION_MENTION.test(t);
+  };
+
+  for (const notAVersion of [
+    'replaysSessionSampleRate: 0.01,',
+    'map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));',
+    "| ANR rate (Android) | < 0.47% | Play's threshold",
+    'longitude={-0.12}',
+    'a 0.85% conversion lift',
+    'git tag -a v1.4.2 -m "Release"',
+    'A persisted shape from v1.2 will be loaded by v2.0.',
+  ]) {
+    assert(!hit(notAVersion), `must not flag: ${notAVersion}`);
+  }
+
+  for (const isAVersion of [
+    'The New Architecture has been the default since **0.76**',
+    'the legacy bridge was removed in 0.82',
+    '4.7.x supports 0.85–0.87',
+    'requires react-native 0.87 or newer',
+    'reanimated 4.1.x',
+    'Expo SDK 54',
+    'React 19.2 changed the default',
+  ]) {
+    assert(hit(isAVersion), `must still flag: ${isAVersion}`);
+  }
+});
 
 test('knowledge.json declares verification metadata', () => {
   assert(/^\d{4}-\d{2}-\d{2}$/.test(KNOWLEDGE.last_verified), 'last_verified must be a date');

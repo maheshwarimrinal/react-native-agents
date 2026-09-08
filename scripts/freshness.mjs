@@ -55,13 +55,47 @@ async function latestOnNpm(pkg) {
   }
 }
 
+/**
+ * A number that is actually a version, rather than a decimal in prose.
+ *
+ * `\b0\.\d{2}\b` matched every two-place decimal in the corpus. One issue listed
+ * 23 documents to review, of which 22 were noise: a Sentry
+ * `replaysSessionSampleRate: 0.01`, the WCAG luminance constant `0.055`, Play's
+ * `< 0.47%` ANR threshold, a map `longitude={-0.12}`, Kotlin `2.0.21`. A check
+ * that cries wolf on 22 of 23 files teaches you to close it unread, which is
+ * worse than not running it.
+ *
+ * Four narrower signals, each of which only a version is written with:
+ *
+ *  1. `0.6x`–`0.9x` — the React Native minor range. Every false positive above
+ *     sat below 0.60. Excludes a following `%` (a rate, not a release) and a
+ *     following digit (so `0.055` is not read as `0.05`).
+ *  2. A named product next to a number — `react-native 0.87`, `reanimated 4.7`.
+ *  3. An explicit `.x` series — `4.7.x`.
+ *  4. `SDK NN` and `React 19`, unchanged.
+ *
+ * A bare `v`-prefixed number was tried and dropped: it matched `git tag -a
+ * v1.4.2` in a shell example and a `v1.2 → v2.0` persisted-shape migration
+ * narrative, neither of which is a dependency claim.
+ */
+export const VERSION_MENTION = new RegExp(
+  [
+    String.raw`\b0\.(?:6[0-9]|[7-9][0-9])\b(?!\s*%)(?!\.\d)`,
+    String.raw`\b(?:react[-\s]?native|expo|worklets?|reanimated)\b[^\n.]{0,24}?\bv?\d+\.\d{1,3}(?:\.\d+)?\b`,
+    String.raw`\b\d+\.\d{1,3}\.x\b`,
+    String.raw`\bSDK\s*\d{2}\b`,
+    String.raw`\bReact\s*19(?:\.\d+)?\b`,
+  ].join('|'),
+  'gi',
+);
+
 /** Reference documents that name a specific version — these need review on a bump. */
 export function referencesMentioningVersions() {
   const hits = [];
   const agents = loadAgents();
   for (const agent of agents) {
     for (const ref of agent.references) {
-      const matches = ref.content.match(/\b0\.\d{2}\b|\bSDK\s*\d{2}\b|\bReact\s*19(\.\d+)?\b/g);
+      const matches = ref.content.match(VERSION_MENTION);
       if (matches?.length) {
         hits.push({
           agent: agent.id,
