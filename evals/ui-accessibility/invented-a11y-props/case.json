@@ -1,0 +1,65 @@
+{
+  "agent": "rn-ui-accessibility",
+  "title": "A form using web ARIA props that React Native does not implement",
+  "context": {
+    "reactNative": "0.87",
+    "language": "TypeScript"
+  },
+  "notes": "Five invented or misapplied identifiers, all of which a model trained mostly on web code will read straight past — and all of which fail silently, because an unknown prop on a host component is dropped with no warning. (1) accessibilityInvalid does not exist. (2) accessibilityRequired does not exist. (3) aria-invalid does not exist; React Native borrows the ARIA vocabulary selectively. (4) aria-describedby does not exist. (5) accessibilityState accepts only disabled/selected/checked/busy/expanded, so `invalid` is silently dropped. Plus one real-but-wrong value: role=\"header\" on the submit button — `header` is an accessibilityRole name, not a `role` name, and `role` takes precedence over accessibilityRole, so this actively mislabels the button. This case exists because v1.4.0 of this package shipped accessibilityInvalid in its own guidance; the failure mode is not hypothetical.",
+  "expect": [
+    {
+      "name": "flags accessibilityInvalid as not a React Native prop",
+      "any": ["accessibilityinvalid", "not a real prop", "does not exist", "no such prop", "not a valid prop", "invented"]
+    },
+    {
+      "name": "flags the aria-* props React Native does not implement",
+      "any": ["aria-invalid", "aria-describedby", "not implemented", "does not exist", "not supported"]
+    },
+    {
+      "name": "flags invalid as a non-existent accessibilityState key",
+      "any": ["accessibilitystate", "disabled", "selected", "checked", "busy", "expanded", "only accepts", "five"]
+    },
+    {
+      "name": "explains that unknown props fail silently rather than erroring",
+      "any": ["silent", "silently", "no warning", "no error", "dropped", "ignored", "does nothing"]
+    },
+    {
+      "name": "gives a real way to convey the error to a screen reader",
+      "any": ["accessibilitylabel", "announceforaccessibility", "livevregion", "accessibilityliveregion", "label", "announce"]
+    },
+    {
+      "name": "catches role=\"header\" on the submit control",
+      "any": ["role=\"header\"", "role='header'", "header", "button", "precedence", "wrong role"]
+    }
+  ],
+  "expectSeverity": [{ "atLeast": "P2" }],
+  "forbid": [
+    {
+      "name": "recommends another prop React Native does not have",
+      "any": [
+        "accessibilityerror",
+        "accessibilityrequired={",
+        "aria-required",
+        "aria-errormessage",
+        "accessibilitydescribedby",
+        "accessibilityinvalid={"
+      ]
+    },
+    {
+      "name": "claims accessibilityState has an invalid key",
+      "pattern": "accessibilitystate[^.;,]{0,40}\\binvalid\\b",
+      "unlessPattern": "\\b(no|not|never|does not|doesn't|only|remove|drop)\\b|\\bis not (a|an|valid)\\b"
+    },
+    {
+      "name": "asserts iOS and Android announce a role identically",
+      "pattern": "(both platforms|ios and android)[^.;,]{0,40}(identical|the same way|same announcement)",
+      "unlessPattern": "\\b(not|differ|vary|test|verify)\\b"
+    },
+    {
+      "name": "invents a frame rate or millisecond figure",
+      "pattern": "\\b\\d+\\s?(fps|ms|milliseconds)\\b",
+      "unlessPattern": "(?:for example|e\\.?g\\.?|such as|roughly|approximately|measure\\w*)"
+    }
+  ],
+  "elidedHelpers": []
+}
