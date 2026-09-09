@@ -1,0 +1,150 @@
+{
+  "$comment": [
+    "Vendored snapshot of React Native's accessibility API surface, used by",
+    "scripts/test.mjs to reject prop and API names the agents invent.",
+    "",
+    "Why this exists: v1.4.0 shipped `accessibilityInvalid` in the accessibility",
+    "agent. It is not a React Native prop and never has been. 734 tests passed,",
+    "because every guard we had checked *claims* ('Reanimated 4 supports Paper')",
+    "and none checked *identifiers*. A reader on Reddit found it before any test",
+    "did. Guessing a plausible-looking prop name is the single most damaging",
+    "thing an agent of this kind can do, so it is now mechanically impossible to",
+    "ship one in this namespace.",
+    "",
+    "Refresh deliberately when the React Native floor moves — see the",
+    "'how_to_refresh' key. Do not add a name here to silence a failure; if the",
+    "name is not in the sources below, the agent is wrong, not the snapshot."
+  ],
+  "rn_version": "0.87.0",
+  "captured_on": "2026-09-09",
+  "sources": [
+    "react-native@0.87.0/Libraries/Components/View/ViewAccessibility.d.ts",
+    "react-native@0.87.0/Libraries/Components/View/ViewAccessibility.js",
+    "react-native@0.87.0/Libraries/Components/AccessibilityInfo/AccessibilityInfo.d.ts",
+    "https://reactnative.dev/docs/accessibility (0.87)"
+  ],
+  "how_to_refresh": "Fetch the three files above for the new version, diff against this snapshot, and update rn_version and captured_on. Additions are usually safe; removals mean an agent may now be documenting something that no longer exists.",
+
+  "props": {
+    "cross_platform": [
+      "accessible",
+      "accessibilityLabel",
+      "accessibilityHint",
+      "accessibilityRole",
+      "accessibilityState",
+      "accessibilityValue",
+      "accessibilityActions",
+      "onAccessibilityAction",
+      "role"
+    ],
+    "ios_only": [
+      "accessibilityElementsHidden",
+      "accessibilityViewIsModal",
+      "accessibilityIgnoresInvertColors",
+      "accessibilityLanguage",
+      "accessibilityShowsLargeContentViewer",
+      "accessibilityLargeContentTitle",
+      "accessibilityRespondsToUserInteraction",
+      "onAccessibilityEscape",
+      "onAccessibilityTap",
+      "onMagicTap"
+    ],
+    "android_only": [
+      "accessibilityLabelledBy",
+      "accessibilityLiveRegion",
+      "importantForAccessibility",
+      "screenReaderFocusable"
+    ],
+    "experimental": [
+      "experimental_accessibilityOrder"
+    ]
+  },
+
+  "aria_aliases": {
+    "$comment": "RN 0.71+ W3C-aligned aliases. Each maps onto an accessibility* prop or accessibilityState key.",
+    "cross_platform": [
+      "aria-label",
+      "aria-busy",
+      "aria-checked",
+      "aria-disabled",
+      "aria-expanded",
+      "aria-selected",
+      "aria-hidden",
+      "aria-valuemax",
+      "aria-valuemin",
+      "aria-valuenow",
+      "aria-valuetext"
+    ],
+    "ios_only": ["aria-modal"],
+    "android_only": ["aria-labelledby", "aria-live"]
+  },
+
+  "accessibility_state_keys": ["disabled", "selected", "checked", "busy", "expanded"],
+
+  "roles": {
+    "$comment": [
+      "Two lists, and the difference is the point. `documented` is what",
+      "reactnative.dev/docs/accessibility describes for 0.87. `typed_only` is in",
+      "the AccessibilityRole union but is documented nowhere — every one of them",
+      "names an Android platform construct. Neither list carries a platform",
+      "annotation upstream, which is exactly why both humans and models treat all",
+      "40 as universally meaningful. They are not."
+    ],
+    "documented": [
+      "none", "button", "togglebutton", "link", "search", "image", "keyboardkey",
+      "text", "adjustable", "imagebutton", "header", "summary", "alert",
+      "checkbox", "combobox", "menu", "menubar", "menuitem", "progressbar",
+      "radio", "radiogroup", "scrollbar", "spinbutton", "switch", "tab",
+      "tablist", "timer", "toolbar", "grid", "list"
+    ],
+    "typed_only": [
+      "dropdownlist", "tabbar", "pager", "scrollview", "horizontalscrollview",
+      "viewgroup", "webview", "drawerlayout", "slidingdrawer", "iconmenu"
+    ]
+  },
+
+  "role_prop_values": [
+    "alert", "alertdialog", "application", "article", "banner", "button", "cell",
+    "checkbox", "columnheader", "combobox", "complementary", "contentinfo",
+    "definition", "dialog", "directory", "document", "feed", "figure", "form",
+    "grid", "group", "heading", "img", "link", "list", "listitem", "log", "main",
+    "marquee", "math", "menu", "menubar", "menuitem", "meter", "navigation",
+    "none", "note", "option", "presentation", "progressbar", "radio",
+    "radiogroup", "region", "row", "rowgroup", "rowheader", "scrollbar",
+    "searchbox", "separator", "slider", "spinbutton", "status", "summary",
+    "switch", "tab", "table", "tablist", "tabpanel", "term", "timer", "toolbar",
+    "tooltip", "tree", "treegrid", "treeitem"
+  ],
+
+  "accessibility_actions": {
+    "cross_platform": ["activate", "increment", "decrement"],
+    "ios_only": ["magicTap", "escape"],
+    "android_only": ["longpress", "expand", "collapse"]
+  },
+
+  "accessibility_info_methods": [
+    "isBoldTextEnabled",
+    "isGrayscaleEnabled",
+    "isInvertColorsEnabled",
+    "isReduceMotionEnabled",
+    "isHighTextContrastEnabled",
+    "isDarkerSystemColorsEnabled",
+    "prefersCrossFadeTransitions",
+    "isReduceTransparencyEnabled",
+    "isScreenReaderEnabled",
+    "isAccessibilityServiceEnabled",
+    "addEventListener",
+    "setAccessibilityFocus",
+    "announceForAccessibility",
+    "announceForAccessibilityWithOptions",
+    "getRecommendedTimeoutMillis",
+    "sendAccessibilityEvent"
+  ],
+
+  "notes": {
+    "flow_union_is_open": "In ViewAccessibility.js the Flow AccessibilityRole union ends `| string`, so a typo such as accessibilityRole=\"buton\" type-checks in a Flow project. The TypeScript .d.ts union has no `| string`, so TS catches it. Same prop, different safety.",
+    "role_takes_precedence": "reactnative.dev/docs/accessibility states that `role` has precedence over `accessibilityRole` when both are set.",
+    "no_platform_annotation_on_roles": "Props carry @platform ios / @platform android tags in the type definitions. Role values carry none, in either the types or the docs.",
+    "set_accessibility_focus_not_deprecated": "AccessibilityInfo.setAccessibilityFocus(reactTag) is present and un-deprecated in 0.87's type definitions. sendAccessibilityEvent(handle, eventType) also exists and takes a HostInstance, but the docs section covering accessibility events is titled 'Android', so its cross-platform behaviour is unverified here."
+  }
+}

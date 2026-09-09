@@ -435,16 +435,36 @@ supported position, not a failure, and it is the right advice for a large app
 mid-upgrade.
 
 **There is no single React Native floor.** Support is a *moving window* per
-Reanimated minor, not a minimum you clear once. At the time of writing the table
-starts at RN 0.78, and newer Reanimated minors **drop** older React Native
-versions as they add new ones — 4.7.x supports 0.85–0.87 and does *not* support
-0.78, while 4.1.x supports 0.78–0.82 and not 0.83+. `react-native-worklets` has
-its own matrix on top, pinned tightly: 4.7.x wants worklets 0.13.x.
+Reanimated minor, not a minimum you clear once — and the window has been getting
+narrower, not wider.
 
-Never quote a floor from memory, including from this page. Read the official
-compatibility table for the exact pair, or the `compatibility.json` shipped
-inside the installed Reanimated package — the table assumes the latest patch of
-each minor, and older patches differ.
+The package declares it. Compare what two releases put in `peerDependencies`:
+
+| Reanimated | `react-native` | `react-native-worklets` |
+|---|---|---|
+| 4.1.0 | `*` | `>=0.5.0` |
+| 4.6.0 | `0.83 - 0.87` | `0.12.x` |
+
+*Verified against the npm registry on 2026-09-09; 4.6.0 was `latest`.*
+
+So a project that installed Reanimated 4 early, when it accepted any React
+Native, can find that upgrading Reanimated now requires upgrading React Native
+first. The worklets pin tightens the same way: `0.12.x` is an exact minor, not a
+floor.
+
+**Read `peerDependencies` for the exact version you are installing.** That is the
+authoritative answer, it ships inside the tarball, and it cannot go stale the way
+a number written into a document does:
+
+```bash
+npm view react-native-reanimated@4.6.0 peerDependencies
+# or, for what is actually installed
+cat node_modules/react-native-reanimated/package.json | grep -A5 peerDependencies
+```
+
+Never quote a window from memory, including from the table above — it is a dated
+snapshot of two releases, not a matrix. The official compatibility table and the
+`compatibility.json` inside the installed package are the maintained versions.
 
 **Worklets are a separate package now.** Install `react-native-worklets` and
 rebuild the native apps. Match the version to the compatibility table rather
@@ -466,8 +486,15 @@ first.
 
 ## Threading functions: renamed *and* re-shaped
 
-All of these moved to `react-native-worklets`. They are re-exported from
-`react-native-reanimated` and marked deprecated.
+All of these moved to `react-native-worklets`, which is where the new names
+live. **The old names still work.** `react-native-reanimated` 4.6.0 re-exports
+`runOnJS`, `runOnUI`, `runOnRuntime` and `executeOnUIRuntimeSync` from its own
+index, and only one of the five carries a deprecation marker (see below). So
+this is a migration you should make, not a break that forces your hand — do not
+report existing `runOnJS` as an error.
+
+*Checked against the exports of `react-native-reanimated@4.6.0` and
+`react-native-worklets@0.12.1` on 2026-09-09.*
 
 | Reanimated 3 | Reanimated 4 |
 |---|---|
@@ -479,6 +506,15 @@ All of these moved to `react-native-worklets`. They are re-exported from
 
 `createWorkletRuntime`, `WorkletRuntime` and `isWorkletFunction` moved with no
 API change.
+
+**Only `makeShareableCloneRecursive` is actually deprecated.** In
+`react-native-worklets` it is exported from an internal `deprecated` module,
+while `runOnJS`, `runOnUI`, `runOnRuntime` and `executeOnUIRuntimeSync` come from
+the same live modules as their new counterparts. The library marks deprecations
+in its type exports when it means them — `useScrollViewOffset` and `Extrapolate`
+both carry an explicit `@deprecated` tag — so their absence on the `runOn*`
+family is evidence, not an oversight. Treat the rename as the direction of
+travel and flag it as a P3, not a defect.
 
 **The argument shape changed too.** These were curried; they are not any more.
 A rename-only migration compiles and runs, and passes no arguments:
@@ -517,7 +553,10 @@ older versions depend on the removed hook.
   deprecated.
 - `addWhitelistedNativeProps` / `addWhitelistedUIProps` are **no-ops** now —
   Reanimated 4 dropped the native/UI prop distinction. Delete the calls.
-- `useAnimatedKeyboard` is marked deprecated.
+- `useScrollViewOffset` **is** marked deprecated in the type exports, in favour
+  of `useScrollOffset`. So is `Extrapolate`, in favour of `Extrapolation`. These
+  two carry explicit `@deprecated` tags; do not extend the assumption to other
+  hooks without checking the exports of the installed version.
 - Shared Element Transitions remain **experimental**. Treat them as such in
   production advice.
 

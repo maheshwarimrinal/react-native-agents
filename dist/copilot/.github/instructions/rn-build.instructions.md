@@ -431,10 +431,19 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
 
       <TextInput
         ref={ref}
-        accessibilityLabel={label}
+        // React Native has NO invalid state. There is no `accessibilityInvalid`,
+        // no `aria-invalid`, and `accessibilityState` accepts only disabled,
+        // selected, checked, busy and expanded. The web habit does not carry
+        // over, and inventing a prop here is silent — an unknown prop on a host
+        // component is dropped without warning, so the field looks handled and
+        // announces nothing.
+        //
+        // Carry the error in the accessible name instead, so it is spoken when
+        // the field takes focus rather than only when the error text happens to
+        // be reached.
+        accessibilityLabel={error ? `${label}, error: ${error}` : label}
         accessibilityLabelledBy={`${id}-label`}   // Android
         accessibilityHint={hint}
-        aria-invalid={Boolean(error)}
         style={[styles.input, error && styles.inputError]}
         placeholderTextColor={theme.textSecondary}
         {...props}

@@ -624,6 +624,313 @@ test('an exception is no narrower than the expectation it mirrors', () => {
   }
 });
 
+/* ---------------------------------------------------------------- *
+ * React Native API surface — no invented identifiers
+ * ---------------------------------------------------------------- */
+
+const A11Y_SURFACE = JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'scripts/data/rn-a11y-surface.json'), 'utf8'),
+);
+
+/** Every accessibility identifier React Native actually ships. */
+function knownA11yNames(surface = A11Y_SURFACE) {
+  return new Set([
+    ...surface.props.cross_platform,
+    ...surface.props.ios_only,
+    ...surface.props.android_only,
+    ...surface.props.experimental,
+    ...surface.aria_aliases.cross_platform,
+    ...surface.aria_aliases.ios_only,
+    ...surface.aria_aliases.android_only,
+    ...surface.accessibility_info_methods,
+  ]);
+}
+
+/**
+ * Accessibility identifiers *used as code*, not merely mentioned.
+ *
+ * The distinction is load-bearing. Documenting that a prop does not exist means
+ * naming it — "there is no `accessibilityInvalid`" — and a checker that counts
+ * bare mentions flags the warning as loudly as the mistake. That would push the
+ * fix towards deleting the warning, which is the opposite of what is wanted.
+ *
+ * So this matches usage syntax only: a JSX prop (`name={` / `name="`) or a
+ * member call (`AccessibilityInfo.name(`). A sentence saying the name is fake
+ * cannot match either. Structural, not semantic — no guessing at intent.
+ */
+const A11Y_NAME = String.raw`accessibility[A-Za-z]+|experimental_accessibilityOrder|importantForAccessibility|screenReaderFocusable|onAccessibility[A-Za-z]+|onMagicTap|aria-[a-z]+`;
+
+function a11yNamesUsed(text) {
+  const found = new Set();
+  // As a JSX prop: `name={…}` or `name="…"`.
+  for (const m of text.matchAll(new RegExp(String.raw`\b(${A11Y_NAME})\s*=\s*[{"']`, 'g'))) {
+    found.add(m[1]);
+  }
+  // As a method call on AccessibilityInfo.
+  for (const m of text.matchAll(
+    new RegExp(String.raw`AccessibilityInfo\.\s*([A-Za-z]+)\s*\(`, 'g'),
+  )) {
+    found.add(m[1]);
+  }
+  return found;
+}
+
+test('no invented React Native accessibility props or APIs', () => {
+  /**
+   * v1.4.0 shipped `accessibilityInvalid`, which is not a React Native prop and
+   * never has been. Every guard in this file checked *claims* — "Reanimated 4
+   * supports Paper", "costs nothing per frame" — and none checked *identifiers*,
+   * so 734 tests passed and a reader on Reddit found it instead.
+   *
+   * Scoped to the accessibility namespace because that is where the snapshot in
+   * scripts/data/rn-a11y-surface.json is complete. A name outside a namespace we
+   * have ground truth for cannot be judged, and a guard that guesses is the
+   * problem it is meant to solve.
+   */
+  const known = knownA11yNames();
+  const offenders = [];
+
+  for (const a of agents) {
+    const docs = [
+      { name: `${a.id}/agent.md`, text: a.body },
+      ...a.references.map((r) => ({ name: `${a.id}/${r.slug}.md`, text: r.content })),
+    ];
+    for (const { name, text } of docs) {
+      for (const used of a11yNamesUsed(text)) {
+        if (!known.has(used)) offenders.push(`${name}: ${used}`);
+      }
+    }
+  }
+
+  assert(
+    offenders.length === 0,
+    `identifiers React Native does not ship (checked against ${A11Y_SURFACE.sources[0]}):\n    ` +
+      offenders.join('\n    '),
+  );
+});
+
+test('no invented accessibilityRole or role values', () => {
+  // A role is a string literal, so a typo is invisible to Flow — the union in
+  // ViewAccessibility.js ends `| string`. TypeScript catches it; Flow does not.
+  const roles = new Set([...A11Y_SURFACE.roles.documented, ...A11Y_SURFACE.roles.typed_only]);
+  const roleProp = new Set(A11Y_SURFACE.role_prop_values);
+  const states = new Set(A11Y_SURFACE.accessibility_state_keys);
+  const offenders = [];
+
+  for (const a of agents) {
+    const docs = [
+      { name: `${a.id}/agent.md`, text: a.body },
+      ...a.references.map((r) => ({ name: `${a.id}/${r.slug}.md`, text: r.content })),
+    ];
+    for (const { name, text } of docs) {
+      /**
+       * Fenced code only.
+       *
+       * A role value is a plain string, so explaining that `role="header"` is a
+       * typo means writing it — and a checker that reads prose flags the warning
+       * as loudly as the mistake, pushing the fix towards deleting the warning.
+       * Inside a ```tsx fence it is a recommendation; in a sentence it is
+       * discussion. Structural, like the usage check above.
+       */
+      const fenced = [...text.matchAll(/```(?:tsx|jsx|ts|js)?\n([\s\S]*?)```/g)]
+        .map((m) => m[1])
+        .join('\n');
+
+      for (const m of fenced.matchAll(/accessibilityRole=["'{]+["']?([a-z]+)/g)) {
+        if (!roles.has(m[1])) offenders.push(`${name}: accessibilityRole="${m[1]}"`);
+      }
+      for (const m of fenced.matchAll(/(?<!accessibility)\brole=["'{]+["']?([a-z]+)/g)) {
+        if (!roleProp.has(m[1])) offenders.push(`${name}: role="${m[1]}"`);
+      }
+      // accessibilityState={{ checked, expanded }} — shorthand keys included.
+      for (const m of fenced.matchAll(/accessibilityState=\{\{([^}]*)\}\}/g)) {
+        for (const raw of m[1].split(',')) {
+          const key = raw.trim().split(':')[0].trim();
+          if (key && /^[a-z]+$/.test(key) && !states.has(key)) {
+            offenders.push(`${name}: accessibilityState.${key}`);
+          }
+        }
+      }
+    }
+  }
+
+  assert(offenders.length === 0, `invented values:\n    ${offenders.join('\n    ')}`);
+});
+
+const LIB_VERSIONS = JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'scripts/data/rn-lib-versions.json'), 'utf8'),
+);
+
+test('no version numbers that were never published', () => {
+  /**
+   * The animation agent claimed "Reanimated 4.7.x supports RN 0.85–0.87 and
+   * wants worklets 0.13.x". There is no 4.7.x release — 4.7.0 is a nightly
+   * dist-tag. The real latest, 4.6.0, declares react-native "0.83 - 0.87" and
+   * worklets "0.12.x".
+   *
+   * The claim sat in four places, one of which was the `why` text of the guard
+   * written to stop version fabrication, and another a test fixture asserting
+   * it. Documenting a version is not the same as verifying one, and until now
+   * nothing distinguished them.
+   *
+   * A wrong version is worse than a vague one: specific enough to act on, wrong
+   * enough to cost an afternoon.
+   */
+  const offenders = [];
+  const docs = [];
+  for (const a of agents) {
+    docs.push({ name: `${a.id}/agent.md`, text: a.body });
+    for (const r of a.references) docs.push({ name: `${a.id}/${r.slug}.md`, text: r.content });
+  }
+
+  for (const [lib, meta] of Object.entries(LIB_VERSIONS.libraries)) {
+    for (const bad of meta.never_released ?? []) {
+      // `4.7.x` and `4.7.0` both, but not `4.7.0-nightly`, which is real and
+      // may legitimately be named as a prerelease.
+      const pattern = new RegExp(
+        String.raw`\b${bad.replace(/\./g, String.raw`\.`).replace(/x$/, String.raw`[0-9x]+`)}\b(?!-)`,
+      );
+      for (const { name, text } of docs) {
+        if (pattern.test(text)) offenders.push(`${name}: ${lib} ${bad} was never released`);
+      }
+    }
+  }
+
+  assert(
+    offenders.length === 0,
+    `unpublished versions (registry checked ${LIB_VERSIONS.verified_on}):\n    ` +
+      offenders.join('\n    '),
+  );
+});
+
+test('quoted peer-dependency windows match the registry', () => {
+  // Asserting a support window is a factual claim about a published package.
+  // If a doc names one, it has to be the one the package actually declares.
+  const offenders = [];
+  const docs = [];
+  for (const a of agents) {
+    for (const r of a.references) docs.push({ name: `${a.id}/${r.slug}.md`, text: r.content });
+  }
+
+  const reanimated = LIB_VERSIONS.libraries['react-native-reanimated'];
+  for (const { name, text } of docs) {
+    for (const m of text.matchAll(/\b(4\.\d+\.\d+)\b[^|\n]{0,40}?\|\s*`?([^`|\n]+?)`?\s*\|/g)) {
+      const declared = reanimated.peer_dependencies[m[1]]?.['react-native'];
+      if (!declared) continue;
+      const quoted = m[2].trim();
+      if (quoted !== declared) {
+        offenders.push(`${name}: reanimated ${m[1]} declares "${declared}", doc says "${quoted}"`);
+      }
+    }
+  }
+
+  assert(offenders.length === 0, `peer window mismatch:\n    ${offenders.join('\n    ')}`);
+});
+
+test('no imports of exports a library does not have', () => {
+  /**
+   * The same class as the invented prop, one level up: naming an export that
+   * does not exist. Verified for the two libraries whose full export list is
+   * recorded in the snapshot — a library without ground truth is skipped rather
+   * than guessed at.
+   */
+  const surfaces = {
+    'react-native-reanimated': new Set(
+      LIB_VERSIONS.libraries['react-native-reanimated'].exports_4_6_0,
+    ),
+    'react-native-worklets': new Set(
+      LIB_VERSIONS.libraries['react-native-worklets'].exports_0_12_1,
+    ),
+  };
+
+  const offenders = [];
+  const docs = [];
+  for (const a of agents) {
+    docs.push({ name: `${a.id}/agent.md`, text: a.body });
+    for (const r of a.references) docs.push({ name: `${a.id}/${r.slug}.md`, text: r.content });
+  }
+
+  for (const { name, text } of docs) {
+    for (const m of text.matchAll(
+      /import\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s+from\s+['"]([^'"]+)['"]/g,
+    )) {
+      const surface = surfaces[m[2]];
+      if (!surface) continue;
+      for (const raw of m[1].split(',')) {
+        const named = raw.trim().split(/\s+as\s+/)[0].replace(/^type\s+/, '').trim();
+        // Types are exported separately and are not in the value list.
+        if (!named || /^[A-Z][A-Za-z]*(Props|Config|Value|Type|Info|Options)$/.test(named)) continue;
+        if (!surface.has(named)) offenders.push(`${name}: ${m[2]} has no export "${named}"`);
+      }
+    }
+  }
+
+  assert(offenders.length === 0, `invented exports:\n    ${offenders.join('\n    ')}`);
+});
+
+test('deprecation claims match what the library actually marks', () => {
+  /**
+   * The migration reference said the whole `runOn*` family was "re-exported and
+   * marked deprecated". It is re-exported, but only `makeShareableCloneRecursive`
+   * sits in worklets' `deprecated` module; `runOnJS` and friends come from the
+   * same live modules as the new `scheduleOn*` names. Reanimated marks
+   * deprecations explicitly when it means them — `useScrollViewOffset` and
+   * `Extrapolate` both carry the tag — so their absence is evidence.
+   *
+   * Calling a working API deprecated makes the agent report a false defect,
+   * which costs a reviewer's trust in every real finding beside it.
+   */
+  const reallyDeprecated = new Set([
+    ...LIB_VERSIONS.libraries['react-native-reanimated'].deprecated_exports_4_6_0,
+    ...LIB_VERSIONS.libraries['react-native-worklets'].deprecated_module_exports,
+  ]);
+  const live = new Set(
+    LIB_VERSIONS.libraries['react-native-worklets'].exports_0_12_1.filter(
+      (e) => !reallyDeprecated.has(e),
+    ),
+  );
+
+  const offenders = [];
+  for (const a of agents) {
+    for (const r of a.references) {
+      for (const m of r.content.matchAll(
+        /`(\w+)`[^.\n]{0,60}?\b(is|are)\s+(?:now\s+)?(?:marked\s+)?deprecated/gi,
+      )) {
+        if (live.has(m[1]) && !reallyDeprecated.has(m[1])) {
+          offenders.push(`${a.id}/${r.slug}.md: calls "${m[1]}" deprecated, but it is not marked so`);
+        }
+      }
+    }
+  }
+
+  assert(offenders.length === 0, `false deprecation claims:\n    ${offenders.join('\n    ')}`);
+});
+
+test('the version snapshot records what it was taken from', () => {
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(LIB_VERSIONS.verified_on), 'verified_on must be a date');
+  assert(LIB_VERSIONS.verified_against?.includes('registry'), 'verified_against must name the registry');
+  assert(LIB_VERSIONS.how_to_refresh?.length > 60, 'how_to_refresh must be actionable');
+  for (const [lib, meta] of Object.entries(LIB_VERSIONS.libraries)) {
+    assert(meta.latest || meta.verified_through, `${lib}: needs latest or verified_through`);
+  }
+});
+
+test('the vendored API snapshot records what it was taken from', () => {
+  // A snapshot without provenance is an assertion with no evidence — and this
+  // one exists precisely because an unevidenced assertion shipped.
+  assert(/^\d+\.\d+\.\d+$/.test(A11Y_SURFACE.rn_version), 'rn_version must be exact');
+  assert(/^\d{4}-\d{2}-\d{2}$/.test(A11Y_SURFACE.captured_on), 'captured_on must be a date');
+  assert(A11Y_SURFACE.sources?.length >= 2, 'sources must be listed');
+  assert(A11Y_SURFACE.how_to_refresh?.length > 40, 'how_to_refresh must be actionable');
+
+  // The snapshot tracks the RN version the agents claim to be verified against.
+  const claimed = KNOWLEDGE.reactNative.verified_through;
+  assert(
+    A11Y_SURFACE.rn_version.startsWith(claimed),
+    `snapshot is RN ${A11Y_SURFACE.rn_version} but knowledge.json claims ${claimed}`,
+  );
+});
+
 test('README documents every agent and states the right counts', () => {
   // The README said "Ten expert AI agents" and "57 reference documents" while
   // the collection was 21 and 113. Docs drift silently; this makes it fail loudly.
@@ -984,7 +1291,8 @@ const FORBIDDEN_ABSOLUTES = [
       /rn\s*(>=|≥)\s*0\.7[0-7]/i,
       /(react native|rn)\s+0\.76\s+(or newer|and above|\+)/i,
     ],
-    why: 'Support is a moving window per Reanimated minor, not a floor — 4.7.x drops RN 0.78. Read the compatibility table',
+    why: "Support is a moving window declared in the package's own peerDependencies, not a floor. "
+      + '4.6.0 declares react-native 0.83 - 0.87 where 4.1.0 declared *. Read peerDependencies for the exact version',
   },
   {
     claim: 'captured React values frozen forever, with no mention of dependencies',
@@ -2367,7 +2675,7 @@ await testAsync('the version detector ignores decimals that are not versions', a
   for (const isAVersion of [
     'The New Architecture has been the default since **0.76**',
     'the legacy bridge was removed in 0.82',
-    '4.7.x supports 0.85–0.87',
+    '4.6.0 supports 0.83–0.87',
     'requires react-native 0.87 or newer',
     'reanimated 4.1.x',
     'Expo SDK 54',

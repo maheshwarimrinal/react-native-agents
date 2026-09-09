@@ -126,8 +126,41 @@ it's in**.
 `header` is important and almost always missing — it enables heading-based navigation, which is
 how screen reader users skim a screen. Every section title should have it.
 
-**States** — `accessibilityState={{ disabled, selected, checked, busy, expanded }}`. A visually
+### Roles are not equally real on both platforms
+
+**Nothing upstream tells you this.** Props carry `@platform ios` / `@platform android`
+annotations in React Native's type definitions; role *values* carry none, in the
+types or in the documentation. So all of them read as universally meaningful,
+and they are not — VoiceOver and TalkBack expose different trait systems, and
+React Native maps a subset onto each.
+
+Two things follow, and they are the difference between advice and guesswork:
+
+- **Ten values are in the type union but documented nowhere:** `dropdownlist`,
+  `tabbar`, `pager`, `scrollview`, `horizontalscrollview`, `viewgroup`,
+  `webview`, `drawerlayout`, `slidingdrawer`, `iconmenu`. Every one names an
+  Android platform construct. Treat an undocumented role as Android-shaped and
+  verify before shipping it.
+- **A typo is invisible in Flow.** The `AccessibilityRole` union in
+  `ViewAccessibility.js` ends `| string`, so `accessibilityRole="buton"` type
+  checks in a Flow project and silently does nothing. TypeScript's `.d.ts` union
+  has no `| string`, so TS catches it. Same prop, different safety — worth
+  knowing which one you are relying on.
+
+Do not claim a specific role behaves identically on iOS and Android unless you
+have heard it on both. The honest recommendation is the small set above, plus a
+device check with VoiceOver and TalkBack — the emulator and Accessibility
+Inspector do not reproduce either faithfully.
+
+**States** — `accessibilityState` accepts exactly `disabled`, `selected`,
+`checked`, `busy`, `expanded`. Nothing else, on either platform. A visually
 disabled button that doesn't report `disabled: true` is announced as tappable.
+
+`disabled` and `selected` are dependable. `checked` and `expanded` describe
+concepts iOS has no direct trait for, so what a VoiceOver user actually hears
+depends on the role you paired the state with — `checkbox` and `switch` behave
+differently from a plain `button` carrying `checked`. Pair the state with the
+matching role, and listen to it before you rely on it.
 
 **Values** — for sliders and steppers:
 ```tsx
@@ -135,6 +168,42 @@ accessibilityRole="adjustable"
 accessibilityValue={{ min: 0, max: 100, now: volume, text: `${volume} percent` }}
 onAccessibilityAction={(e) => e.nativeEvent.actionName === 'increment' ? up() : down()}
 ```
+
+## `role` and the `aria-*` aliases
+
+React Native 0.71 added a W3C-aligned surface alongside the `accessibility*`
+props. It is not a rename and not a deprecation — both spellings work — but it is
+missing from most RN advice, including advice written since it landed.
+
+```tsx
+<Pressable role="button" aria-label="Close" aria-disabled={busy} />
+// identical to
+<Pressable accessibilityRole="button" accessibilityLabel="Close"
+           accessibilityState={{ disabled: busy }} />
+```
+
+Three things decide whether you should care:
+
+- **`role` wins.** React Native documents `role` as taking precedence over
+  `accessibilityRole` when both are set. Setting them to different values is a
+  bug that reads as working code, and it is the kind a mixed codebase acquires
+  during a refactor.
+- **The vocabularies differ.** `role` takes the ARIA names — `img`, `heading`,
+  `searchbox`, `slider`, `listitem`, `presentation` — where `accessibilityRole`
+  takes `image`, `header`, `search`, `adjustable`. `role="header"` is not a role;
+  it is a typo that does nothing.
+- **The aliases inherit their platform.** `aria-label`, `aria-busy`,
+  `aria-checked`, `aria-disabled`, `aria-expanded`, `aria-selected`,
+  `aria-hidden` and the `aria-value*` family work on both. `aria-modal` is iOS
+  only; `aria-labelledby` and `aria-live` are Android only — exactly like the
+  `accessibility*` props they alias.
+
+There is no `aria-invalid`. The ARIA vocabulary is borrowed selectively, and
+assuming an attribute crossed over because it exists on the web is how invented
+props get written.
+
+Pick one spelling per codebase and keep to it. Mixing them is legal and makes
+review harder for no benefit.
 
 ## Grouping
 
@@ -229,10 +298,19 @@ Rules:
   ```tsx
   const ref = useRef(null);
   useEffect(() => {
+    // setAccessibilityFocus takes a react tag, so the handle lookup is still
+    // required. It is current in 0.87 — not deprecated, despite what a lot of
+    // advice says. AccessibilityInfo.sendAccessibilityEvent(handle, 'focus')
+    // also exists and takes the instance directly, but React Native documents
+    // accessibility events under an Android heading, so do not assume it
+    // replaces this on iOS without testing.
     const tag = findNodeHandle(ref.current);
     if (tag) AccessibilityInfo.setAccessibilityFocus(tag);
   }, []);
   ```
+  Moving focus on mount fights the platform, which is already deciding where to
+  put it. Do it when *you* replaced the content — a route change, a step in a
+  wizard, a dialog opening — not on every screen as a matter of course.
 - **Modals must trap focus.** The content behind needs
   `importantForAccessibility="no-hide-descendants"` / `accessibilityElementsHidden` while open, or
   users swipe straight out of the dialog into invisible content. Use `accessibilityViewIsModal`
@@ -247,21 +325,42 @@ Rules:
 
 ## Forms
 
+**React Native has no invalid state.** This is the single most common invented
+prop in RN accessibility code. There is no `accessibilityInvalid`, no
+`aria-invalid`, and `accessibilityState` accepts only `disabled`, `selected`,
+`checked`, `busy` and `expanded` — nothing else. The web habit does not carry
+over, and the failure is silent: an unknown prop on a host component is dropped
+without a warning, so the field looks handled and announces nothing.
+
+Carry the error in the accessible name, so it is spoken when the field takes
+focus rather than only if the error text happens to be reached:
+
 ```tsx
 <Text nativeID="emailLabel">Email address</Text>
 <TextInput
-  accessibilityLabel="Email address"
-  accessibilityLabelledBy="emailLabel"     // Android
+  accessibilityLabel={error ? `Email address, error: ${error}` : 'Email address'}
+  accessibilityLabelledBy="emailLabel"     // Android only
   accessibilityHint="We'll send your receipt here"
-  accessibilityInvalid={!!error}
   keyboardType="email-address"
   autoComplete="email"
   textContentType="emailAddress"
   autoCapitalize="none"
 />
 {error && (
-  <Text accessibilityLiveRegion="assertive" accessibilityRole="alert">{error}</Text>
+  <Text
+    accessibilityRole="alert"
+    accessibilityLiveRegion="assertive"   // Android only; iOS ignores it
+  >
+    {error}
+  </Text>
 )}
+```
+
+`accessibilityLiveRegion` is Android-only. On iOS an error that appears while
+focus is elsewhere is announced only if you say so explicitly:
+
+```tsx
+if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(error);
 ```
 
 - Placeholders are **not** labels. They vanish on focus and often fail contrast.
