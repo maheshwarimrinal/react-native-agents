@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "25 specialist React Native agents (18 review, 7 interactive) covering upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, and store submission.",
-    "version": "1.4.1"
+    "version": "1.4.2"
   },
   "plugins": [
     {
       "name": "react-native-agents",
       "source": "./plugins/react-native-agents",
       "description": "25 specialist React Native agents (18 review, 7 interactive) covering upgrades, debugging, performance, security, offline, navigation, push, permissions, platform parity, state, accessibility, testing, native modules, observability, release, and store submission.",
-      "version": "1.4.1",
+      "version": "1.4.2",
       "category": "development",
       "keywords": [
         "react-native",
