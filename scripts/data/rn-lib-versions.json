@@ -16,7 +16,7 @@
     "Rule: a released version listed here must exist on the registry. Do not add a",
     "number to make a failure go away."
   ],
-  "verified_on": "2026-09-09",
+  "verified_on": "2026-09-12",
   "verified_against": "https://registry.npmjs.org — dist-tags and per-version peerDependencies",
   "libraries": {
     "react-native-reanimated": {
@@ -246,7 +246,66 @@
         "shareableMappingCache"
       ],
       "note": "runOnJS/runOnUI/runOnRuntime/executeOnUIRuntimeSync come from the LIVE ./threads and ./runtimes modules alongside the new scheduleOn* names — only the makeShareable* family sits in ./deprecated."
+    },
+    "react-native-gesture-handler": {
+      "latest": "3.3.0",
+      "checked_on": "2026-09-12",
+      "note": "v3 released. Gesture, GestureDetector and GestureHandlerRootView are unchanged. The v2 COMPONENT surface is Legacy-prefixed (RectButton -> LegacyRectButton, ScrollView -> LegacyScrollView, Pressable -> LegacyPressable, createNativeWrapper -> legacy_createNativeWrapper) and the unprefixed names now resolve to new v3 implementations — an unchanged import can silently mean something else. v3 adds a hooks gesture API (usePanGesture, useTapGesture, useCompetingGestures, ...) and InterceptingGestureDetector / VirtualGestureDetector.",
+      "verified_identifiers": [
+        "Gesture",
+        "GestureDetector",
+        "GestureHandlerRootView"
+      ],
+      "v3_renamed_from_v2": {
+        "RectButton": "LegacyRectButton",
+        "BaseButton": "LegacyBaseButton",
+        "BorderlessButton": "LegacyBorderlessButton",
+        "RawButton": "LegacyRawButton",
+        "ScrollView": "LegacyScrollView",
+        "FlatList": "LegacyFlatList",
+        "Pressable": "LegacyPressable",
+        "Switch": "LegacySwitch",
+        "TextInput": "LegacyTextInput",
+        "RefreshControl": "LegacyRefreshControl",
+        "createNativeWrapper": "legacy_createNativeWrapper"
+      }
     }
   },
-  "how_to_refresh": "For each library: fetch https://registry.npmjs.org/-/package/<name>/dist-tags and https://registry.npmjs.org/<name>/<version> for the versions quoted in agent docs. Update latest, peer_dependencies and verified_on. If a version in never_released starts resolving, remove it from that list rather than leaving a stale prohibition."
+  "how_to_refresh": "For each library: fetch https://registry.npmjs.org/-/package/<name>/dist-tags and https://registry.npmjs.org/<name>/<version> for the versions quoted in agent docs. Update latest, peer_dependencies and verified_on. If a version in never_released starts resolving, remove it from that list rather than leaving a stale prohibition.",
+  "verified_imports": {
+    "react-native-reanimated": {
+      "version_checked": "4.6.0",
+      "checked_on": "2026-09-09",
+      "type_entry": "lib/typescript/index.d.ts",
+      "identifiers_verified": [
+        "FadeIn",
+        "FadeOutLeft",
+        "LinearTransition",
+        "Reanimated3DefaultSpringConfig",
+        "Reanimated3DefaultSpringConfigWithDuration",
+        "runOnJS",
+        "useAnimatedStyle",
+        "useSharedValue"
+      ]
+    },
+    "react-native-worklets": {
+      "version_checked": "0.12.1",
+      "checked_on": "2026-09-09",
+      "type_entry": "lib/typescript/index.d.ts",
+      "identifiers_verified": [
+        "scheduleOnRN"
+      ]
+    },
+    "react-native-iap": {
+      "version_checked": "16.5.1",
+      "checked_on": "2026-09-10",
+      "type_entry": "lib/typescript/src/index.d.ts",
+      "identifiers_verified": [
+        "ErrorCode",
+        "isUserCancelledError"
+      ],
+      "note": "ErrorCode is a declared enum in types.d.ts (ErrorCode.UserCancelled = 'user-cancelled'); isUserCancelledError is in utils/error.d.ts. Both re-exported from the index."
+    }
+  },
+  "$verified_imports_note": "Identifiers the agent corpus imports, each confirmed present in the named version's type definitions. Populated by `npm run api:refresh -- --write`, which needs network access and is therefore a maintenance command, never part of `npm test`. Libraries absent from this map are UNVERIFIED, not verified-absent — the guard skips them rather than guessing."
 }

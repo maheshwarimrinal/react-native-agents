@@ -22,7 +22,8 @@
     "prepublishOnly": "node scripts/build.mjs --check && node scripts/test.mjs && node action/test.mjs && node evals/run.mjs --validate",
     "evals": "node evals/run.mjs",
     "evals:validate": "node evals/run.mjs --validate",
-    "freshness": "node scripts/freshness.mjs"
+    "freshness": "node scripts/freshness.mjs",
+    "api:refresh": "node scripts/refresh-api-snapshot.mjs"
   },
   "files": [
     "agents",

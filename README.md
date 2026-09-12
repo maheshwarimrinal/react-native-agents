@@ -153,9 +153,44 @@ configuration for CI.
 
 Seven agents are deliberately excluded from pull-request routing — **Doctor, Build, Debug, Dependencies, Onboard, Store Submission, and Monorepo**. They need something brought to them: an error log, a question, a rejection notice. Firing them at a diff would spend tokens to say nothing.
 
-Routing is narrow on purpose. A typical UI change reaches about three agents, not twenty-four — signals are scoped so that adding specialists does not raise the cost of an ordinary pull request.
+Routing is narrow on purpose. A typical UI change reaches about three agents, not twenty-five — signals are scoped so that adding specialists does not raise the cost of an ordinary pull request.
 
 25 playbooks and 133 reference documents. Knowledge is verified through React Native 0.87 and Expo SDK 57; always verify version-specific advice against your project.
+
+## How the advice is kept honest
+
+The failure mode that matters for a tool like this is not being unhelpful. It is
+being **confidently wrong** — recommending a prop, a hook or a version that does
+not exist. It looks plausible, it survives review, and other AI tools repeat it.
+
+This has happened here. `accessibilityInvalid` shipped in v1.4.0; it is not a
+React Native prop and never has been. A React Native compatibility window was
+asserted for a Reanimated version that was never released. Both passed the full
+test suite, because every check tested *claims* and none tested *identifiers*.
+
+So identifiers are now checked mechanically, against the libraries themselves:
+
+| Checked | Against |
+|---|---|
+| Accessibility props, roles, `accessibilityState` keys, `aria-*` | React Native's shipped type definitions |
+| Imported exports | each library's published `.d.ts` |
+| Version numbers | the npm registry — a version never released fails the build |
+| Quoted `peerDependencies` windows | what the package actually declares |
+| Deprecation claims | what the library actually marks `@deprecated` |
+
+```bash
+npm run api:refresh    # re-verify every identifier the agents claim
+```
+
+Two rules keep this from becoming theatre. **A library with no verified snapshot
+is treated as unverified, not as verified-absent** — a checker that fails on
+incomplete evidence gets switched off, and then protects nothing. And **every new
+check is mutation-tested**: the bug it catches is reintroduced to confirm the
+check fails, because a test that cannot fail is worse than no test.
+
+Coverage is deliberately incomplete and stated as such. `npm run api:refresh`
+prints exactly which libraries are verified, which are partial, and which could
+not be checked.
 
 ## Bundle size, measured
 
@@ -214,6 +249,7 @@ across every release, and it collects nothing from anyone.
 - [Usage guide](docs/usage.md) — prompts, commands, MCP, full audits, severity, and finding format
 - [Architecture](docs/architecture.md) — source files, generator, generated targets, and design decisions
 - [Development guide](docs/development.md) — build, test, evals, freshness checks, and extending the project
+- [Community backlog](docs/community-backlog.md) — problems raised publicly about this class of tool, what is closed, and what is deliberately still open
 - [FAQ](docs/faq.md) — versions, Expo, API keys, customization, npm, and troubleshooting
 - [Telemetry](TELEMETRY.md) — every field collected, verbatim, and how to turn it off
 - [Contributing](CONTRIBUTING.md)

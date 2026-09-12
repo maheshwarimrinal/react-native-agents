@@ -13,7 +13,29 @@ fights the scroll view, never fires, or leaves the UI mid-animation.
 
 `useAnimatedGestureHandler` was deprecated in Reanimated 3 and **removed in
 Reanimated 4**. Code using it does not warn on 4.x; it fails to import. The
-replacement is the `Gesture` API from Gesture Handler 2:
+replacement is the `Gesture` builder API, introduced in Gesture Handler 2 and
+still current:
+
+> **Gesture Handler 3 is out, and it renamed things around this API.** Verified
+> against the exports of `react-native-gesture-handler@3.3.0` on 2026-09-12:
+>
+> - `Gesture`, `GestureDetector` and `GestureHandlerRootView` are **unchanged**.
+>   Everything below still applies — do not report it as outdated.
+> - The v2 *component* surface is now `Legacy`-prefixed: `RectButton` →
+>   `LegacyRectButton`, `BaseButton` → `LegacyBaseButton`, `ScrollView` →
+>   `LegacyScrollView`, `Pressable` → `LegacyPressable`,
+>   `createNativeWrapper` → `legacy_createNativeWrapper`. Unprefixed names now
+>   point at new v3 implementations, so an unchanged import can silently resolve
+>   to a different component.
+> - v3 adds a **hooks** gesture API alongside the builder — `usePanGesture`,
+>   `useTapGesture`, `usePinchGesture`, and `useCompetingGestures` /
+>   `useExclusiveGestures` / `useSimultaneousGestures` for composition — plus
+>   `InterceptingGestureDetector` and `VirtualGestureDetector`.
+>
+> Read the installed major before advising. This page teaches the builder API,
+> which works on both; the hooks API is described here only as *existing*,
+> because its behaviour has not been verified beyond its type signatures and
+> guessing at it is how wrong advice gets written.
 
 ```tsx
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';

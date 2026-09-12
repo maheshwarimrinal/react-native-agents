@@ -67,6 +67,12 @@
       "review_window_days": 90,
       "on_new_minor": "Open a maintenance issue listing references that mention version-specific behaviour.",
       "on_stale": "If last_verified is older than review_window_days, CI warns; it does not fail the build, because stale-but-honest is better than a forced bump."
+    },
+    "$agentsVerified_note": "Per-agent verification dates. An agent absent from this map has never been verified individually — which is different from stale, and is reported as such. Only add a date after actually reviewing that agent's references against upstream sources; a date added without reading launders an unchecked claim, which is the failure the freshness job exists to prevent.",
+    "agentsVerified": {
+      "rn-animation": "2026-09-09",
+      "rn-payments": "2026-09-10",
+      "rn-ui-accessibility": "2026-09-09"
     }
   },
   "agents": [

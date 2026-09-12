@@ -89,6 +89,57 @@ export const VERSION_MENTION = new RegExp(
   'gi',
 );
 
+/**
+ * Per-agent verification status.
+ *
+ * `knowledge.json` carries one repository-wide `last_verified`, which answers
+ * "is the corpus stale?" but not "*which specialist* is stale?" — and with 25
+ * agents that is the question you actually need. One global date also makes a
+ * genuinely reviewed agent and an untouched one look identical.
+ *
+ * The fix is to record it: an optional `agentsVerified` map in knowledge.json,
+ * `{ "rn-animation": "2026-09-09" }`. An agent with no entry has *never* been
+ * verified individually, which is different from stale and is reported as such.
+ *
+ * File mtimes were tried as a proxy and rejected: `git clone` rewrites them, so
+ * every agent looks freshly touched on CI and on any new machine. A signal that
+ * reads as reassuring on a clean checkout is worse than no signal.
+ *
+ * Ranking: never-verified first, then oldest, then by how much version-specific
+ * surface the agent carries — that last is the tie-break for review effort.
+ */
+export function perAgentStaleness(knowledge) {
+  const recorded = knowledge.agentsVerified ?? {};
+  const hits = referencesMentioningVersions();
+  const byAgent = new Map();
+
+  for (const h of hits) {
+    if (!byAgent.has(h.agent)) {
+      byAgent.set(h.agent, { agent: h.agent, files: 0, mentions: new Set() });
+    }
+    const row = byAgent.get(h.agent);
+    row.files += 1;
+    for (const m of h.mentions) row.mentions.add(m);
+  }
+
+  for (const row of byAgent.values()) {
+    row.verifiedOn = recorded[row.agent] ?? null;
+    row.ageDays = row.verifiedOn
+      ? Math.floor((Date.now() - Date.parse(row.verifiedOn)) / 86400000)
+      : null;
+    row.mentions = [...row.mentions].slice(0, 5);
+  }
+
+  return [...byAgent.values()].sort((a, b) => {
+    if (!a.verifiedOn && b.verifiedOn) return -1;
+    if (a.verifiedOn && !b.verifiedOn) return 1;
+    if (a.verifiedOn && b.verifiedOn && a.verifiedOn !== b.verifiedOn) {
+      return a.verifiedOn < b.verifiedOn ? -1 : 1;
+    }
+    return b.files - a.files;
+  });
+}
+
 /** Reference documents that name a specific version — these need review on a bump. */
 export function referencesMentioningVersions() {
   const hits = [];
@@ -197,6 +248,22 @@ async function main() {
     '',
     ...affected.slice(0, 25).map((h) => `- \`${h.file}\` — mentions ${h.mentions.join(', ')}`),
     affected.length > 25 ? `- …and ${affected.length - 25} more` : '',
+    '',
+    '### Per-agent verification',
+    '',
+    'One repository-wide `last_verified` cannot say *which* specialist went stale.',
+    'Agents carrying version-specific claims, never-verified first:',
+    '',
+    ...perAgentStaleness(KNOWLEDGE)
+      .slice(0, 12)
+      .map(
+        (r) =>
+          `- ${r.verifiedOn ? `verified ${r.verifiedOn}` : '**never verified individually**'} — ` +
+          `\`${r.agent}\` (${r.files} file(s): ${r.mentions.slice(0, 3).join(', ')})`,
+      ),
+    '',
+    'Record a date in `agentsVerified` in `knowledge.json` **after** reviewing that agent,',
+    'never before.',
     '',
     '### What to do',
     '',

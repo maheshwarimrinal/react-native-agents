@@ -868,6 +868,113 @@ test('no imports of exports a library does not have', () => {
   assert(offenders.length === 0, `invented exports:\n    ${offenders.join('\n    ')}`);
 });
 
+test('every claimed import is either verified or explicitly unverified', () => {
+  /**
+   * The generalised form of the invented-prop guard: an import names an export,
+   * which is a factual claim about a published package.
+   *
+   * `verified_imports` records identifiers confirmed against a specific
+   * version's type definitions, produced by `npm run api:refresh`. A library
+   * absent from that map is UNVERIFIED, not verified-absent — the guard skips
+   * it rather than guessing, because a guard that fails on incomplete evidence
+   * gets switched off and then protects nothing.
+   *
+   * What this does enforce: once a library IS verified, every identifier the
+   * corpus imports from it must be in the confirmed list. Adding an import to a
+   * covered library therefore requires re-running the refresh.
+   */
+  const verified = LIB_VERSIONS.verified_imports ?? {};
+  const offenders = [];
+  const unverified = new Set();
+
+  const docs = [];
+  for (const a of agents) {
+    for (const r of a.references) docs.push({ name: `${a.id}/${r.slug}.md`, text: r.content });
+    docs.push({ name: `${a.id}/agent.md`, text: a.body });
+  }
+
+  for (const { name, text } of docs) {
+    for (const block of text.matchAll(/```(?:tsx|jsx|ts|js)\n([\s\S]*?)```/g)) {
+      for (const m of block[1].matchAll(
+        /import\s+(?:type\s+)?(?:[\w$]+\s*,\s*)?\{([^}]*)\}\s+from\s*['"]([^'"]+)['"]/g,
+      )) {
+        const lib = m[2];
+        if (lib.startsWith('@/') || lib.startsWith('.') || lib === 'react' || lib.startsWith('react-native/')) {
+          continue;
+        }
+        const entry = verified[lib];
+        if (!entry) {
+          if (lib !== 'react-native') unverified.add(lib);
+          continue;
+        }
+        // `partial` means the refresh could not see the whole export surface —
+        // the package re-exports from another package. What it did confirm is
+        // recorded, but absence from that list is not evidence of absence.
+        if (entry.partial) continue;
+        for (const raw of m[1].split(',')) {
+          const named = raw.trim().split(/\s+as\s+/)[0].replace(/^type\s+/, '').trim();
+          if (!named) continue;
+          if (!entry.identifiers_verified.includes(named)) {
+            offenders.push(
+              `${name}: ${lib}@${entry.version_checked} has no verified export "${named}" — run npm run api:refresh`,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  assert(offenders.length === 0, `unverified identifiers:\n    ${offenders.join('\n    ')}`);
+
+  // Not a failure — coverage is being extended deliberately. Recorded so the
+  // number is visible rather than assumed to be zero.
+  if (unverified.size && process.env.RN_AGENTS_VERBOSE) {
+    console.log(`\n  ${unverified.size} librar(ies) not yet verified: ${[...unverified].join(', ')}`);
+  }
+});
+
+await testAsync('the export extractor survives JSDoc braces and offshore re-exports', async () => {
+  /**
+   * The first refresh reported six libraries as not exporting identifiers they
+   * plainly do export — including `useSharedValue`, which is in the Reanimated
+   * index.d.ts and in this repo's own vendored list.
+   *
+   * Cause: `{@link useScrollOffset}` inside a JSDoc comment closed the
+   * `export { … }` capture, dropping every name after it. A verifier that
+   * reports false absences is worse than none — run with --write it would have
+   * been committed as ground truth, and the guard would then reject correct code.
+   */
+  const { stripCommentsForExports, hasOffshoreReexport } = await import(
+    path.join(ROOT, 'scripts/refresh-api-snapshot.mjs')
+  );
+
+  const reanimatedShape = [
+    'export { useAnimatedKeyboard, useScrollOffset,',
+    '/** @deprecated Please use {@link useScrollOffset} instead. */',
+    'useScrollOffset as useScrollViewOffset, useSharedValue, useTimestamp, } from \'./hook\';',
+  ].join('\n');
+
+  const names = new Set();
+  for (const m of stripCommentsForExports(reanimatedShape).matchAll(/export\s*\{([^}]*)\}/g)) {
+    for (const piece of m[1].split(',')) {
+      const n = piece.trim().split(/\s+as\s+/).pop().trim();
+      if (n) names.add(n);
+    }
+  }
+  assert(names.has('useSharedValue'), 'a JSDoc {@link} must not truncate the export list');
+  assert(names.has('useTimestamp'), 'names after the comment must survive');
+
+  // Absence is only reportable when nothing re-exports from another package.
+  assert(
+    hasOffshoreReexport("export * from '@react-navigation/core';"),
+    'a cross-package re-export makes the local list a subset',
+  );
+  assert(
+    !hasOffshoreReexport("export * from './hook';"),
+    'a local re-export is followed, so it does not make the list partial',
+  );
+});
+
 test('deprecation claims match what the library actually marks', () => {
   /**
    * The migration reference said the whole `runOn*` family was "re-exported and
@@ -947,6 +1054,31 @@ test('README documents every agent and states the right counts', () => {
   assert(
     readme.includes(`${refCount} reference documents`),
     `README should say "${refCount} reference documents"`,
+  );
+
+  /**
+   * The spelled-out count drifts too.
+   *
+   * "reaches about three agents, not twenty-four" survived the 24th and 25th
+   * agent being added, because the numeric assertions above only look at
+   * digits. A reader counts the table, sees 25, and reads a sentence saying
+   * 24 — small, but it is the same class of staleness the rest of this test
+   * exists to catch.
+   */
+  const SPELLED = [
+    'twenty', 'twenty-one', 'twenty-two', 'twenty-three', 'twenty-four',
+    'twenty-five', 'twenty-six', 'twenty-seven', 'twenty-eight', 'twenty-nine',
+    'thirty',
+  ];
+  const correct = SPELLED[agents.length - 20];
+  // `\btwenty\b` matches inside "twenty-five", because a hyphen is a word
+  // boundary — so the bare form needs an explicit "not followed by a hyphen".
+  const wrong = SPELLED.filter((w) => w !== correct).filter((w) =>
+    new RegExp(`\\b${w}\\b(?!-)`, 'i').test(readme),
+  );
+  assert(
+    wrong.length === 0,
+    `README spells a stale agent count (${wrong.join(', ')}); there are ${agents.length} — "${correct}"`,
   );
 });
 
@@ -2649,6 +2781,64 @@ test('no hardcoded version literals remain in the generators', () => {
 /* ---------------------------------------------------------------- *
  * Knowledge freshness
  * ---------------------------------------------------------------- */
+
+await testAsync('per-agent verification distinguishes never-verified from stale', async () => {
+  /**
+   * One global `last_verified` answers "is the corpus stale?" but not "which of
+   * the 25 specialists is?" — the actual question with this many agents, and
+   * item 16 of the community backlog.
+   *
+   * File mtimes were tried as a proxy and rejected: `git clone` rewrites them,
+   * so every agent reads as freshly touched on CI. A signal that looks
+   * reassuring on a clean checkout is worse than none.
+   */
+  const { perAgentStaleness } = await import(path.join(ROOT, 'scripts/freshness.mjs'));
+  const rows = perAgentStaleness(KNOWLEDGE);
+  assert(rows.length > 0, 'some agents carry version-specific surface');
+
+  const firstVerified = rows.findIndex((r) => r.verifiedOn);
+  if (firstVerified !== -1) {
+    assert(
+      rows.slice(0, firstVerified).every((r) => !r.verifiedOn),
+      'never-verified agents must sort first',
+    );
+    assert(
+      rows.slice(firstVerified).every((r) => r.verifiedOn),
+      'verified agents must not be interleaved with never-verified ones',
+    );
+  }
+
+  const recorded = Object.keys(KNOWLEDGE.agentsVerified ?? {});
+  for (const id of recorded) {
+    const row = rows.find((r) => r.agent === id);
+    if (row) eq(row.verifiedOn, KNOWLEDGE.agentsVerified[id], `${id} date must round-trip`);
+  }
+  // Absent means never verified, NOT verified-absent.
+  for (const r of rows) {
+    if (!recorded.includes(r.agent)) eq(r.verifiedOn, null, `${r.agent} should read as never verified`);
+  }
+});
+
+test('recorded agent verification dates are real dates for real agents', () => {
+  const recorded = KNOWLEDGE.agentsVerified ?? {};
+  const ids = new Set(agents.map((a) => a.id));
+  for (const [id, date] of Object.entries(recorded)) {
+    assert(ids.has(id), `agentsVerified names "${id}", which is not an agent`);
+    assert(/^\d{4}-\d{2}-\d{2}$/.test(date), `${id}: "${date}" is not a date`);
+    /**
+     * One day of tolerance for timezone skew. A contributor recording "today"
+     * in UTC+5:30 writes a date that is still tomorrow in UTC, and CI runs in
+     * UTC — so a strict comparison fails a perfectly honest entry. Anything
+     * beyond a day is a real error: a future verification date claims a review
+     * that has not happened.
+     */
+    const DAY = 86400000;
+    assert(
+      Date.parse(date) <= Date.now() + DAY,
+      `${id}: verification date ${date} is more than a day in the future`,
+    );
+  }
+});
 
 await testAsync('the version detector ignores decimals that are not versions', async () => {
   // One freshness issue listed 23 documents to review, of which 22 were noise:
