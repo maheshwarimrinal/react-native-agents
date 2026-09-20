@@ -933,6 +933,79 @@ test('every claimed import is either verified or explicitly unverified', () => {
   }
 });
 
+/* ------------------------------------------------------------------ *
+ * Trigger strings are identifier claims too
+ * ------------------------------------------------------------------ */
+
+const TRIGGER_PROVENANCE = JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'scripts/data/trigger-provenance.json'), 'utf8'),
+);
+
+const { auditTriggers, isIdentifierShapedTrigger } = await import(
+  path.join(ROOT, 'scripts/lib/triggers.mjs')
+);
+
+test('every identifier-shaped trigger names an API that exists', () => {
+  /**
+   * A trigger is matched against the added lines of a diff, so it is a claim
+   * about text that appears in real code — the same kind of factual claim an
+   * import is, and until now the only one nothing checked.
+   *
+   * The commit that fixed routing recall introduced three wrong ones at once:
+   * `registerdevicefornotifications` (RNFB's API is
+   * `registerDeviceForRemoteMessages`), `tobeintthedocument` (jest-dom's
+   * matcher, misspelled — RNTL's is `toBeOnTheScreen`) and `layouttransition`
+   * (Reanimated's is `LinearTransition`). Each one silently routed on nothing.
+   * A trigger that matches no code is invisible: the agent simply never fires,
+   * and the eval suite cannot see the absence because there is no finding to
+   * miss.
+   *
+   * Substring, not equality, because triggers are deliberately written as
+   * prefixes — `getexpopushtoken` is meant to catch `getExpoPushTokenAsync`,
+   * and `acknowledgepurchase` to catch `acknowledgePurchaseAndroid`.
+   */
+  const { missing, invented, checked } = auditTriggers(
+    agents,
+    TRIGGER_PROVENANCE,
+    LIB_VERSIONS,
+  );
+
+  assert(missing.length === 0, `triggers with no usable provenance:\n    ${missing.join('\n    ')}`);
+  assert(invented.length === 0, `invented triggers:\n    ${invented.join('\n    ')}`);
+
+  /**
+   * The floor exists because the `!reason` escape hatch is unbounded: every
+   * trigger could be excused into prose and the guard would pass with nothing
+   * checked. Raise this when a surface is added; never lower it to make a
+   * failure go away — if a trigger stopped being checkable, that is the finding.
+   */
+  assert(
+    checked >= 30,
+    `only ${checked} triggers were checked against a real export surface (floor is 30) — has a surface been dropped, or a trigger excused into a "!reason"?`,
+  );
+});
+
+test('trigger provenance has no entries for triggers that no longer exist', () => {
+  /**
+   * The inverse of the guard above. A trigger renamed or deleted leaves its
+   * provenance line behind, and the next person to read the file believes a
+   * trigger exists that does not. Stale documentation about correctness is
+   * worse than none, because it is trusted.
+   */
+  const live = new Set();
+  for (const agent of agents) {
+    for (const raw of agent.triggers ?? []) {
+      if (isIdentifierShapedTrigger(raw)) live.add(String(raw).toLowerCase());
+    }
+  }
+
+  const orphans = Object.keys(TRIGGER_PROVENANCE.triggers ?? {}).filter((t) => !live.has(t));
+  assert(
+    orphans.length === 0,
+    `trigger-provenance.json documents triggers no agent declares: ${orphans.join(', ')}`,
+  );
+});
+
 await testAsync('the export extractor survives JSDoc braces and offshore re-exports', async () => {
   /**
    * The first refresh reported six libraries as not exporting identifiers they
@@ -1650,11 +1723,55 @@ test('no agent repeats a trigger, glob, or reference within its own frontmatter'
  * Build output
  * ---------------------------------------------------------------- */
 
-const DIST = path.join(ROOT, 'dist');
+/**
+ * The suite builds into a scratch directory, never into the repo's `dist/`.
+ *
+ * It used to build into the real `dist/`, which had two consequences. Running
+ * `npm test` silently rewrote tracked files, so a developer's tree came back
+ * dirty for no reason they could see. And worse, the `dist/ is in sync` test
+ * two hundred lines below compared a fresh build against a `dist/` this same
+ * process had just regenerated — so it passed unconditionally. The CI gate that
+ * exists to catch "you edited an agent and forgot to rebuild" could not fail.
+ *
+ * Building elsewhere fixes both: the output assertions still run against a real
+ * build, and the sync check now compares a fresh build against what is actually
+ * committed.
+ */
+const DIST = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-test-dist-'));
+process.on('exit', () => {
+  try {
+    fs.rmSync(DIST, { recursive: true, force: true });
+  } catch {
+    /* best effort — a leftover temp dir is not worth failing a test run over */
+  }
+});
 
 await testAsync('build produces dist/', async () => {
-  await run('node', [path.join(ROOT, 'scripts/build.mjs')]);
+  await run('node', [path.join(ROOT, 'scripts/build.mjs'), '--out', DIST]);
   assert(fs.existsSync(DIST), 'no dist/');
+});
+
+test('a --out build leaves the committed dist/ untouched', () => {
+  /**
+   * The guarantee the rest of this file depends on. If `--out` ever starts
+   * writing to `dist/` again, every build-output assertion below silently goes
+   * back to testing the thing it just produced.
+   */
+  const realDist = path.join(ROOT, 'dist');
+  const before = fs.statSync(path.join(realDist, 'index.json')).mtimeMs;
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-isolation-'));
+  try {
+    execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), '--out', scratch], {
+      stdio: 'ignore',
+    });
+    assert(
+      fs.statSync(path.join(realDist, 'index.json')).mtimeMs === before,
+      'a --out build rewrote dist/index.json',
+    );
+    assert(fs.existsSync(path.join(scratch, 'index.json')), '--out produced nothing');
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 const expectedPaths = [

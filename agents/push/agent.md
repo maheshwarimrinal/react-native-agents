@@ -38,8 +38,9 @@ triggers:
   - onnotificationopenedapp
   - getinitialnotification
   - setbackgroundmessagehandler
-  - registerdevicefornotifications
-  - requestuserpermission
+  - registerdeviceforremotemessages
+  - post_notifications
+  - authorizationstatus
   - getapnstoken
   - ontokenrefresh
   - expo-notifications

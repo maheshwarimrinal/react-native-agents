@@ -136,10 +136,12 @@ a confident wrong citation is a rejected release; say what to verify against the
 > not match; see the version table at the end.
 >
 > **The package requires `react-native-nitro-modules`.** Since v14.0.0 `react-native-iap` is a
-> Nitro module, and `react-native-nitro-modules` is a *peer* dependency (`^0.36.5` at 16.6.0) —
-> it is not installed for you. An install without it fails to build rather than failing at
-> runtime, so this is the first thing to check when someone reports that the library "won't
-> compile after upgrading". v13.1.0 is the last pre-Nitro release.
+> Nitro module, and `react-native-nitro-modules` is a *peer* dependency — it is not installed
+> for you. An install without it fails to build rather than failing at runtime, so this is the
+> first thing to check when someone reports that the library "won't compile after upgrading".
+> v13.1.0 is the last pre-Nitro release. Read the **installed** version's range rather than
+> quoting one: it was `^0.36.5` at 16.6.0 and `>=0.36.5` at 16.6.2, and 16.6.2 also added two
+> optional `@amazon-devices/*` Kepler peers that npm will warn about on a non-Kepler install.
 >
 > **The package moved.** It now lives in the `hyodotdev/openiap` monorepo, and the reference
 > documentation is at openiap.dev rather than the old `hyochan.github.io` site. Links in older

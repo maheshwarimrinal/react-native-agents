@@ -42,7 +42,7 @@ triggers:
   - jest.spyon
   - describe(
   - it.each
-  - tobeintthedocument
+  - tobeonthescreen
   - tohavebeencalledwith
   - device.launchapp
 references:

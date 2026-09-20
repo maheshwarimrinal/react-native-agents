@@ -845,6 +845,39 @@ test('the legacy Animated and LayoutAnimation APIs route the animation agent', (
   assert(!ids.includes('rn-animation'), `inert change should not route: ${ids.join(', ')}`);
 });
 
+test('the corrected triggers route on the real API spellings', () => {
+  /**
+   * Regression cover for four triggers that named APIs which do not exist, and
+   * so routed on nothing:
+   *
+   *   registerdevicefornotifications  ->  registerDeviceForRemoteMessages
+   *   requestuserpermission           ->  (dropped: a docs wrapper, not an API)
+   *   tobeintthedocument              ->  toBeOnTheScreen
+   *   layouttransition                ->  LinearTransition
+   *
+   * The lines below are what the real APIs look like at a call site. If a
+   * trigger regresses to a plausible-but-wrong spelling, the guard in
+   * scripts/lib/triggers.mjs catches the claim and this catches the effect.
+   */
+  const cases = [
+    ['rn-push', 'src/Boot.tsx', '    await messaging().registerDeviceForRemoteMessages();'],
+    ['rn-push', 'src/Boot.tsx', '    const st = await messaging().requestPermission();\n+    if (st === messaging.AuthorizationStatus.AUTHORIZED) register();'],
+    // Deliberately NOT *.test.tsx: that filename routes rn-testing on its own
+    // globs, which would make the trigger untested.
+    ['rn-testing', 'src/testUtils.tsx', '    expect(screen.getByText(label)).toBeOnTheScreen();'],
+    ['rn-animation', 'src/Row.tsx', '    <Animated.View layout={LinearTransition} />'],
+  ];
+
+  const missed = [];
+  for (const [id, file, line] of cases) {
+    const diff = `diff --git a/${file} b/${file}\n+++ b/${file}\n+${line}`;
+    const ids = route([file], agents, { diffText: diff }).selected.map((a) => a.id);
+    if (!ids.includes(id)) missed.push(`${id}: "${line.trim().slice(0, 56)}…" routed ${ids.join(', ') || 'nobody'}`);
+  }
+
+  assert(missed.length === 0, `corrected triggers that still route nothing:\n    ${missed.join('\n    ')}`);
+});
+
 test('an unrelated babel.config.js change does not route the animation agent', () => {
   const diff = [
     'diff --git a/babel.config.js b/babel.config.js',
