@@ -774,6 +774,56 @@ test('removedLinesForFile isolates one file and ignores the --- header', () => {
   );
 });
 
+test('every review agent routes on a canonical API call from its own domain', () => {
+  /**
+   * Routing recall, per agent.
+   *
+   * `rn-push` carried 14 triggers and not one matched `messaging()` or
+   * `onNotificationOpenedApp` — the closest was the two-word phrase "firebase
+   * messaging". A diff doing real push work routed five agents and skipped the
+   * push specialist. Reported from outside as backlog item 4: a problem that
+   * spans specialists loses the one that matters most.
+   *
+   * Under-routing is silent in a way over-routing is not. An agent that runs
+   * unnecessarily costs tokens and is obvious in the output; an agent that never
+   * runs produces a clean review of code nobody looked at.
+   *
+   * One realistic call per agent, in a file whose name gives the router no help,
+   * so the trigger has to carry it.
+   */
+  const CANONICAL = {
+    'rn-push': "    messaging().onNotificationOpenedApp((m) => go(m.data.screen));",
+    'rn-navigation': "    const nav = useNavigation(); nav.navigate('Order', { id });",
+    'rn-permissions': "    const s = await check(PERMISSIONS.IOS.CAMERA);",
+    'rn-animation': "    const x = useSharedValue(0); const st = useAnimatedStyle(() => ({ opacity: x.value }));",
+    'rn-offline': "    const state = await NetInfo.fetch(); if (!state.isConnected) enqueue(op);",
+    'rn-payments': "    await requestPurchase({ request: { apple: { sku } }, type: 'in-app' });",
+    'rn-observability': "    Sentry.captureException(err, { tags: { screen } });",
+    'rn-state': "    const useStore = create(persist((set) => ({ user: null }), { name: 'app' }));",
+    'rn-testing': "    render(<Screen />); await waitFor(() => expect(screen.getByRole('button')).toBeTruthy());",
+    'rn-background': "    BackgroundFetch.registerTaskAsync(TASK, { minimumInterval: 900 });",
+  };
+
+  const missing = [];
+  for (const [id, line] of Object.entries(CANONICAL)) {
+    // A deliberately neutral filename: `Thing.tsx` matches no agent's signal
+    // globs, so only the diff content can route it.
+    const diff = [
+      'diff --git a/src/Thing.tsx b/src/Thing.tsx',
+      '+++ b/src/Thing.tsx',
+      `+${line}`,
+    ].join('\n');
+
+    const ids = route(['src/Thing.tsx'], agents, { diffText: diff }).selected.map((a) => a.id);
+    if (!ids.includes(id)) missing.push(`${id}: "${line.trim().slice(0, 52)}…" routed ${ids.join(', ') || 'nobody'}`);
+  }
+
+  assert(
+    missing.length === 0,
+    `review agents that do not route on their own domain's API:\n    ${missing.join('\n    ')}`,
+  );
+});
+
 test('the legacy Animated and LayoutAnimation APIs route the animation agent', () => {
   // Both live in generically-named files and mention neither Reanimated nor a
   // gesture, so nothing in SIGNALS or the old trigger list could see them.
@@ -793,6 +843,39 @@ test('the legacy Animated and LayoutAnimation APIs route the animation agent', (
   const inert = 'diff --git a/src/UserPanel.tsx b/src/UserPanel.tsx\n+++ b/src/UserPanel.tsx\n+  const name = user.displayName;';
   const ids = route(['src/UserPanel.tsx'], agents, { diffText: inert }).selected.map((a) => a.id);
   assert(!ids.includes('rn-animation'), `inert change should not route: ${ids.join(', ')}`);
+});
+
+test('the corrected triggers route on the real API spellings', () => {
+  /**
+   * Regression cover for four triggers that named APIs which do not exist, and
+   * so routed on nothing:
+   *
+   *   registerdevicefornotifications  ->  registerDeviceForRemoteMessages
+   *   requestuserpermission           ->  (dropped: a docs wrapper, not an API)
+   *   tobeintthedocument              ->  toBeOnTheScreen
+   *   layouttransition                ->  LinearTransition
+   *
+   * The lines below are what the real APIs look like at a call site. If a
+   * trigger regresses to a plausible-but-wrong spelling, the guard in
+   * scripts/lib/triggers.mjs catches the claim and this catches the effect.
+   */
+  const cases = [
+    ['rn-push', 'src/Boot.tsx', '    await messaging().registerDeviceForRemoteMessages();'],
+    ['rn-push', 'src/Boot.tsx', '    const st = await messaging().requestPermission();\n+    if (st === messaging.AuthorizationStatus.AUTHORIZED) register();'],
+    // Deliberately NOT *.test.tsx: that filename routes rn-testing on its own
+    // globs, which would make the trigger untested.
+    ['rn-testing', 'src/testUtils.tsx', '    expect(screen.getByText(label)).toBeOnTheScreen();'],
+    ['rn-animation', 'src/Row.tsx', '    <Animated.View layout={LinearTransition} />'],
+  ];
+
+  const missed = [];
+  for (const [id, file, line] of cases) {
+    const diff = `diff --git a/${file} b/${file}\n+++ b/${file}\n+${line}`;
+    const ids = route([file], agents, { diffText: diff }).selected.map((a) => a.id);
+    if (!ids.includes(id)) missed.push(`${id}: "${line.trim().slice(0, 56)}…" routed ${ids.join(', ') || 'nobody'}`);
+  }
+
+  assert(missed.length === 0, `corrected triggers that still route nothing:\n    ${missed.join('\n    ')}`);
 });
 
 test('an unrelated babel.config.js change does not route the animation agent', () => {

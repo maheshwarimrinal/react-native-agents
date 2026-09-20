@@ -16,7 +16,7 @@
     "Rule: a released version listed here must exist on the registry. Do not add a",
     "number to make a failure go away."
   ],
-  "verified_on": "2026-09-12",
+  "verified_on": "2026-09-20",
   "verified_against": "https://registry.npmjs.org — dist-tags and per-version peerDependencies",
   "libraries": {
     "react-native-reanimated": {
@@ -176,13 +176,25 @@
       ]
     },
     "react-native-iap": {
-      "latest": "16.5.1",
+      "latest": "16.6.2",
       "peer_dependencies": {
         "16.5.1": {
           "react-native-nitro-modules": "^0.36.5"
+        },
+        "16.6.0": {
+          "react-native-nitro-modules": "^0.36.5"
+        },
+        "16.6.2": {
+          "react": "*",
+          "react-native": "*",
+          "react-native-nitro-modules": ">=0.36.5",
+          "@amazon-devices/package-manager-lib": "~1.0.1767254401 (optional)",
+          "@amazon-devices/keplerscript-appstore-iap-lib": "~2.13.0 (optional)"
         }
       },
-      "note": "Moved to the hyodotdev/openiap monorepo. Nitro peer dependency since v14.0.0; a missing peer is a build failure."
+      "note": "Moved to the hyodotdev/openiap monorepo. Nitro peer dependency since v14.0.0; a missing peer is a build failure. The Nitro range LOOSENED at 16.6.2 (^0.36.5 -> >=0.36.5) and two optional Amazon Kepler peers appeared — read the installed version's peerDependencies rather than quoting 16.6.0's.",
+      "checked_on": "2026-09-20",
+      "$staleness": "This entry said 16.6.0 with checked_on 2026-09-20, and the registry said 16.6.2 the same day. Two patches landed inside one working session, which is the argument for `npm run api:refresh` over hand-checking: the number is not wrong because someone was careless, it is wrong because the library moves faster than a commit."
     },
     "react-native": {
       "verified_through": "0.87",
@@ -297,8 +309,8 @@
       ]
     },
     "react-native-iap": {
-      "version_checked": "16.5.1",
-      "checked_on": "2026-09-10",
+      "version_checked": "16.6.0",
+      "checked_on": "2026-09-20",
       "type_entry": "lib/typescript/src/index.d.ts",
       "identifiers_verified": [
         "ErrorCode",
@@ -307,5 +319,178 @@
       "note": "ErrorCode is a declared enum in types.d.ts (ErrorCode.UserCancelled = 'user-cancelled'); isUserCancelledError is in utils/error.d.ts. Both re-exported from the index."
     }
   },
-  "$verified_imports_note": "Identifiers the agent corpus imports, each confirmed present in the named version's type definitions. Populated by `npm run api:refresh -- --write`, which needs network access and is therefore a maintenance command, never part of `npm test`. Libraries absent from this map are UNVERIFIED, not verified-absent — the guard skips them rather than guessing."
+  "$verified_imports_note": "Identifiers the agent corpus imports, each confirmed present in the named version's type definitions. Populated by `npm run api:refresh -- --write`, which needs network access and is therefore a maintenance command, never part of `npm test`. Libraries absent from this map are UNVERIFIED, not verified-absent — the guard skips them rather than guessing.",
+  "$export_surfaces_note": [
+    "COMPLETE value-export surfaces, as opposed to the spot-checks in",
+    "`verified_imports`. The difference matters: a spot-check proves presence and",
+    "says nothing about absence, so it can never justify a failure. A complete",
+    "surface can — if a name is not in this list, the package does not export it.",
+    "",
+    "Used by the trigger guard in scripts/test.mjs. A trigger string is an",
+    "identifier claim exactly like an import is, and nothing checked them until",
+    "`registerdevicefornotifications` (the real API is",
+    "`registerDeviceForRemoteMessages`) and `tobeintthedocument` (a jest-dom",
+    "matcher that RNTL does not have; RNTL's is `toBeOnTheScreen`) shipped in the",
+    "very commit that fixed routing recall.",
+    "",
+    "`exports_ref` points at a list stored elsewhere in this file rather than",
+    "copying it, so there is one place to update when a version moves.",
+    "Type-only exports are deliberately absent: a trigger matches source text at",
+    "a call site, and types do not appear there."
+  ],
+  "export_surfaces": {
+    "react-native-reanimated": {
+      "version_checked": "4.6.0",
+      "checked_on": "2026-09-09",
+      "exports_ref": "libraries.react-native-reanimated.exports_4_6_0",
+      "extra": ["Animated", "default"],
+      "$extra": "The default export, referred to as `Animated` at every call site (`Animated.View`, `Animated.createAnimatedComponent`)."
+    },
+    "react-native-worklets": {
+      "version_checked": "0.12.1",
+      "checked_on": "2026-09-09",
+      "exports_ref": "libraries.react-native-worklets.exports_0_12_1"
+    },
+    "@react-native-firebase/messaging": {
+      "version_checked": "23.5.0",
+      "checked_on": "2026-09-20",
+      "type_entry": "lib/index.d.ts",
+      "$note": "The Module class's methods, which is what call sites name, plus the statics and the named `firebase` export. `istNotificationDelegationEnabled` is spelled that way upstream — a typo in the library, not in this file.",
+      "exports": [
+        "firebase",
+        "AuthorizationStatus",
+        "NotificationAndroidPriority",
+        "NotificationAndroidVisibility",
+        "MessagePriority",
+        "setAutoInitEnabled",
+        "isAutoInitEnabled",
+        "getInitialNotification",
+        "getDidOpenSettingsForNotification",
+        "getToken",
+        "getIsHeadless",
+        "deleteToken",
+        "onMessage",
+        "onNotificationOpenedApp",
+        "onTokenRefresh",
+        "requestPermission",
+        "registerDeviceForRemoteMessages",
+        "isDeviceRegisteredForRemoteMessages",
+        "unregisterDeviceForRemoteMessages",
+        "getAPNSToken",
+        "setAPNSToken",
+        "hasPermission",
+        "onDeletedMessages",
+        "onMessageSent",
+        "onSendError",
+        "setBackgroundMessageHandler",
+        "setOpenSettingsForNotificationsHandler",
+        "sendMessage",
+        "subscribeToTopic",
+        "unsubscribeFromTopic",
+        "setDeliveryMetricsExportToBigQuery",
+        "setNotificationDelegationEnabled",
+        "istNotificationDelegationEnabled",
+        "isSupported",
+        "experimentalSetDeliveryMetricsExportedToBigQueryEnabled"
+      ]
+    },
+    "expo-notifications": {
+      "version_checked": "57.0.20",
+      "checked_on": "2026-09-20",
+      "type_entry": "build/index.d.ts",
+      "$note": "index.d.ts plus the four `export *` modules that carry runtime values (TokenEmitter, NotificationsEmitter, NotificationsHandler, NotificationPermissions). The remaining `export *` targets are `.types` files and contribute no call-site names.",
+      "exports": [
+        "getDevicePushTokenAsync",
+        "unregisterForNotificationsAsync",
+        "getExpoPushTokenAsync",
+        "subscribeToTopicAsync",
+        "unsubscribeFromTopicAsync",
+        "getPresentedNotificationsAsync",
+        "dismissNotificationAsync",
+        "dismissAllNotificationsAsync",
+        "getNotificationChannelsAsync",
+        "getNotificationChannelAsync",
+        "setNotificationChannelAsync",
+        "deleteNotificationChannelAsync",
+        "getNotificationChannelGroupsAsync",
+        "getNotificationChannelGroupAsync",
+        "setNotificationChannelGroupAsync",
+        "deleteNotificationChannelGroupAsync",
+        "getBadgeCountAsync",
+        "setBadgeCountAsync",
+        "getAllScheduledNotificationsAsync",
+        "scheduleNotificationAsync",
+        "cancelScheduledNotificationAsync",
+        "cancelAllScheduledNotificationsAsync",
+        "getNotificationCategoriesAsync",
+        "setNotificationCategoryAsync",
+        "deleteNotificationCategoryAsync",
+        "getNextTriggerDateAsync",
+        "useLastNotificationResponse",
+        "setAutoServerRegistrationEnabledAsync",
+        "registerTaskAsync",
+        "BackgroundNotificationTaskResult",
+        "unregisterTaskAsync",
+        "addPushTokenListener",
+        "DEFAULT_ACTION_IDENTIFIER",
+        "addNotificationReceivedListener",
+        "addNotificationsDroppedListener",
+        "addNotificationResponseReceivedListener",
+        "getLastNotificationResponseAsync",
+        "getLastNotificationResponse",
+        "clearLastNotificationResponseAsync",
+        "clearLastNotificationResponse",
+        "addNotificationResponseClearedListener",
+        "NotificationTimeoutError",
+        "setNotificationHandler",
+        "getPermissionsAsync",
+        "requestPermissionsAsync"
+      ],
+      "deprecated_exports": [
+        "getLastNotificationResponseAsync",
+        "clearLastNotificationResponseAsync"
+      ]
+    },
+    "@testing-library/react-native": {
+      "version_checked": "14.0.1",
+      "checked_on": "2026-09-20",
+      "type_entry": "dist/index.d.ts",
+      "$note": "dist/pure.d.ts (the runtime surface) plus dist/matchers/index.d.ts, because a matcher name is what a test file actually contains. `toBeInTheDocument` is jest-dom's and is deliberately absent here.",
+      "exports": [
+        "act",
+        "cleanup",
+        "fireEvent",
+        "render",
+        "waitFor",
+        "waitForElementToBeRemoved",
+        "within",
+        "configure",
+        "resetToDefaults",
+        "isHiddenFromAccessibility",
+        "isInaccessible",
+        "getDefaultNormalizer",
+        "renderHook",
+        "screen",
+        "userEvent",
+        "toBeBusy",
+        "toBeChecked",
+        "toBeDisabled",
+        "toBeEnabled",
+        "toBeEmptyElement",
+        "toBeCollapsed",
+        "toBeExpanded",
+        "toBeOnTheScreen",
+        "toBePartiallyChecked",
+        "toBeSelected",
+        "toBeVisible",
+        "toContainElement",
+        "toHaveAccessibilityValue",
+        "toHaveAccessibleName",
+        "toHaveDisplayValue",
+        "toHaveProp",
+        "toHaveStyle",
+        "toHaveTextContent"
+      ]
+    }
+  }
 }

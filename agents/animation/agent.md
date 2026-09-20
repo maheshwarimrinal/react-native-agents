@@ -43,7 +43,7 @@ triggers:
   - exiting animation
   - fadein
   - slideinright
-  - layouttransition
+  - lineartransition
   - interpolate
   - usescrolloffset
   - useanimatedscrollhandler

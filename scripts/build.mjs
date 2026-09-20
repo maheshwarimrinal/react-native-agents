@@ -43,6 +43,22 @@ function syncTelemetryVersion({ dryRun = false } = {}) {
 
 const args = process.argv.slice(2);
 const check = args.includes('--check');
+/**
+ * `--out <dir>` writes the build somewhere other than `dist/`.
+ *
+ * It exists for the test suite. Before it, `scripts/test.mjs` built straight
+ * into the real `dist/` so it would have something to assert against — which
+ * meant running the tests rewrote the working tree, and made the `--check`
+ * gate two hundred lines later structurally incapable of failing: it compared
+ * a fresh build against a `dist/` that the same process had just regenerated.
+ * The same shape as a test whose assertions never run.
+ */
+const outArg = args.find((a) => a.startsWith('--out'));
+const outDir = outArg
+  ? path.resolve(outArg.includes('=') ? outArg.split('=')[1] : args[args.indexOf(outArg) + 1] ?? '')
+  : null;
+if (outArg && !outDir) throw new Error('--out needs a directory');
+
 const onlyArg = args.find((a) => a.startsWith('--only'));
 const only = onlyArg
   ? (onlyArg.includes('=') ? onlyArg.split('=')[1] : args[args.indexOf(onlyArg) + 1] ?? '')
@@ -122,14 +138,16 @@ try {
     process.exit(0);
   }
 
+  const target = outDir ?? DIST_DIR;
+
   // Write first, then prune what's no longer generated. Safer than deleting
   // dist/ up front: a mid-build failure leaves the previous output intact, and
   // it works on filesystems that refuse recursive removal.
-  const { agents, results } = build(DIST_DIR);
+  const { agents, results } = build(target);
 
   const written = results.flatMap((r) => r.files);
   const warnings = results.flatMap((r) => r.warnings);
-  const { removed, failed } = pruneStale(DIST_DIR, written);
+  const { removed, failed } = pruneStale(target, written);
   const total = written.length;
 
   if (failed.length) {
@@ -138,7 +156,10 @@ try {
     );
   }
 
-  if (syncTelemetryVersion()) {
+  // TELEMETRY.md lives in the repo, not in the build output. A build aimed
+  // somewhere else must not touch it, or `--out` stops being side-effect free
+  // and the problem it was added to solve comes back through a side door.
+  if (!outDir && syncTelemetryVersion()) {
     warnings.push(`TELEMETRY.md version row updated to ${VERSION}`);
   }
 
@@ -154,7 +175,9 @@ try {
   }
 
   console.log(
-    c.dim(`\n  ${total} files written to dist/${removed.length ? `, ${removed.length} stale removed` : ''}\n`),
+    c.dim(
+      `\n  ${total} files written to ${outDir ? target : 'dist/'}${removed.length ? `, ${removed.length} stale removed` : ''}\n`,
+    ),
   );
 } catch (err) {
   console.error(c.red(`\n✗ Build failed: ${err.message}\n`));
