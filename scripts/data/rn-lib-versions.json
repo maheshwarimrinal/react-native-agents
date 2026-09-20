@@ -16,7 +16,7 @@
     "Rule: a released version listed here must exist on the registry. Do not add a",
     "number to make a failure go away."
   ],
-  "verified_on": "2026-09-12",
+  "verified_on": "2026-09-20",
   "verified_against": "https://registry.npmjs.org — dist-tags and per-version peerDependencies",
   "libraries": {
     "react-native-reanimated": {
@@ -176,13 +176,17 @@
       ]
     },
     "react-native-iap": {
-      "latest": "16.5.1",
+      "latest": "16.6.0",
       "peer_dependencies": {
         "16.5.1": {
           "react-native-nitro-modules": "^0.36.5"
+        },
+        "16.6.0": {
+          "react-native-nitro-modules": "^0.36.5"
         }
       },
-      "note": "Moved to the hyodotdev/openiap monorepo. Nitro peer dependency since v14.0.0; a missing peer is a build failure."
+      "note": "Moved to the hyodotdev/openiap monorepo. Nitro peer dependency since v14.0.0; a missing peer is a build failure.",
+      "checked_on": "2026-09-20"
     },
     "react-native": {
       "verified_through": "0.87",
@@ -297,8 +301,8 @@
       ]
     },
     "react-native-iap": {
-      "version_checked": "16.5.1",
-      "checked_on": "2026-09-10",
+      "version_checked": "16.6.0",
+      "checked_on": "2026-09-20",
       "type_entry": "lib/typescript/src/index.d.ts",
       "identifiers_verified": [
         "ErrorCode",

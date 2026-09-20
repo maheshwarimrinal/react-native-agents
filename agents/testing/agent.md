@@ -32,6 +32,19 @@ triggers:
   - mock
   - flaky test
   - test coverage
+  - @testing-library/react-native
+  - renderhook
+  - screen.getby
+  - findbyrole
+  - waitfor
+  - userevent
+  - jest.mock
+  - jest.spyon
+  - describe(
+  - it.each
+  - tobeintthedocument
+  - tohavebeencalledwith
+  - device.launchapp
 references:
   - component-testing
   - mocking

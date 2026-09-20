@@ -774,6 +774,56 @@ test('removedLinesForFile isolates one file and ignores the --- header', () => {
   );
 });
 
+test('every review agent routes on a canonical API call from its own domain', () => {
+  /**
+   * Routing recall, per agent.
+   *
+   * `rn-push` carried 14 triggers and not one matched `messaging()` or
+   * `onNotificationOpenedApp` — the closest was the two-word phrase "firebase
+   * messaging". A diff doing real push work routed five agents and skipped the
+   * push specialist. Reported from outside as backlog item 4: a problem that
+   * spans specialists loses the one that matters most.
+   *
+   * Under-routing is silent in a way over-routing is not. An agent that runs
+   * unnecessarily costs tokens and is obvious in the output; an agent that never
+   * runs produces a clean review of code nobody looked at.
+   *
+   * One realistic call per agent, in a file whose name gives the router no help,
+   * so the trigger has to carry it.
+   */
+  const CANONICAL = {
+    'rn-push': "    messaging().onNotificationOpenedApp((m) => go(m.data.screen));",
+    'rn-navigation': "    const nav = useNavigation(); nav.navigate('Order', { id });",
+    'rn-permissions': "    const s = await check(PERMISSIONS.IOS.CAMERA);",
+    'rn-animation': "    const x = useSharedValue(0); const st = useAnimatedStyle(() => ({ opacity: x.value }));",
+    'rn-offline': "    const state = await NetInfo.fetch(); if (!state.isConnected) enqueue(op);",
+    'rn-payments': "    await requestPurchase({ request: { apple: { sku } }, type: 'in-app' });",
+    'rn-observability': "    Sentry.captureException(err, { tags: { screen } });",
+    'rn-state': "    const useStore = create(persist((set) => ({ user: null }), { name: 'app' }));",
+    'rn-testing': "    render(<Screen />); await waitFor(() => expect(screen.getByRole('button')).toBeTruthy());",
+    'rn-background': "    BackgroundFetch.registerTaskAsync(TASK, { minimumInterval: 900 });",
+  };
+
+  const missing = [];
+  for (const [id, line] of Object.entries(CANONICAL)) {
+    // A deliberately neutral filename: `Thing.tsx` matches no agent's signal
+    // globs, so only the diff content can route it.
+    const diff = [
+      'diff --git a/src/Thing.tsx b/src/Thing.tsx',
+      '+++ b/src/Thing.tsx',
+      `+${line}`,
+    ].join('\n');
+
+    const ids = route(['src/Thing.tsx'], agents, { diffText: diff }).selected.map((a) => a.id);
+    if (!ids.includes(id)) missing.push(`${id}: "${line.trim().slice(0, 52)}…" routed ${ids.join(', ') || 'nobody'}`);
+  }
+
+  assert(
+    missing.length === 0,
+    `review agents that do not route on their own domain's API:\n    ${missing.join('\n    ')}`,
+  );
+});
+
 test('the legacy Animated and LayoutAnimation APIs route the animation agent', () => {
   // Both live in generically-named files and mention neither Reanimated nor a
   // gesture, so nothing in SIGNALS or the old trigger list could see them.

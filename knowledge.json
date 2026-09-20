@@ -19,13 +19,13 @@
     "$comment": "Third-party libraries whose API the agents quote concretely. Tracked separately from the platform because they move on their own schedule, and because payments guidance went stale across three review rounds while the React Native version above was current.",
     "react-native-iap": {
       "package": "react-native-iap",
-      "verified_through": "16.5.1",
-      "verified_on": "2026-09-08",
+      "verified_through": "16.6.0",
+      "verified_on": "2026-09-20",
       "used_by": [
         "rn-payments"
       ],
-      "notes": "v14 is a hard break, not a deprecation: getProducts, getSubscriptions, requestSubscription, getPurchaseHistory, clearProductsIOS, flushFailedPurchasesCachedAsPendingAndroid and setup were removed. StoreKit 2 (iOS 15+), RN 0.71+. Error codes moved to the unified ErrorCode enum, so the old 'E_USER_CANCELLED' string silently stops matching. The v14 call signatures are UNCHANGED at 16.5.1 — requestPurchase({request:{apple,google},type}), finishTransaction({purchase,isConsumable}) and the google.subscriptionOffers requirement all still hold — so v14 code does not break on upgrade the way v13 code broke on v14. What changed sits around the API: react-native-nitro-modules is a required PEER dependency (^0.36.5), a missing peer being a build failure rather than a runtime one; the package moved to the hyodotdev/openiap monorepo with docs at openiap.dev; Play Billing 8.2.0+/9.1.0+ surface (billing programs, external offers, Billing Choice) was added beyond the Billing 7 floor v14 targeted; presentCodeRedemptionSheetIOS and openRedeemOfferCodeAndroid are deprecated in favour of openRedeemOfferCode, slated for removal in OpenIAP 4.0. fetchProducts' `type` is optional and defaults to 'in-app' ('all' is also valid). purchase-flow.md carries the v13->v14 and v14->v16 tables.",
-      "verified_against": "published type definitions for 16.5.1, not the v15/v16 release notes"
+      "notes": "v14 is a hard break, not a deprecation: getProducts, getSubscriptions, requestSubscription, getPurchaseHistory, clearProductsIOS, flushFailedPurchasesCachedAsPendingAndroid and setup were removed. StoreKit 2 (iOS 15+), RN 0.71+. Error codes moved to the unified ErrorCode enum, so the old 'E_USER_CANCELLED' string silently stops matching. The v14 call signatures are UNCHANGED at 16.6.0 — requestPurchase({request:{apple,google},type}), finishTransaction({purchase,isConsumable}) and the google.subscriptionOffers requirement all still hold — so v14 code does not break on upgrade the way v13 code broke on v14. What changed sits around the API: react-native-nitro-modules is a required PEER dependency (^0.36.5), a missing peer being a build failure rather than a runtime one; the package moved to the hyodotdev/openiap monorepo with docs at openiap.dev; Play Billing 8.2.0+/9.1.0+ surface (billing programs, external offers, Billing Choice) was added beyond the Billing 7 floor v14 targeted; presentCodeRedemptionSheetIOS and openRedeemOfferCodeAndroid are deprecated in favour of openRedeemOfferCode, slated for removal in OpenIAP 4.0. fetchProducts' `type` is optional and defaults to 'in-app' ('all' is also valid). purchase-flow.md carries the v13->v14 and v14->v16 tables.",
+      "verified_against": "published type definitions for 16.6.0, diffed against 16.5.1. Nothing documented here changed: requestPurchase/finishTransaction/fetchProducts shapes, the react-native-nitro-modules ^0.36.5 peer dependency, and the openRedeemOfferCodeAndroid/presentCodeRedemptionSheetIOS deprecations are all identical. 16.6.0 is additive — one new export, getUserFriendlyErrorMessage."
     }
   },
   "reanimated": {
@@ -68,7 +68,7 @@
   "$agentsVerified_note": "Per-agent verification dates. An agent absent from this map has never been verified individually — which is different from stale, and is reported as such. Only add a date after actually reviewing that agent's references against upstream sources; a date added without reading launders an unchecked claim, which is the failure the freshness job exists to prevent.",
   "agentsVerified": {
     "rn-animation": "2026-09-09",
-    "rn-payments": "2026-09-10",
+    "rn-payments": "2026-09-20",
     "rn-ui-accessibility": "2026-09-09"
   }
 }
