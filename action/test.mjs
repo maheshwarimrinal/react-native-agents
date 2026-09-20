@@ -796,11 +796,25 @@ test('every review agent routes on a canonical API call from its own domain', ()
     'rn-navigation': "    const nav = useNavigation(); nav.navigate('Order', { id });",
     'rn-permissions': "    const s = await check(PERMISSIONS.IOS.CAMERA);",
     'rn-animation': "    const x = useSharedValue(0); const st = useAnimatedStyle(() => ({ opacity: x.value }));",
-    'rn-offline': "    const state = await NetInfo.fetch(); if (!state.isConnected) enqueue(op);",
+    // The first version was `if (!state.isConnected) enqueue(op)` — verbatim
+    // the first bullet under rn-offline's own "things you push back on". A
+    // fixture is documentation by example, and that one demonstrated the
+    // anti-pattern the agent exists to catch.
+    //
+    // This is TanStack Query's documented React Native wiring, taken from
+    // onlineManager's own JSDoc. It reads `isConnected` to *observe*
+    // connectivity for query resumption rather than to gate a request, which
+    // is the distinction the agent draws.
+    'rn-offline':
+      '    onlineManager.setEventListener((setOnline) => NetInfo.addEventListener((s) => setOnline(!!s.isConnected)));',
     'rn-payments': "    await requestPurchase({ request: { apple: { sku } }, type: 'in-app' });",
     'rn-observability': "    Sentry.captureException(err, { tags: { screen } });",
     'rn-state': "    const useStore = create(persist((set) => ({ user: null }), { name: 'app' }));",
-    'rn-testing': "    render(<Screen />); await waitFor(() => expect(screen.getByRole('button')).toBeTruthy());",
+    // Same reason as rn-offline below: `waitFor` wrapping a synchronous
+    // assertion is a bullet under rn-testing's own "things you push back on",
+    // and its advice there is to use `findBy*`. `toBeTruthy()` on an element
+    // is also the weaker assertion — RNTL ships `toBeOnTheScreen`.
+    'rn-testing': "    render(<Screen />); expect(await screen.findByRole('button')).toBeOnTheScreen();",
     'rn-background': "    BackgroundFetch.registerTaskAsync(TASK, { minimumInterval: 900 });",
   };
 
