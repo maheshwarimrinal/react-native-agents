@@ -35,6 +35,7 @@ triggers:
   - badge count
   - notifee
   - onmessage
+  - getmessaging
   - onnotificationopenedapp
   - getinitialnotification
   - setbackgroundmessagehandler

@@ -354,10 +354,13 @@
     "@react-native-firebase/messaging": {
       "version_checked": "23.5.0",
       "checked_on": "2026-09-20",
-      "type_entry": "lib/index.d.ts",
-      "$note": "The Module class's methods, which is what call sites name, plus the statics and the named `firebase` export. `istNotificationDelegationEnabled` is spelled that way upstream — a typo in the library, not in this file.",
+      "type_entry": "lib/index.d.ts + lib/modular/index.d.ts",
+      "$note": "The Module class's methods, which is what call sites name, plus the statics, the named `firebase` export, and the modular API's own functions. Both entry points were read: the modular surface adds `getMessaging` and `isDeliveryMetricsExportToBigQueryEnabled`, which the namespaced Module does not have.",
+      "$upstream_typo": "`istNotificationDelegationEnabled` is spelled exactly that way in BOTH lib/index.d.ts and lib/modular/index.d.ts at 23.5.0 — an upstream typo for `is…`, reproduced here deliberately because this list records what the package exports, not what it meant to. A PR review flagged it as our mistake; it is not. Do not 'correct' it without re-reading the published types, or the guard will start rejecting the name that actually exists.",
       "exports": [
         "firebase",
+        "getMessaging",
+        "isDeliveryMetricsExportToBigQueryEnabled",
         "AuthorizationStatus",
         "NotificationAndroidPriority",
         "NotificationAndroidVisibility",
