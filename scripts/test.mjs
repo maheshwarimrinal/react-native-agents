@@ -1751,6 +1751,52 @@ await testAsync('build produces dist/', async () => {
   assert(fs.existsSync(DIST), 'no dist/');
 });
 
+await testAsync('--out refuses every argument that could prune a real directory', async () => {
+  /**
+   * `--out` writes and then calls pruneStale(), which deletes every file in
+   * the target that the build did not generate. That makes a bad argument
+   * unrecoverable rather than merely wrong, so the parser is tested like the
+   * destructive thing it is.
+   *
+   * The original bug: the value was validated *after* `path.resolve()`.
+   * `path.resolve('')` is the current working directory and a directory path
+   * is always truthy, so `if (outArg && !outDir)` could never fire — a bare
+   * `--out` aimed the build at the repo root and pruned it.
+   */
+  const guarded = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-guard-'));
+  fs.writeFileSync(path.join(guarded, 'precious.txt'), 'do not delete me\n');
+
+  const mustRefuse = [
+    [['--out'], 'a bare --out (resolves to cwd)'],
+    [['--out='], 'an empty --out= value'],
+    [['--out', '--check'], 'a following flag mistaken for the value'],
+    [['--out', guarded], 'a non-empty directory that is not build output'],
+  ];
+
+  for (const [argv, why] of mustRefuse) {
+    let exitCode = 0;
+    try {
+      execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), ...argv], {
+        cwd: guarded,
+        stdio: 'pipe',
+      });
+    } catch (err) {
+      exitCode = err.status ?? 1;
+    }
+    assert(exitCode !== 0, `--out ${argv.slice(1).join(' ')} should be refused: ${why}`);
+  }
+
+  assert(
+    fs.existsSync(path.join(guarded, 'precious.txt')),
+    'a refused --out still deleted a file in the target directory',
+  );
+  assert(
+    fs.readdirSync(guarded).length === 1,
+    `a refused --out wrote into the target: ${fs.readdirSync(guarded).join(', ')}`,
+  );
+  fs.rmSync(guarded, { recursive: true, force: true });
+});
+
 test('a --out build leaves the committed dist/ untouched', () => {
   /**
    * The guarantee the rest of this file depends on. If `--out` ever starts

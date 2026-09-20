@@ -53,11 +53,46 @@ const check = args.includes('--check');
  * a fresh build against a `dist/` that the same process had just regenerated.
  * The same shape as a test whose assertions never run.
  */
-const outArg = args.find((a) => a.startsWith('--out'));
-const outDir = outArg
-  ? path.resolve(outArg.includes('=') ? outArg.split('=')[1] : args[args.indexOf(outArg) + 1] ?? '')
-  : null;
-if (outArg && !outDir) throw new Error('--out needs a directory');
+/**
+ * Deliberately NOT exported. This file runs a build at import time, so an
+ * export invites a test to import it and trigger one as a side effect — the
+ * same trap that made `refresh-api-snapshot.mjs` fire a network refresh on
+ * import. The `--out` tests drive the real CLI through execFileSync instead,
+ * which is what users actually hit.
+ */
+function parseOutDir(argv) {
+  const outArg = argv.find((a) => a.startsWith('--out'));
+  if (!outArg) return null;
+
+  const value = outArg.includes('=') ? outArg.split('=')[1] : argv[argv.indexOf(outArg) + 1];
+
+  // `path.resolve('')` is the current working directory, and a directory path
+  // is always truthy — so validating AFTER resolving cannot catch a missing
+  // value. A bare `node scripts/build.mjs --out` therefore aimed the build at
+  // the repo root, where pruneStale() deletes every file it did not generate.
+  // The check has to happen on the raw argument, before resolve() erases the
+  // difference between "no value" and "here".
+  if (!value || value.startsWith('-')) {
+    throw new Error('--out needs a directory (e.g. --out tmp/build)');
+  }
+  const dir = path.resolve(value);
+
+  // Defence in depth, because the failure mode is unrecoverable data loss and
+  // one bad argument should not be able to cause it. A build may only write
+  // into somewhere that is empty, absent, or recognisably a previous build.
+  // `--out .` and `--out ~` now refuse instead of pruning.
+  if (fs.existsSync(dir)) {
+    if (!fs.statSync(dir).isDirectory()) throw new Error(`--out ${value} is not a directory`);
+    const entries = fs.readdirSync(dir);
+    if (entries.length && !entries.includes('index.json')) {
+      throw new Error(
+        `refusing to build into ${dir}: not empty and does not look like build output ` +
+          `(no index.json). Its contents would be pruned.`,
+      );
+    }
+  }
+  return dir;
+}
 
 const onlyArg = args.find((a) => a.startsWith('--only'));
 const only = onlyArg
@@ -107,6 +142,10 @@ function snapshot(dir) {
 }
 
 try {
+  // Parsed inside the try so a bad `--out` produces the build's own error
+  // message rather than an unhandled stack trace.
+  const outDir = parseOutDir(args);
+
   if (check) {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-'));
     build(tmp);
