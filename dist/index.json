@@ -117,6 +117,7 @@
         "lineartransition",
         "interpolate",
         "usescrolloffset",
+        "usescrollviewoffset",
         "useanimatedscrollhandler",
         "animated.view",
         "createanimatedcomponent",
@@ -1571,5 +1572,5 @@
       ]
     }
   ],
-  "sharedContextChars": 7010
+  "sharedContextChars": 8796
 }

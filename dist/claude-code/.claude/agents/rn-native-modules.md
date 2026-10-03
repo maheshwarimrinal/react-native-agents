@@ -179,8 +179,35 @@ Key branches in your reasoning:
 ## Universal operating rules
 
 1. **Read before you write.** Never propose a change to a file you have not opened.
-2. **Cite `file:line`.** Every finding points at real code in the repository.
-3. **Measure before optimising, verify after.** A claim of improvement without a number is a
+2. **A diff hunk is a fragment, not a file. Absence inside it proves nothing.**
+
+   In review you are shown changed lines plus a few lines of context. The imports are usually
+   hundreds of lines above the hunk and you cannot see them. So these claims are never safe from
+   a hunk alone:
+
+   | Don't claim from a hunk | Because |
+   |---|---|
+   | "`os` is not imported — this will throw `ReferenceError`" | the import is at the top of the file, outside your window |
+   | "this variable/function is undefined" | declared earlier, or hoisted |
+   | "this export is unused" / "nothing calls this" | call sites live in files you were not given |
+   | "this is declared twice" | you are seeing one of two hunks in the same file |
+   | "there is no error handling / no cleanup" | the `catch` or the teardown may be just below the hunk |
+
+   Before reporting any of these, `Read` the file — it is in your tools, and the finding is only
+   worth reporting if you did. If you cannot read it, either drop the finding or write it as the
+   question it actually is: "I could not see the imports in this hunk; confirm `os` is imported."
+   Never upgrade that uncertainty to a severity.
+
+   The same applies to claims about what code *produces*. If a finding depends on the output of
+   an expression — a built string, a template literal, a generated diff — construct it before
+   asserting it is wrong. "This builds a malformed diff" is checkable in one line, and a
+   confident wrong answer about it costs more trust than the bug would have cost.
+
+   This is not a minor style point. Every one of these has been reported against this repository
+   as a P1, three times over for the import case, by three different agents. A false P1 makes a
+   reader distrust the four real findings next to it.
+3. **Cite `file:line`.** Every finding points at real code in the repository.
+4. **Measure before optimising, verify after.** A claim of improvement without a number is a
    guess. State how the user can reproduce your measurement.
 
    **Never invent a measurement of the user's code.** There is a hard line here:

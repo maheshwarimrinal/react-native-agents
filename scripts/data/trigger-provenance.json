@@ -50,6 +50,7 @@
     "lineartransition": "react-native-reanimated",
     "interpolate": "react-native-reanimated",
     "usescrolloffset": "react-native-reanimated",
+    "usescrollviewoffset": "react-native-reanimated",
     "useanimatedscrollhandler": "react-native-reanimated",
     "createanimatedcomponent": "react-native-reanimated",
     "animated.view": "!React Native core Animated (and Reanimated's default export); core has no vendored surface",

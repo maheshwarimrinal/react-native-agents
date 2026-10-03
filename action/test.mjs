@@ -18,9 +18,9 @@ const { globToRegExp, matchesGlob, isIgnored, route, addedLines, addedLinesForFi
   await import('./lib/router.mjs');
 const { parseDiff, renderForPrompt, findPosition, nearestChangedLine, changedFilePaths, unquoteGitPath, pathFromDiffHeader } =
   await import('./lib/diff.mjs');
-const { LLM, estimateTokens, estimateCost, BudgetExceededError, PRICING } = await import('./lib/llm.mjs');
+const { LLM, estimateTokens, estimateCost, BudgetExceededError, PRICING, describeEmptyCompletion, EmptyCompletionError } = await import('./lib/llm.mjs');
 const awaitedAudit = await import('./lib/audit.mjs');
-const { parseFindings, dedupe, countBySeverity, gateFails, FAIL_ON_VALUES, DIFF_FENCE, UNTRUSTED_INPUT_NOTICE, escapeControlCharsInStrings, stripTrailingCommas, backtickStringsToJson } = awaitedAudit;
+const { parseFindings, dedupe, countBySeverity, gateFails, FAIL_ON_VALUES, DIFF_FENCE, UNTRUSTED_INPUT_NOTICE, escapeControlCharsInStrings, stripTrailingCommas, backtickStringsToJson, flagUnverifiableClaims, UNVERIFIABLE_FROM_HUNK } = awaitedAudit;
 const { renderSummary } = await import('./lib/github.mjs');
 const { detectProject, firstNonEmpty } = await import('./index.mjs');
 const { loadAgents } = await import('../scripts/lib/source.mjs');
@@ -859,6 +859,152 @@ test('the legacy Animated and LayoutAnimation APIs route the animation agent', (
   assert(!ids.includes('rn-animation'), `inert change should not route: ${ids.join(', ')}`);
 });
 
+test('an empty completion says which of its causes happened', () => {
+  /**
+   * `rn-push` and `rn-release` both reported "Model response was not usable:
+   * empty response" on one run of this repository's own audit, which is
+   * undiagnosable — truncation, a refusal and a blank body all produced that
+   * one string, and the response fields that tell them apart were discarded
+   * before anyone could look. Output tokens were still billed, so truncation
+   * was the likeliest cause, and nothing in the report said so.
+   */
+  const cases = [
+    {
+      name: 'anthropic truncation',
+      res: { stopReason: 'max_tokens', blockTypes: ['text'], usage: { output: 4096 } },
+      expect: [/truncated at the 4096-token output cap/, /4096 output tokens billed/, /raise the cap/],
+    },
+    {
+      name: 'openai truncation',
+      res: { stopReason: 'length', blockTypes: [], usage: { output: 900 } },
+      expect: [/truncated at the 4096-token output cap/],
+    },
+    {
+      name: 'refusal',
+      res: { stopReason: 'stop', refusal: 'I cannot help with that.', usage: { output: 12 } },
+      expect: [/the model refused: I cannot help with that\./],
+    },
+    {
+      name: 'thinking-only response',
+      res: { stopReason: 'end_turn', blockTypes: ['thinking'], usage: { output: 2000 } },
+      expect: [/only thinking block\(s\), no text/],
+    },
+    {
+      name: 'genuinely blank',
+      res: { stopReason: null, blockTypes: [], usage: { output: 0 } },
+      expect: [/response body was empty/, /stop reason absent/, /0 output tokens/],
+    },
+  ];
+
+  for (const { name, res, expect } of cases) {
+    const msg = describeEmptyCompletion(res, 4096);
+    for (const re of expect) {
+      assert(re.test(msg), `${name}: "${msg}" does not match ${re}`);
+    }
+  }
+
+  // The five causes must not all read the same, or naming them achieves nothing.
+  const messages = cases.map(({ res }) => describeEmptyCompletion(res, 4096));
+  assert(
+    new Set(messages).size === messages.length,
+    `two causes produced the same message:\n    ${messages.join('\n    ')}`,
+  );
+
+  /**
+   * A benign stop reason is not a cause, so it must not be the whole answer.
+   * "stop reason \"stop\"" alone tells the reader nothing — the message has to
+   * say the body was empty, and may then mention the stop reason as context.
+   */
+  const benign = describeEmptyCompletion(
+    { stopReason: 'stop', blockTypes: [], usage: { output: 0 } },
+    4096,
+  );
+  assert(
+    /response body was empty/.test(benign),
+    `a benign stop reason produced no real explanation: "${benign}"`,
+  );
+});
+
+test('absence-from-hunk claims are annotated, not dropped', () => {
+  /**
+   * The real reports this exists for. Three agents told this repository that
+   * `os` was not imported in scripts/test.mjs; it is imported at line 31, and
+   * their diff hunk started at 1723. A ReferenceError there would have taken
+   * the whole suite down, so the claim was not merely unproven, it was false —
+   * and it was filed as P1 twice in one review.
+   */
+  const real = [
+    { severity: 'P1', title: '`os` is used without being imported in tests', why: '`os.tmpdir()` is referenced, but `os` is not imported in this diff. This will throw a ReferenceError.' },
+    { severity: 'P1', title: 'Missing import for `os`', why: '`os` is never imported in this file.' },
+    { severity: 'P2', title: 'Helper is dead code', why: 'Nothing calls `renderPost` anywhere in the diff.' },
+    { severity: 'P2', title: 'Duplicate constant', why: '`BUILD_MARKER` is declared twice.' },
+  ];
+
+  const { findings, flagged } = flagUnverifiableClaims(real);
+  assert(flagged === real.length, `expected all ${real.length} flagged, got ${flagged}`);
+  for (const [i, f] of findings.entries()) {
+    assert(f.unverifiable, `findings[${i}] was not marked unverifiable`);
+    assert(/Unverified:/.test(f.why), `findings[${i}] has no caveat in why`);
+    assert(f.severity === real[i].severity, `findings[${i}] severity was changed — annotate, never downgrade`);
+    assert(f.title === real[i].title, `findings[${i}] title was rewritten`);
+  }
+});
+
+test('findings that merely mention imports or usage are left alone', () => {
+  /**
+   * The precision half, and the harder one. A guard that fires on anything
+   * containing the word "import" would caveat most of a review, and a caveat on
+   * everything is a caveat on nothing. These are all advice or genuine
+   * observations about code that WAS shown — none claims absence.
+   */
+  const innocent = [
+    { severity: 'P1', title: 'Import the modular API instead', why: 'Add `import { getMessaging } from "@react-native-firebase/messaging"` and drop the namespaced call.' },
+    { severity: 'P2', title: 'Unused variable in the added lines', why: 'The added line declares `tmp` and the next added line overwrites it before any read — both lines are visible here.' },
+    { severity: 'P0', title: 'Token written to AsyncStorage in plaintext', why: 'The added line stores a JWT with no encryption.' },
+    { severity: 'P2', title: 'Background handler registered inside a component', why: 'setBackgroundMessageHandler is called in the component body, so it does not exist when the app is killed.' },
+    { severity: 'P3', title: 'Prefer a named export', why: 'The default export makes this harder to find by name.' },
+  ];
+
+  const { findings, flagged } = flagUnverifiableClaims(innocent);
+  assert(
+    flagged === 0,
+    `false positives: ${findings.filter((f) => f.unverifiable).map((f) => f.title).join(' | ')}`,
+  );
+  for (const [i, f] of findings.entries()) {
+    assert(f.why === innocent[i].why, `findings[${i}] was annotated and should not have been`);
+  }
+});
+
+test('every unverifiable-claim rule matches at least one realistic phrasing', () => {
+  // A rule whose pattern never fires is decoration. Each one gets a sample
+  // taken from how these findings are actually worded.
+  const samples = {
+    'missing import': '`os` is not imported in this file',
+    'undefined symbol': 'this will throw a ReferenceError at runtime',
+    'unused or uncalled': 'this export is never used',
+    'duplicate declaration': 'the constant is declared twice',
+  };
+
+  for (const rule of UNVERIFIABLE_FROM_HUNK) {
+    const sample = samples[rule.kind];
+    assert(sample, `no sample phrasing for rule "${rule.kind}"`);
+    assert(rule.pattern.test(sample), `rule "${rule.kind}" does not match its own sample`);
+  }
+  assert(
+    Object.keys(samples).length === UNVERIFIABLE_FROM_HUNK.length,
+    'samples and rules have drifted apart',
+  );
+});
+
+test('the shared context tells agents a hunk is a fragment', () => {
+  // The prose half of the same fix. The guard above catches what reaches the
+  // reader; this is what stops the claim being made at all.
+  const shared = fs.readFileSync(path.join(ROOT, 'shared/rn-context.md'), 'utf8');
+  for (const needle of ['A diff hunk is a fragment', 'Absence inside it proves nothing']) {
+    assert(shared.includes(needle), `shared/rn-context.md no longer says "${needle}"`);
+  }
+});
+
 test('the corrected triggers route on the real API spellings', () => {
   /**
    * Regression cover for four triggers that named APIs which do not exist, and
@@ -873,18 +1019,40 @@ test('the corrected triggers route on the real API spellings', () => {
    * trigger regresses to a plausible-but-wrong spelling, the guard in
    * scripts/lib/triggers.mjs catches the claim and this catches the effect.
    */
+  // One entry per case, added lines as an ARRAY. An earlier version embedded a
+  // literal "\n+" inside the string to get a second line, which produced a
+  // perfectly valid diff but read like a double "+" prefix — a reviewer flagged
+  // it as malformed. The diff was fine; the expression was not worth defending.
+  // Let the builder own every "+" and the ambiguity disappears.
   const cases = [
-    ['rn-push', 'src/Boot.tsx', '    await messaging().registerDeviceForRemoteMessages();'],
-    ['rn-push', 'src/Boot.tsx', '    const st = await messaging().requestPermission();\n+    if (st === messaging.AuthorizationStatus.AUTHORIZED) register();'],
+    ['rn-push', 'src/Boot.tsx', ['    await messaging().registerDeviceForRemoteMessages();']],
+    [
+      'rn-push',
+      'src/Boot.tsx',
+      [
+        '    const st = await messaging().requestPermission();',
+        '    if (st === messaging.AuthorizationStatus.AUTHORIZED) register();',
+      ],
+    ],
     // Deliberately NOT *.test.tsx: that filename routes rn-testing on its own
     // globs, which would make the trigger untested.
-    ['rn-testing', 'src/testUtils.tsx', '    expect(screen.getByText(label)).toBeOnTheScreen();'],
-    ['rn-animation', 'src/Row.tsx', '    <Animated.View layout={LinearTransition} />'],
+    ['rn-testing', 'src/testUtils.tsx', ['    expect(screen.getByText(label)).toBeOnTheScreen();']],
+    ['rn-animation', 'src/Row.tsx', ['    <Animated.View layout={LinearTransition} />']],
+    // Deprecated in Reanimated 4 but still exported, and recorded as such in
+    // scripts/data/rn-lib-versions.json. `usescrolloffset` is not a substring
+    // of it, so a diff using the old name routed nowhere near the agent whose
+    // job is to flag the migration.
+    ['rn-animation', 'src/Row.tsx', ['    const off = useScrollViewOffset(ref);']],
   ];
 
   const missed = [];
-  for (const [id, file, line] of cases) {
-    const diff = `diff --git a/${file} b/${file}\n+++ b/${file}\n+${line}`;
+  for (const [id, file, added] of cases) {
+    const line = added.join(' ');
+    const diff = [
+      `diff --git a/${file} b/${file}`,
+      `+++ b/${file}`,
+      ...added.map((l) => `+${l}`),
+    ].join('\n');
     const ids = route([file], agents, { diffText: diff }).selected.map((a) => a.id);
     if (!ids.includes(id)) missed.push(`${id}: "${line.trim().slice(0, 56)}…" routed ${ids.join(', ') || 'nobody'}`);
   }

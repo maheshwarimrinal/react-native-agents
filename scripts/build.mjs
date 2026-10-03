@@ -54,6 +54,17 @@ const check = args.includes('--check');
  * The same shape as a test whose assertions never run.
  */
 /**
+ * A file this build writes into any `--out` target, purely so a later build can
+ * recognise the directory as its own and reuse it.
+ *
+ * The first version of the guard below keyed on `index.json` instead. That is a
+ * generic filename — any npm package directory has one — so `--out` pointed at
+ * an unrelated project would have been accepted and then pruned. A marker only
+ * this script writes cannot be there by coincidence.
+ */
+const BUILD_MARKER = '.rn-agents-build';
+
+/**
  * Deliberately NOT exported. This file runs a build at import time, so an
  * export invites a test to import it and trigger one as a side effect — the
  * same trap that made `refresh-api-snapshot.mjs` fire a network refresh on
@@ -61,10 +72,16 @@ const check = args.includes('--check');
  * which is what users actually hit.
  */
 function parseOutDir(argv) {
-  const outArg = argv.find((a) => a.startsWith('--out'));
+  // Exact flag only. `startsWith('--out')` also matched `--outDir` and
+  // `--output`, quietly treating the next token as the destination — so a typo
+  // aimed the build, and the prune that follows it, somewhere the user never
+  // named.
+  const outArg = argv.find((a) => a === '--out' || a.startsWith('--out='));
   if (!outArg) return null;
 
-  const value = outArg.includes('=') ? outArg.split('=')[1] : argv[argv.indexOf(outArg) + 1];
+  const value = outArg.startsWith('--out=')
+    ? outArg.slice('--out='.length)
+    : argv[argv.indexOf(outArg) + 1];
 
   // `path.resolve('')` is the current working directory, and a directory path
   // is always truthy — so validating AFTER resolving cannot catch a missing
@@ -79,15 +96,15 @@ function parseOutDir(argv) {
 
   // Defence in depth, because the failure mode is unrecoverable data loss and
   // one bad argument should not be able to cause it. A build may only write
-  // into somewhere that is empty, absent, or recognisably a previous build.
-  // `--out .` and `--out ~` now refuse instead of pruning.
+  // into somewhere absent, empty, or marked as a previous build of this repo.
+  // `--out .`, `--out ~` and `--out ../some-other-project` all refuse.
   if (fs.existsSync(dir)) {
     if (!fs.statSync(dir).isDirectory()) throw new Error(`--out ${value} is not a directory`);
     const entries = fs.readdirSync(dir);
-    if (entries.length && !entries.includes('index.json')) {
+    if (entries.length && !entries.includes(BUILD_MARKER)) {
       throw new Error(
-        `refusing to build into ${dir}: not empty and does not look like build output ` +
-          `(no index.json). Its contents would be pruned.`,
+        `refusing to build into ${dir}: not empty and not a previous build of this repo ` +
+          `(no ${BUILD_MARKER}). Its contents would be pruned. Pass an empty or new directory.`,
       );
     }
   }
@@ -194,6 +211,11 @@ try {
       `could not remove ${failed.length} stale file(s) (${failed[0].code}) — e.g. ${failed[0].file}`,
     );
   }
+
+  // Written after the prune, which would otherwise delete it as a file the
+  // build did not generate. Lets a repeat `--out` into the same directory be
+  // recognised instead of refused.
+  if (outDir) fs.writeFileSync(path.join(outDir, BUILD_MARKER), `${VERSION}\n`);
 
   // TELEMETRY.md lives in the repo, not in the build output. A build aimed
   // somewhere else must not touch it, or `--out` stops being side-effect free

@@ -1773,6 +1773,13 @@ await testAsync('--out refuses every argument that could prune a real directory'
     [['--out', guarded], 'a non-empty directory that is not build output'],
   ];
 
+  // A directory holding an unrelated `index.json` — every npm package has one.
+  // The guard used to accept it as "looks like build output" and prune it.
+  const decoy = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-decoy-'));
+  fs.writeFileSync(path.join(decoy, 'index.json'), '{"not":"ours"}\n');
+  fs.writeFileSync(path.join(decoy, 'src.js'), 'module.exports = 1;\n');
+  mustRefuse.push([['--out', decoy], 'a directory whose index.json is not ours']);
+
   for (const [argv, why] of mustRefuse) {
     let exitCode = 0;
     try {
@@ -1794,7 +1801,63 @@ await testAsync('--out refuses every argument that could prune a real directory'
     fs.readdirSync(guarded).length === 1,
     `a refused --out wrote into the target: ${fs.readdirSync(guarded).join(', ')}`,
   );
+  assert(
+    fs.readdirSync(decoy).sort().join(',') === 'index.json,src.js',
+    `a refused --out pruned the decoy directory: ${fs.readdirSync(decoy).join(', ')}`,
+  );
+
+  /**
+   * A near-miss flag must not be read as `--out`. `startsWith('--out')` also
+   * matched `--outDir` and `--output`, so a typo silently aimed the build — and
+   * the prune that follows it — at a directory the user never named as output.
+   * These are unknown flags, so the build should ignore them and write to
+   * `dist/` as normal; what matters is that they do NOT consume the next token.
+   */
+  for (const flag of ['--outDir', '--output']) {
+    let exitCode = 0;
+    try {
+      execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), flag, decoy, '--check'], {
+        stdio: 'pipe',
+      });
+    } catch (err) {
+      exitCode = err.status ?? 1;
+    }
+    // --check exits 0 when dist/ is in sync; the point is that it ran against
+    // dist/ rather than treating `decoy` as the destination.
+    assert(exitCode === 0, `${flag} ${decoy} was mistaken for --out (exit ${exitCode})`);
+    assert(
+      fs.readdirSync(decoy).sort().join(',') === 'index.json,src.js',
+      `${flag} was treated as --out and touched the decoy`,
+    );
+  }
+
   fs.rmSync(guarded, { recursive: true, force: true });
+  fs.rmSync(decoy, { recursive: true, force: true });
+});
+
+await testAsync('--out into the same directory twice is allowed', () => {
+  /**
+   * The marker file makes a rebuild recognisable rather than refused. Without
+   * it the "absent or empty" rule would reject every second build into the same
+   * scratch directory, and the obvious workaround — keying on a generic
+   * filename like `index.json` — is what made the guard unsafe in the first
+   * place.
+   */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-rebuild-'));
+  try {
+    for (const pass of [1, 2]) {
+      execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), '--out', dir], {
+        stdio: 'pipe',
+      });
+      assert(fs.existsSync(path.join(dir, 'index.json')), `pass ${pass} produced no index.json`);
+      assert(
+        fs.existsSync(path.join(dir, '.rn-agents-build')),
+        `pass ${pass} left no build marker, so a third build would be refused`,
+      );
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a --out build leaves the committed dist/ untouched', () => {
