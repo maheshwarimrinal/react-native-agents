@@ -47,6 +47,7 @@ triggers:
   - interpolate
   - usescrolloffset
   - usescrollviewoffset
+  - combinetransition
   - useanimatedscrollhandler
   - animated.view
   - createanimatedcomponent

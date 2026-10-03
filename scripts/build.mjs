@@ -99,6 +99,24 @@ function parseOutDir(argv) {
   // into somewhere absent, empty, or marked as a previous build of this repo.
   // `--out .`, `--out ~` and `--out ../some-other-project` all refuse.
   if (fs.existsSync(dir)) {
+    /**
+     * lstat, not stat: a symlink to a directory passes `isDirectory()` and
+     * `readdirSync` reads through it, so every check in this function applies to
+     * the target while the user only named the link. Verified — with a marker
+     * inside the target, `--out link` pruned a file in the real directory.
+     *
+     * The safety rule itself survives the indirection, so this is not a bypass.
+     * It is refused anyway because on a destructive path the directory the user
+     * typed should be the directory that is affected, and a marker is much
+     * easier to acquire accidentally through a symlink into a shared or cached
+     * tree than by typing the real path.
+     */
+    if (fs.lstatSync(dir).isSymbolicLink()) {
+      throw new Error(
+        `refusing to build into ${value}: it is a symlink. Pass the real directory, so the ` +
+          `path pruned is the path you named.`,
+      );
+    }
     if (!fs.statSync(dir).isDirectory()) throw new Error(`--out ${value} is not a directory`);
     const entries = fs.readdirSync(dir);
     if (entries.length && !entries.includes(BUILD_MARKER)) {

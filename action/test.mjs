@@ -1094,6 +1094,18 @@ test('the corrected triggers route on the real API spellings', () => {
     // of it, so a diff using the old name routed nowhere near the agent whose
     // job is to flag the migration.
     ['rn-animation', 'src/Row.tsx', ['    const off = useScrollViewOffset(ref);']],
+    // Same gap, worse: REMOVED in Reanimated 4. Three reference files tell the
+    // reader to grep for it and layout-and-css.md documents the replacement,
+    // yet no trigger matched it — the agent could not route on an API it exists
+    // to flag.
+    //
+    // Every other identifier here is deliberately neutral. Two earlier versions
+    // of this fixture routed on something else and tested nothing: the first
+    // used `Animated.View` (the `animated.view` trigger), the second passed
+    // `fadeIn, fadeOut` as arguments — and `fadein` is a trigger too. Both left
+    // the suite green with `combinetransition` deleted. Checked by deletion, not
+    // by reading the trigger list.
+    ['rn-animation', 'src/List.tsx', ['    const t = combineTransition(enter, exit);']],
   ];
 
   const missed = [];
