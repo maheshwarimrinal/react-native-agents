@@ -992,17 +992,39 @@ test('trigger provenance has no entries for triggers that no longer exist', () =
    * trigger exists that does not. Stale documentation about correctness is
    * worse than none, because it is trusted.
    */
-  const live = new Set();
-  for (const agent of agents) {
-    for (const raw of agent.triggers ?? []) {
-      if (isIdentifierShapedTrigger(raw)) live.add(String(raw).toLowerCase());
-    }
-  }
+  /**
+   * `live` comes from auditTriggers rather than being rebuilt here. Two
+   * independent derivations of the same set are two things to keep in step, and
+   * a reviewer read this test as comparing sets built by different rules — it
+   * was not, but only because both happened to call the same predicate. Taking
+   * the set from the function that already computed it makes that structural
+   * instead of coincidental.
+   */
+  const { live } = auditTriggers(agents, TRIGGER_PROVENANCE, LIB_VERSIONS);
 
-  const orphans = Object.keys(TRIGGER_PROVENANCE.triggers ?? {}).filter((t) => !live.has(t));
+  // Both sides filtered by the same predicate, so an entry can only be an
+  // orphan for the one reason this test is about: no agent declares it.
+  const orphans = Object.keys(TRIGGER_PROVENANCE.triggers ?? {})
+    .filter((t) => isIdentifierShapedTrigger(t))
+    .filter((t) => !live.has(t.toLowerCase()));
   assert(
     orphans.length === 0,
     `trigger-provenance.json documents triggers no agent declares: ${orphans.join(', ')}`,
+  );
+
+  /**
+   * And the other direction: a provenance key that the guard would never look
+   * at is dead weight, because `auditTriggers` only consults keys for triggers
+   * that pass the predicate. Without this, such a key is both unused and
+   * exempt from the orphan check above.
+   */
+  const unreachable = Object.keys(TRIGGER_PROVENANCE.triggers ?? {}).filter(
+    (t) => !isIdentifierShapedTrigger(t),
+  );
+  assert(
+    unreachable.length === 0,
+    `trigger-provenance.json has keys the guard never reads (too short, or containing a space ` +
+      `or hyphen): ${unreachable.join(', ')}`,
   );
 });
 

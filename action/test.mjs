@@ -925,6 +925,57 @@ test('an empty completion says which of its causes happened', () => {
   );
 });
 
+await testAsync('complete() throws EmptyCompletionError, never a TypeError', async () => {
+  /**
+   * End-to-end over the stubbed transport, because the value of this code is the
+   * diagnosis and the one way to lose it is to crash while producing it. Both
+   * providers currently return a string for `text`, so `res.text.trim()` worked
+   * — but a provider that returns no `text` field at all would have thrown
+   * "Cannot read properties of undefined (reading 'trim')" and replaced the
+   * explanation with a stack trace about `trim`.
+   */
+  const realFetch = globalThis.fetch;
+  const bodies = [
+    // Truncated with no text block at all: the shape that reaches `trim`.
+    { label: 'no content array', body: { usage: { input: 10, output: 0 }, stop_reason: 'max_tokens' } },
+    // Content present, but every block filtered out.
+    {
+      label: 'thinking-only content',
+      body: {
+        content: [{ type: 'thinking', thinking: 'hmm' }],
+        usage: { input: 10, output: 50 },
+        stop_reason: 'end_turn',
+      },
+    },
+  ];
+
+  try {
+    for (const { label, body } of bodies) {
+      globalThis.fetch = async () => new Response(JSON.stringify(body), { status: 200 });
+      const llm = new LLM({ provider: 'anthropic', apiKey: 'test-key', model: 'claude-sonnet-5' });
+
+      let caught;
+      try {
+        await llm.complete({ system: 's', user: 'u' });
+      } catch (err) {
+        caught = err;
+      }
+
+      assert(caught, `${label}: complete() resolved instead of throwing`);
+      assert(
+        caught instanceof EmptyCompletionError,
+        `${label}: threw ${caught.name} (${caught.message}) rather than EmptyCompletionError`,
+      );
+      assert(
+        !/trim|undefined/.test(caught.message),
+        `${label}: the message leaked a TypeError about trim: ${caught.message}`,
+      );
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('absence-from-hunk claims are annotated, not dropped', () => {
   /**
    * The real reports this exists for. Three agents told this repository that

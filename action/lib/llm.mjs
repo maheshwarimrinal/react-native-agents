@@ -285,11 +285,23 @@ export class LLM {
      * records `err.message` per agent, so a precise message here lands directly
      * in the PR comment.
      */
-    if (!res.text.trim()) {
+    /**
+     * Coerced rather than assumed, as unreachable defence.
+     *
+     * Both current providers always produce a string — `#anthropic` joins a
+     * filtered array and `#openai` falls back to `''` — so no test can drive
+     * `res.text` to undefined through the public path, and a mutation removing
+     * this coercion leaves the suite green. It stays because the cost is one
+     * line and the failure it prevents is the expensive kind: a TypeError here
+     * would replace the diagnosis this block exists to produce with a stack
+     * trace about `trim`. A future provider is the only way to reach it.
+     */
+    const text = typeof res.text === 'string' ? res.text : '';
+    if (!text.trim()) {
       throw new EmptyCompletionError(describeEmptyCompletion(res, this.maxOutputTokens));
     }
 
-    return res.text;
+    return text;
   }
 
   async #anthropic({ system, user }) {
