@@ -1023,19 +1023,49 @@ test('no test asserts the existence of a directory it created itself', () => {
 
   for (const rel of ['scripts/test.mjs', 'action/test.mjs', 'evals/run.mjs']) {
     /**
-     * Comments stripped first, and this is not hypothetical: the first run of
-     * this guard flagged its own doc comment, which quotes the bug it detects.
-     * The repo has made this mistake twice before — the CJK sweep that only
-     * scanned agent prose, and the export capture that `{@link}` in a JSDoc cut
-     * short. `stripCommentsAndStrings` blanks comments while preserving
-     * newlines, so reported line numbers still point at real source.
+     * Comments must be excluded — the first run of this guard flagged its own
+     * doc comment, which quotes the bug it detects.
+     *
+     * But NOT with `stripCommentsAndStrings`. That was the obvious reach and it
+     * was wrong: it is built for eval fixtures (TSX snippets), and this file is
+     * dense with regex literals like `/[,)]/`, whose brackets and quotes desync
+     * its string-state machine. Measured on this file it silently ate real code
+     * — 4 of 5 `assert(fs.existsSync(...))` sites, 3 of 10 `mkdtempSync` sites.
+     * The guard passed because it could barely see anything, which is precisely
+     * the can't-fail failure it exists to detect. Caught only because a review
+     * comment about the mkdir gap sent me to measure it.
+     *
+     * A line-level test is cruder and correct here. Every false positive seen
+     * was a JSDoc continuation line, and a regex literal never renders a bare
+     * `//` or `/*` in source (the slashes are escaped), so matching on the
+     * line's leading characters needs no parser.
      */
-    const src = stripCommentsAndStrings(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+    const lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n');
+    const isComment = (text) => /^\s*(?:\*|\/\/|\/\*)/.test(text);
+    const src = lines.map((l) => (isComment(l) ? '' : l)).join('\n');
 
     // Variables assigned from a directory the test itself creates.
-    const created = new Set(
-      [...src.matchAll(/(?:const|let|var)\s+([\w$]+)\s*=\s*fs\.mkdtempSync\(/g)].map((m) => m[1]),
-    );
+    /**
+     * Both ways a test makes a directory of its own, because both support the
+     * same vacuous assertion:
+     *
+     *   const d = fs.mkdtempSync(...);      assert(fs.existsSync(d))
+     *   const d = path.join(...); fs.mkdirSync(d); assert(fs.existsSync(d))
+     *
+     * The first version of this guard collected only `mkdtempSync` while its own
+     * comment promised `mkdtemp`/`mkdir` — a doc/code mismatch with no live
+     * instance, so nothing failed and the gap would have sat there until someone
+     * trusted the comment. This file already calls `fs.mkdirSync(symTarget)`,
+     * which made the next test extended from it the likely victim.
+     *
+     * Only bare identifiers are collected. `fs.mkdirSync(path.join(dir, 'ios'))`
+     * creates a path no variable names, so no later assertion can be correlated
+     * with it.
+     */
+    const created = new Set([
+      ...[...src.matchAll(/(?:const|let|var)\s+([\w$]+)\s*=\s*fs\.mkdtempSync\(/g)].map((m) => m[1]),
+      ...[...src.matchAll(/fs\.mkdirSync\(\s*([\w$]+)\s*[,)]/g)].map((m) => m[1]),
+    ]);
     if (!created.size) continue;
 
     for (const m of src.matchAll(/assert\(\s*\n?\s*fs\.existsSync\(\s*([\w$]+)\s*\)/g)) {
