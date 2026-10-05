@@ -35,6 +35,21 @@ triggers:
   - badge count
   - notifee
   - onmessage
+  - getmessaging
+  - onnotificationopenedapp
+  - getinitialnotification
+  - setbackgroundmessagehandler
+  - registerdeviceforremotemessages
+  - post_notifications
+  - authorizationstatus
+  - getapnstoken
+  - ontokenrefresh
+  - expo-notifications
+  - getexpopushtoken
+  - addnotificationresponsereceived
+  - addnotificationreceived
+  - setnotificationhandler
+  - lastnotificationresponse
 references:
   - the-delivery-chain
   - platform-setup

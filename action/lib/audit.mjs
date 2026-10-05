@@ -238,8 +238,16 @@ export async function runAudit({
     }
   }
 
+  // Applied after dedupe so a claim surviving as the kept copy of two
+  // duplicates still carries the caveat, and so `flagged` counts findings the
+  // reader will actually see rather than ones already collapsed away.
+  const { findings: checked, flagged: unverifiableCount } = flagUnverifiableClaims(
+    dedupe(findings).sort(bySeverityThenFile),
+  );
+
   return {
-    findings: dedupe(findings).sort(bySeverityThenFile),
+    findings: checked,
+    unverifiableCount,
     perAgent,
     errors,
     budgetHit,
@@ -591,6 +599,97 @@ export function parseFindings(raw) {
         verify: typeof f.verify === 'string' ? f.verify.trim() : '',
       })),
   };
+}
+
+/**
+ * Claims that cannot be true-or-false from a diff hunk.
+ *
+ * An agent reviewing a PR sees changed lines plus a little context. The imports
+ * are hundreds of lines above and it cannot see them. So "X is not imported" is
+ * not an observation, it is a guess about the part of the file it was not shown
+ * — and three different agents have now reported exactly that against this
+ * repository as a P1, for an import sitting at line 31 of a 2,000-line file.
+ *
+ * The other shapes fail the same way: a symbol declared earlier, an export whose
+ * call sites are in files this agent was not given, a `catch` just below the
+ * window.
+ *
+ * Patterns are deliberately narrow. They must match a *claim of absence*, not a
+ * mention of the subject: "add an import for os" is advice and stays untouched;
+ * "os is not imported" is the guess. A guard that fires on every finding
+ * mentioning an import would annotate everything and teach readers to skip the
+ * caveat.
+ */
+export const UNVERIFIABLE_FROM_HUNK = [
+  {
+    kind: 'missing import',
+    pattern:
+      /\b(?:is|are|was|were)\s+(?:never\s+|not\s+)(?:being\s+)?import(?:ed)?\b|\bmissing\s+(?:an?\s+)?import\b|\bno\s+(?:corresponding\s+)?import\b|\bimport\s+is\s+missing\b|\bwithout\s+being\s+imported\b/i,
+  },
+  {
+    kind: 'undefined symbol',
+    pattern: /\bReferenceError\b|\bis\s+not\s+defined\b|\bis\s+undefined\s+(?:here|at\s+runtime)\b/i,
+  },
+  {
+    kind: 'unused or uncalled',
+    pattern:
+      /\b(?:is|are)\s+(?:never|not)\s+(?:used|called|referenced|invoked)\b|\bnothing\s+(?:calls|references|uses)\b|\bdead\s+code\b|\bunused\s+export\b/i,
+  },
+  {
+    kind: 'duplicate declaration',
+    pattern: /\b(?:declared|defined)\s+twice\b|\bduplicate\s+(?:declaration|definition)\b/i,
+  },
+  {
+    /**
+     * Unreachable-defence suggestions. Whether a value can be null, or whether a
+     * global exists, depends on the call graph and on `engines` — neither of
+     * which is in the hunk. Reported three reviews running here (`res.text`,
+     * `res.usage`, `Response` twice) and unreachable every time.
+     *
+     * Narrow on purpose: it must match a *conditional* claim about a value the
+     * agent has not traced, not an observed one. "returns undefined here, see
+     * line 12" stays untouched; "if a provider omits usage, this throws" does
+     * not.
+     */
+    kind: 'unreachable null or missing global',
+    pattern:
+      /\bif\s+(?:a|an|the|some|any)\s+\w+[^.\n]{0,40}\b(?:omits|returns|lacks|does not (?:have|return|provide))\b|\bmay(?:\s+be)?\s+(?:be\s+)?undefined\b|\bpossibly\s+undefined\b|\bis\s+only\s+(?:a\s+)?global\s+(?:in|on|since)\b|\bundefined\s+(?:in|on)\s+(?:older|earlier)\s+\w+/i,
+  },
+];
+
+/**
+ * Annotate — never drop — findings whose claim the agent could not have checked.
+ *
+ * Dropping would be the false-green this package exists to avoid: sometimes the
+ * import really is missing. Silently downgrading is no better, because the
+ * severity is the only thing a reader skims. So the finding survives at its
+ * stated severity with the uncertainty attached to it, which is the honest
+ * version of what the agent actually knew.
+ *
+ * @param {any[]} findings
+ * @returns {{findings: any[], flagged: number}}
+ */
+export function flagUnverifiableClaims(findings) {
+  let flagged = 0;
+
+  const annotated = findings.map((f) => {
+    const text = `${f.title ?? ''}\n${f.why ?? ''}`;
+    const hit = UNVERIFIABLE_FROM_HUNK.find((rule) => rule.pattern.test(text));
+    if (!hit) return f;
+
+    flagged += 1;
+    const caveat =
+      `Unverified: this is a "${hit.kind}" claim, which cannot be established from a diff ` +
+      `hunk — the relevant code may sit outside the lines this agent was shown. Confirm ` +
+      `against the whole file before acting on it.`;
+    return {
+      ...f,
+      unverifiable: hit.kind,
+      why: f.why ? `${f.why}\n\n${caveat}` : caveat,
+    };
+  });
+
+  return { findings: annotated, flagged };
 }
 
 /**

@@ -17,6 +17,8 @@ triggers:
   - offline
   - offline-first
   - netinfo
+  - isinternetreachable
+  - onlinemanager
   - network state
   - sync
   - background sync

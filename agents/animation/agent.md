@@ -43,9 +43,16 @@ triggers:
   - exiting animation
   - fadein
   - slideinright
-  - layouttransition
+  - lineartransition
   - interpolate
   - usescrolloffset
+  - usescrollviewoffset
+  - combinetransition
+  - extrapolate
+  - makeshareable
+  - isshareableref
+  - shareablemappingcache
+  - callmicrotasks
   - useanimatedscrollhandler
   - animated.view
   - createanimatedcomponent

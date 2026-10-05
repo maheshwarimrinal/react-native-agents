@@ -933,6 +933,246 @@ test('every claimed import is either verified or explicitly unverified', () => {
   }
 });
 
+/* ------------------------------------------------------------------ *
+ * Trigger strings are identifier claims too
+ * ------------------------------------------------------------------ */
+
+const TRIGGER_PROVENANCE = JSON.parse(
+  fs.readFileSync(path.join(ROOT, 'scripts/data/trigger-provenance.json'), 'utf8'),
+);
+
+const { auditTriggers, isIdentifierShapedTrigger } = await import(
+  path.join(ROOT, 'scripts/lib/triggers.mjs')
+);
+const { collectDyingApis, unroutedDyingApis } = await import(
+  path.join(ROOT, 'scripts/lib/deprecations.mjs')
+);
+const { BUILD_MARKER } = await import(path.join(ROOT, 'scripts/lib/build-constants.mjs'));
+
+/**
+ * Dying APIs we knowingly do not route on, each with a reason.
+ *
+ * Empty on purpose. It exists so that a future "we genuinely do not want a
+ * trigger for this" is a line someone writes down, rather than a reason to
+ * weaken the guard — the same bargain as the `!` reasons in
+ * trigger-provenance.json.
+ */
+const DYING_API_EXEMPTIONS = [];
+
+test('every identifier-shaped trigger names an API that exists', () => {
+  /**
+   * A trigger is matched against the added lines of a diff, so it is a claim
+   * about text that appears in real code — the same kind of factual claim an
+   * import is, and until now the only one nothing checked.
+   *
+   * The commit that fixed routing recall introduced three wrong ones at once:
+   * `registerdevicefornotifications` (RNFB's API is
+   * `registerDeviceForRemoteMessages`), `tobeintthedocument` (jest-dom's
+   * matcher, misspelled — RNTL's is `toBeOnTheScreen`) and `layouttransition`
+   * (Reanimated's is `LinearTransition`). Each one silently routed on nothing.
+   * A trigger that matches no code is invisible: the agent simply never fires,
+   * and the eval suite cannot see the absence because there is no finding to
+   * miss.
+   *
+   * Substring, not equality, because triggers are deliberately written as
+   * prefixes — `getexpopushtoken` is meant to catch `getExpoPushTokenAsync`,
+   * and `acknowledgepurchase` to catch `acknowledgePurchaseAndroid`.
+   */
+  const { missing, invented, checked } = auditTriggers(
+    agents,
+    TRIGGER_PROVENANCE,
+    LIB_VERSIONS,
+  );
+
+  assert(missing.length === 0, `triggers with no usable provenance:\n    ${missing.join('\n    ')}`);
+  assert(invented.length === 0, `invented triggers:\n    ${invented.join('\n    ')}`);
+
+  /**
+   * The floor exists because the `!reason` escape hatch is unbounded: every
+   * trigger could be excused into prose and the guard would pass with nothing
+   * checked. Raise this when a surface is added; never lower it to make a
+   * failure go away — if a trigger stopped being checkable, that is the finding.
+   */
+  assert(
+    checked >= 30,
+    `only ${checked} triggers were checked against a real export surface (floor is 30) — has a surface been dropped, or a trigger excused into a "!reason"?`,
+  );
+});
+
+test('no test asserts the existence of a directory it created itself', () => {
+  /**
+   * Third time review has caught a test in this repository that could not fail:
+   *
+   *   1. a babel-config routing test that passed because keyword triggers
+   *      re-added the file;
+   *   2. the `--check` test, which compared a fresh build against a `dist/` the
+   *      same process had just regenerated;
+   *   3. `assert(fs.existsSync(DIST))` where DIST came from `mkdtempSync` ten
+   *      lines above — green whether or not the build wrote anything.
+   *
+   * The first two were one-offs. The third has a shape: create a path, then
+   * assert the path exists. That is mechanically detectable, so it gets a guard
+   * like every other class that recurred, instead of relying on the next
+   * reviewer.
+   *
+   * Scoped to `mkdtemp`/`mkdir` variables rather than any `existsSync`, because
+   * asserting that a path someone *else* produced exists is the normal, useful
+   * form of that assertion.
+   */
+  const offenders = [];
+
+  for (const rel of ['scripts/test.mjs', 'action/test.mjs', 'evals/run.mjs']) {
+    /**
+     * Comments must be excluded — the first run of this guard flagged its own
+     * doc comment, which quotes the bug it detects.
+     *
+     * But NOT with `stripCommentsAndStrings`. That was the obvious reach and it
+     * was wrong: it is built for eval fixtures (TSX snippets), and this file is
+     * dense with regex literals like `/[,)]/`, whose brackets and quotes desync
+     * its string-state machine. Measured on this file it silently ate real code
+     * — 4 of 5 `assert(fs.existsSync(...))` sites, 3 of 10 `mkdtempSync` sites.
+     * The guard passed because it could barely see anything, which is precisely
+     * the can't-fail failure it exists to detect. Caught only because a review
+     * comment about the mkdir gap sent me to measure it.
+     *
+     * A line-level test is cruder and correct here. Every false positive seen
+     * was a JSDoc continuation line, and a regex literal never renders a bare
+     * `//` or `/*` in source (the slashes are escaped), so matching on the
+     * line's leading characters needs no parser.
+     */
+    const lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n');
+    const isComment = (text) => /^\s*(?:\*|\/\/|\/\*)/.test(text);
+    const src = lines.map((l) => (isComment(l) ? '' : l)).join('\n');
+
+    // Variables assigned from a directory the test itself creates.
+    /**
+     * Both ways a test makes a directory of its own, because both support the
+     * same vacuous assertion:
+     *
+     *   const d = fs.mkdtempSync(...);      assert(fs.existsSync(d))
+     *   const d = path.join(...); fs.mkdirSync(d); assert(fs.existsSync(d))
+     *
+     * The first version of this guard collected only `mkdtempSync` while its own
+     * comment promised `mkdtemp`/`mkdir` — a doc/code mismatch with no live
+     * instance, so nothing failed and the gap would have sat there until someone
+     * trusted the comment. This file already calls `fs.mkdirSync(symTarget)`,
+     * which made the next test extended from it the likely victim.
+     *
+     * Only bare identifiers are collected. `fs.mkdirSync(path.join(dir, 'ios'))`
+     * creates a path no variable names, so no later assertion can be correlated
+     * with it.
+     */
+    const created = new Set([
+      ...[...src.matchAll(/(?:const|let|var)\s+([\w$]+)\s*=\s*fs\.mkdtempSync\(/g)].map((m) => m[1]),
+      ...[...src.matchAll(/fs\.mkdirSync\(\s*([\w$]+)\s*[,)]/g)].map((m) => m[1]),
+    ]);
+    if (!created.size) continue;
+
+    for (const m of src.matchAll(/assert\(\s*\n?\s*fs\.existsSync\(\s*([\w$]+)\s*\)/g)) {
+      if (created.has(m[1])) {
+        const line = src.slice(0, m.index).split('\n').length;
+        offenders.push(
+          `${rel}:${line}: asserts fs.existsSync(${m[1]}), but ${m[1]} is the directory this ` +
+            `test created — the assertion cannot fail. Assert an artifact inside it instead.`,
+        );
+      }
+    }
+  }
+
+  assert(offenders.length === 0, `assertions that cannot fail:\n    ${offenders.join('\n    ')}`);
+});
+
+test('every API the corpus calls dying is an API the router can see', () => {
+  /**
+   * The agents' job includes "this was removed, here is the replacement". That
+   * advice is unreachable unless a diff containing the old name routes the agent
+   * carrying it, and only a trigger matches a diff body. So a documented
+   * removal with no trigger is a finding we wrote down and then hid.
+   *
+   * Review found this one instance per round — `useScrollViewOffset`, then
+   * `combineTransition` — each correct, each a sample of the same list. Running
+   * the list found ten, including six worklets names and Apple's
+   * `verifyReceipt`. This test is here so the eleventh does not need a reviewer.
+   */
+  const unrouted = unroutedDyingApis(agents, LIB_VERSIONS, DYING_API_EXEMPTIONS);
+
+  assert(
+    unrouted.length === 0,
+    `deprecated or removed APIs that no trigger matches, so the migration advice ` +
+      `can never route:\n    ` +
+      unrouted.map(({ name, source }) => `${name}  (declared in ${source})`).join('\n    '),
+  );
+});
+
+test('the dying-API guard is actually looking at something', () => {
+  /**
+   * The guard above passes trivially if `collectDyingApis` returns nothing —
+   * a renamed JSON key or a broken prose regex would silently empty it and the
+   * suite would stay green. So assert the inputs, not just the verdict.
+   */
+  const dying = collectDyingApis(agents, LIB_VERSIONS);
+  assert(dying.size >= 13, `only ${dying.size} dying APIs collected; expected at least 13`);
+
+  // Both sources must contribute, or half the detector has quietly died.
+  const sources = [...dying.values()];
+  assert(
+    sources.some((s) => s.startsWith('libraries.') || s.startsWith('export_surfaces[')),
+    'no dying APIs came from the vendored deprecated_* lists',
+  );
+  assert(
+    sources.some((s) => /^rn-[a-z-]+\//.test(s)),
+    'no dying APIs came from agent prose — has the regex stopped matching?',
+  );
+
+  // The two instances review caught by hand must be among them.
+  for (const name of ['useScrollViewOffset', 'combineTransition']) {
+    assert(dying.has(name), `${name} is no longer collected as a dying API`);
+  }
+});
+
+test('trigger provenance has no entries for triggers that no longer exist', () => {
+  /**
+   * The inverse of the guard above. A trigger renamed or deleted leaves its
+   * provenance line behind, and the next person to read the file believes a
+   * trigger exists that does not. Stale documentation about correctness is
+   * worse than none, because it is trusted.
+   */
+  /**
+   * `live` comes from auditTriggers rather than being rebuilt here. Two
+   * independent derivations of the same set are two things to keep in step, and
+   * a reviewer read this test as comparing sets built by different rules — it
+   * was not, but only because both happened to call the same predicate. Taking
+   * the set from the function that already computed it makes that structural
+   * instead of coincidental.
+   */
+  const { live } = auditTriggers(agents, TRIGGER_PROVENANCE, LIB_VERSIONS);
+
+  // Both sides filtered by the same predicate, so an entry can only be an
+  // orphan for the one reason this test is about: no agent declares it.
+  const orphans = Object.keys(TRIGGER_PROVENANCE.triggers ?? {})
+    .filter((t) => isIdentifierShapedTrigger(t))
+    .filter((t) => !live.has(t.toLowerCase()));
+  assert(
+    orphans.length === 0,
+    `trigger-provenance.json documents triggers no agent declares: ${orphans.join(', ')}`,
+  );
+
+  /**
+   * And the other direction: a provenance key that the guard would never look
+   * at is dead weight, because `auditTriggers` only consults keys for triggers
+   * that pass the predicate. Without this, such a key is both unused and
+   * exempt from the orphan check above.
+   */
+  const unreachable = Object.keys(TRIGGER_PROVENANCE.triggers ?? {}).filter(
+    (t) => !isIdentifierShapedTrigger(t),
+  );
+  assert(
+    unreachable.length === 0,
+    `trigger-provenance.json has keys the guard never reads (too short, or containing a space ` +
+      `or hyphen): ${unreachable.join(', ')}`,
+  );
+});
+
 await testAsync('the export extractor survives JSDoc braces and offshore re-exports', async () => {
   /**
    * The first refresh reported six libraries as not exporting identifiers they
@@ -1650,11 +1890,204 @@ test('no agent repeats a trigger, glob, or reference within its own frontmatter'
  * Build output
  * ---------------------------------------------------------------- */
 
-const DIST = path.join(ROOT, 'dist');
+/**
+ * The suite builds into a scratch directory, never into the repo's `dist/`.
+ *
+ * It used to build into the real `dist/`, which had two consequences. Running
+ * `npm test` silently rewrote tracked files, so a developer's tree came back
+ * dirty for no reason they could see. And worse, the `dist/ is in sync` test
+ * two hundred lines below compared a fresh build against a `dist/` this same
+ * process had just regenerated — so it passed unconditionally. The CI gate that
+ * exists to catch "you edited an agent and forgot to rebuild" could not fail.
+ *
+ * Building elsewhere fixes both: the output assertions still run against a real
+ * build, and the sync check now compares a fresh build against what is actually
+ * committed.
+ */
+const DIST = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-test-dist-'));
+process.on('exit', () => {
+  try {
+    fs.rmSync(DIST, { recursive: true, force: true });
+  } catch {
+    /* best effort — a leftover temp dir is not worth failing a test run over */
+  }
+});
 
 await testAsync('build produces dist/', async () => {
-  await run('node', [path.join(ROOT, 'scripts/build.mjs')]);
-  assert(fs.existsSync(DIST), 'no dist/');
+  await run('node', [path.join(ROOT, 'scripts/build.mjs'), '--out', DIST]);
+
+  /**
+   * `existsSync(DIST)` was the whole assertion, and DIST is created by
+   * `mkdtempSync` a few lines above — so it passed whether or not the build
+   * wrote a single file. Third test this session caught asserting something
+   * that could not fail.
+   *
+   * Assert artifacts instead: one per target, so an emitter silently producing
+   * nothing fails here rather than in the hundred downstream tests that assume
+   * this one ran.
+   */
+  for (const rel of ['index.json', 'claude-code', 'cursor', 'agents-md']) {
+    assert(fs.existsSync(path.join(DIST, rel)), `build wrote no ${rel}`);
+  }
+  const index = JSON.parse(fs.readFileSync(path.join(DIST, 'index.json'), 'utf8'));
+  assert(
+    Array.isArray(index.agents) && index.agents.length === agents.length,
+    `index.json lists ${index.agents?.length} agents, expected ${agents.length}`,
+  );
+});
+
+await testAsync('--out refuses every argument that could prune a real directory', async () => {
+  /**
+   * `--out` writes and then calls pruneStale(), which deletes every file in
+   * the target that the build did not generate. That makes a bad argument
+   * unrecoverable rather than merely wrong, so the parser is tested like the
+   * destructive thing it is.
+   *
+   * The original bug: the value was validated *after* `path.resolve()`.
+   * `path.resolve('')` is the current working directory and a directory path
+   * is always truthy, so `if (outArg && !outDir)` could never fire — a bare
+   * `--out` aimed the build at the repo root and pruned it.
+   */
+  const guarded = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-guard-'));
+  fs.writeFileSync(path.join(guarded, 'precious.txt'), 'do not delete me\n');
+
+  const mustRefuse = [
+    [['--out'], 'a bare --out (resolves to cwd)'],
+    [['--out='], 'an empty --out= value'],
+    [['--out', '--check'], 'a following flag mistaken for the value'],
+    [['--out', guarded], 'a non-empty directory that is not build output'],
+  ];
+
+  // A directory holding an unrelated `index.json` — every npm package has one.
+  // The guard used to accept it as "looks like build output" and prune it.
+  const decoy = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-decoy-'));
+  fs.writeFileSync(path.join(decoy, 'index.json'), '{"not":"ours"}\n');
+  fs.writeFileSync(path.join(decoy, 'src.js'), 'module.exports = 1;\n');
+  mustRefuse.push([['--out', decoy], 'a directory whose index.json is not ours']);
+
+  /**
+   * A symlink to a marked build directory. `statSync` and `readdirSync` both
+   * read through it, so every check passed while the user only named the link —
+   * and the prune then deleted a file in the target. Confirmed by running it.
+   */
+  const symRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-symlink-'));
+  const symTarget = path.join(symRoot, 'real');
+  const symLink = path.join(symRoot, 'link');
+  fs.mkdirSync(symTarget);
+  fs.writeFileSync(path.join(symTarget, 'bystander.txt'), 'not generated by the build\n');
+  fs.writeFileSync(path.join(symTarget, BUILD_MARKER), '0.0.0\n');
+  // Windows refuses a directory symlink without an explicit type unless the
+  // process is elevated or developer mode is on. CI is Linux-only, so this is
+  // for contributors running `npm test` on Windows, not for the pipeline.
+  fs.symlinkSync(symTarget, symLink, process.platform === 'win32' ? 'junction' : 'dir');
+  mustRefuse.push([['--out', symLink], 'a symlink, even one pointing at a marked build dir']);
+
+  for (const [argv, why] of mustRefuse) {
+    let exitCode = 0;
+    try {
+      execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), ...argv], {
+        cwd: guarded,
+        stdio: 'pipe',
+      });
+    } catch (err) {
+      exitCode = err.status ?? 1;
+    }
+    assert(exitCode !== 0, `--out ${argv.slice(1).join(' ')} should be refused: ${why}`);
+  }
+
+  assert(
+    fs.existsSync(path.join(guarded, 'precious.txt')),
+    'a refused --out still deleted a file in the target directory',
+  );
+  assert(
+    fs.readdirSync(guarded).length === 1,
+    `a refused --out wrote into the target: ${fs.readdirSync(guarded).join(', ')}`,
+  );
+  assert(
+    fs.readdirSync(decoy).sort().join(',') === 'index.json,src.js',
+    `a refused --out pruned the decoy directory: ${fs.readdirSync(decoy).join(', ')}`,
+  );
+  assert(
+    fs.existsSync(path.join(symTarget, 'bystander.txt')),
+    'a refused --out followed the symlink and pruned a file in its target',
+  );
+
+  /**
+   * A near-miss flag must not be read as `--out`. `startsWith('--out')` also
+   * matched `--outDir` and `--output`, so a typo silently aimed the build — and
+   * the prune that follows it — at a directory the user never named as output.
+   * These are unknown flags, so the build should ignore them and write to
+   * `dist/` as normal; what matters is that they do NOT consume the next token.
+   */
+  for (const flag of ['--outDir', '--output']) {
+    let exitCode = 0;
+    try {
+      execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), flag, decoy, '--check'], {
+        stdio: 'pipe',
+      });
+    } catch (err) {
+      exitCode = err.status ?? 1;
+    }
+    // --check exits 0 when dist/ is in sync; the point is that it ran against
+    // dist/ rather than treating `decoy` as the destination.
+    assert(exitCode === 0, `${flag} ${decoy} was mistaken for --out (exit ${exitCode})`);
+    assert(
+      fs.readdirSync(decoy).sort().join(',') === 'index.json,src.js',
+      `${flag} was treated as --out and touched the decoy`,
+    );
+  }
+
+  fs.rmSync(guarded, { recursive: true, force: true });
+  fs.rmSync(decoy, { recursive: true, force: true });
+  fs.rmSync(symRoot, { recursive: true, force: true });
+});
+
+await testAsync('--out into the same directory twice is allowed', () => {
+  /**
+   * The marker file makes a rebuild recognisable rather than refused. Without
+   * it the "absent or empty" rule would reject every second build into the same
+   * scratch directory, and the obvious workaround — keying on a generic
+   * filename like `index.json` — is what made the guard unsafe in the first
+   * place.
+   */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-rebuild-'));
+  try {
+    for (const pass of [1, 2]) {
+      execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), '--out', dir], {
+        stdio: 'pipe',
+      });
+      assert(fs.existsSync(path.join(dir, 'index.json')), `pass ${pass} produced no index.json`);
+      assert(
+        fs.existsSync(path.join(dir, BUILD_MARKER)),
+        `pass ${pass} left no build marker, so a third build would be refused`,
+      );
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a --out build leaves the committed dist/ untouched', () => {
+  /**
+   * The guarantee the rest of this file depends on. If `--out` ever starts
+   * writing to `dist/` again, every build-output assertion below silently goes
+   * back to testing the thing it just produced.
+   */
+  const realDist = path.join(ROOT, 'dist');
+  const before = fs.statSync(path.join(realDist, 'index.json')).mtimeMs;
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-agents-isolation-'));
+  try {
+    execFileSync('node', [path.join(ROOT, 'scripts/build.mjs'), '--out', scratch], {
+      stdio: 'ignore',
+    });
+    assert(
+      fs.statSync(path.join(realDist, 'index.json')).mtimeMs === before,
+      'a --out build rewrote dist/index.json',
+    );
+    assert(fs.existsSync(path.join(scratch, 'index.json')), '--out produced nothing');
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
 });
 
 const expectedPaths = [

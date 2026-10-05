@@ -79,6 +79,62 @@ export class BudgetExceededError extends Error {
   }
 }
 
+/**
+ * Turn a provider response that carried no text into a sentence naming the
+ * cause. Pure, and exported, so the branches can be tested without a network
+ * call — the reason this was a single inline block that nothing exercised.
+ *
+ * Order matters: a refusal is the most specific thing that can be said, and a
+ * truncation is more actionable than a bare stop reason.
+ *
+ * @param {{text?: string, stopReason?: string|null, refusal?: string|null, blockTypes?: string[], usage: {output: number}}} res
+ * @param {number} maxOutputTokens
+ * @returns {string}
+ */
+export function describeEmptyCompletion(res, maxOutputTokens) {
+  const why = [];
+  if (res.refusal) why.push(`the model refused: ${String(res.refusal).slice(0, 200)}`);
+
+  if (res.stopReason === 'max_tokens' || res.stopReason === 'length') {
+    why.push(
+      `truncated at the ${maxOutputTokens}-token output cap before emitting any text ` +
+        `(${res.usage.output} output tokens billed) — raise the cap or narrow the agent's scope`,
+    );
+  } else if (res.stopReason && res.stopReason !== 'stop' && res.stopReason !== 'end_turn') {
+    why.push(`stop reason "${res.stopReason}"`);
+  }
+
+  // Content came back but every block was filtered out. Distinct from an empty
+  // body, and the fix is ours rather than the prompt's.
+  if (res.blockTypes?.length && !res.blockTypes.includes('text')) {
+    why.push(`response carried only ${res.blockTypes.join('/')} block(s), no text`);
+  }
+
+  if (!why.length) {
+    why.push(
+      `the response body was empty with stop reason ` +
+        `${res.stopReason ? `"${res.stopReason}"` : 'absent'} and ${res.usage.output} output tokens`,
+    );
+  }
+  return why.join('; ');
+}
+
+/**
+ * The model returned no usable text, and this says why.
+ *
+ * Separate from MalformedResponseError because the causes do not overlap: that
+ * one means the model wrote something we could not parse, this one means it
+ * wrote nothing at all. Conflating them produced "empty response" as the only
+ * diagnosis for truncation, refusal, and a genuinely blank body alike.
+ */
+export class EmptyCompletionError extends Error {
+  constructor(reason) {
+    super(`model returned no text — ${reason}`);
+    this.name = 'EmptyCompletionError';
+    this.reason = reason;
+  }
+}
+
 export class LLM {
   /**
    * @param {object} opts
@@ -211,7 +267,41 @@ export class LLM {
       `  ${this.model}: ${res.usage.input} in / ${res.usage.output} out · ` +
         `$${this.spentUsd.toFixed(3)} cumulative · ${((Date.now() - started) / 1000).toFixed(1)}s`,
     );
-    return res.text;
+
+    /**
+     * An empty completion has several distinct causes and they need different
+     * fixes, so say which one happened.
+     *
+     * Two agents returned "Model response was not usable: empty response" on one
+     * run of this repository's own audit. That message is undiagnosable: it is
+     * equally consistent with the model being truncated at `max_tokens`, with a
+     * refusal, and with a genuinely empty body — and the response fields that
+     * distinguish them were being thrown away here. Output tokens were still
+     * billed, so the likeliest cause was truncation, but nothing in the report
+     * said so and there was no way to tell without rerunning.
+     *
+     * Thrown rather than returned: an empty string reaches parseFindings, which
+     * reports "empty response" and loses this context. The caller in audit.mjs
+     * records `err.message` per agent, so a precise message here lands directly
+     * in the PR comment.
+     */
+    /**
+     * Coerced rather than assumed, as unreachable defence.
+     *
+     * Both current providers always produce a string — `#anthropic` joins a
+     * filtered array and `#openai` falls back to `''` — so no test can drive
+     * `res.text` to undefined through the public path, and a mutation removing
+     * this coercion leaves the suite green. It stays because the cost is one
+     * line and the failure it prevents is the expensive kind: a TypeError here
+     * would replace the diagnosis this block exists to produce with a stack
+     * trace about `trim`. A future provider is the only way to reach it.
+     */
+    const text = typeof res.text === 'string' ? res.text : '';
+    if (!text.trim()) {
+      throw new EmptyCompletionError(describeEmptyCompletion(res, this.maxOutputTokens));
+    }
+
+    return text;
   }
 
   async #anthropic({ system, user }) {
@@ -231,9 +321,15 @@ export class LLM {
     });
     const j = await r.json();
     if (j.error) throw new Error(`Anthropic API: ${j.error.message}`);
+    const blocks = j.content ?? [];
     return {
-      text: (j.content ?? []).filter((c) => c.type === 'text').map((c) => c.text).join(''),
+      text: blocks.filter((c) => c.type === 'text').map((c) => c.text).join(''),
       usage: { input: j.usage?.input_tokens ?? 0, output: j.usage?.output_tokens ?? 0 },
+      stopReason: j.stop_reason ?? null,
+      // What kinds of block came back. When `text` is empty this is the whole
+      // diagnosis: content present but no text block means we filtered away the
+      // only thing the model said.
+      blockTypes: [...new Set(blocks.map((c) => c.type))],
     };
   }
 
@@ -255,9 +351,12 @@ export class LLM {
     });
     const j = await r.json();
     if (j.error) throw new Error(`OpenAI API: ${j.error.message}`);
+    const choice = j.choices?.[0];
     return {
-      text: j.choices?.[0]?.message?.content ?? '',
+      text: choice?.message?.content ?? '',
       usage: { input: j.usage?.prompt_tokens ?? 0, output: j.usage?.completion_tokens ?? 0 },
+      stopReason: choice?.finish_reason ?? null,
+      refusal: choice?.message?.refusal ?? null,
     };
   }
 
