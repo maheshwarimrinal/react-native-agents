@@ -43,6 +43,7 @@ triggers:
   - initconnection
   - acknowledgepurchase
   - verifypurchase
+  - verifyreceipt
   - expo-in-app-purchases
 references:
   - the-money-rules

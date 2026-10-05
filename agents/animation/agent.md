@@ -48,6 +48,11 @@ triggers:
   - usescrolloffset
   - usescrollviewoffset
   - combinetransition
+  - extrapolate
+  - makeshareable
+  - isshareableref
+  - shareablemappingcache
+  - callmicrotasks
   - useanimatedscrollhandler
   - animated.view
   - createanimatedcomponent

@@ -639,6 +639,22 @@ export const UNVERIFIABLE_FROM_HUNK = [
     kind: 'duplicate declaration',
     pattern: /\b(?:declared|defined)\s+twice\b|\bduplicate\s+(?:declaration|definition)\b/i,
   },
+  {
+    /**
+     * Unreachable-defence suggestions. Whether a value can be null, or whether a
+     * global exists, depends on the call graph and on `engines` — neither of
+     * which is in the hunk. Reported three reviews running here (`res.text`,
+     * `res.usage`, `Response` twice) and unreachable every time.
+     *
+     * Narrow on purpose: it must match a *conditional* claim about a value the
+     * agent has not traced, not an observed one. "returns undefined here, see
+     * line 12" stays untouched; "if a provider omits usage, this throws" does
+     * not.
+     */
+    kind: 'unreachable null or missing global',
+    pattern:
+      /\bif\s+(?:a|an|the|some|any)\s+\w+[^.\n]{0,40}\b(?:omits|returns|lacks|does not (?:have|return|provide))\b|\bmay(?:\s+be)?\s+(?:be\s+)?undefined\b|\bpossibly\s+undefined\b|\bis\s+only\s+(?:a\s+)?global\s+(?:in|on|since)\b|\bundefined\s+(?:in|on)\s+(?:older|earlier)\s+\w+/i,
+  },
 ];
 
 /**

@@ -989,6 +989,10 @@ test('absence-from-hunk claims are annotated, not dropped', () => {
     { severity: 'P1', title: 'Missing import for `os`', why: '`os` is never imported in this file.' },
     { severity: 'P2', title: 'Helper is dead code', why: 'Nothing calls `renderPost` anywhere in the diff.' },
     { severity: 'P2', title: 'Duplicate constant', why: '`BUILD_MARKER` is declared twice.' },
+    // Verbatim from the reviews: res.text, then res.usage, then Response twice.
+    { severity: 'P2', title: 'describeEmptyCompletion may throw', why: 'If a future provider omits usage, it will throw "Cannot read properties of undefined".' },
+    { severity: 'P2', title: 'trim() on possibly undefined res.text', why: 'The JSDoc marks it optional, so res.text may be undefined.' },
+    { severity: 'P2', title: 'Tests rely on global Response', why: 'new Response(...) is only available in Node 18+, so it is undefined in older runtimes.' },
   ];
 
   const { findings, flagged } = flagUnverifiableClaims(real);
@@ -1014,6 +1018,8 @@ test('findings that merely mention imports or usage are left alone', () => {
     { severity: 'P0', title: 'Token written to AsyncStorage in plaintext', why: 'The added line stores a JWT with no encryption.' },
     { severity: 'P2', title: 'Background handler registered inside a component', why: 'setBackgroundMessageHandler is called in the component body, so it does not exist when the app is killed.' },
     { severity: 'P3', title: 'Prefer a named export', why: 'The default export makes this harder to find by name.' },
+    // An OBSERVED null, with the evidence in the hunk — must not be caveated.
+    { severity: 'P1', title: 'cfg is undefined on this path', why: 'The added line returns early before cfg is assigned, three lines above, so the next added line dereferences undefined.' },
   ];
 
   const { findings, flagged } = flagUnverifiableClaims(innocent);
@@ -1034,6 +1040,8 @@ test('every unverifiable-claim rule matches at least one realistic phrasing', ()
     'undefined symbol': 'this will throw a ReferenceError at runtime',
     'unused or uncalled': 'this export is never used',
     'duplicate declaration': 'the constant is declared twice',
+    'unreachable null or missing global':
+      'if a provider omits usage, this will throw',
   };
 
   for (const rule of UNVERIFIABLE_FROM_HUNK) {

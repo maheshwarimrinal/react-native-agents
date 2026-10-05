@@ -944,6 +944,20 @@ const TRIGGER_PROVENANCE = JSON.parse(
 const { auditTriggers, isIdentifierShapedTrigger } = await import(
   path.join(ROOT, 'scripts/lib/triggers.mjs')
 );
+const { collectDyingApis, unroutedDyingApis } = await import(
+  path.join(ROOT, 'scripts/lib/deprecations.mjs')
+);
+const { BUILD_MARKER } = await import(path.join(ROOT, 'scripts/lib/build-constants.mjs'));
+
+/**
+ * Dying APIs we knowingly do not route on, each with a reason.
+ *
+ * Empty on purpose. It exists so that a future "we genuinely do not want a
+ * trigger for this" is a line someone writes down, rather than a reason to
+ * weaken the guard — the same bargain as the `!` reasons in
+ * trigger-provenance.json.
+ */
+const DYING_API_EXEMPTIONS = [];
 
 test('every identifier-shaped trigger names an API that exists', () => {
   /**
@@ -983,6 +997,107 @@ test('every identifier-shaped trigger names an API that exists', () => {
     checked >= 30,
     `only ${checked} triggers were checked against a real export surface (floor is 30) — has a surface been dropped, or a trigger excused into a "!reason"?`,
   );
+});
+
+test('no test asserts the existence of a directory it created itself', () => {
+  /**
+   * Third time review has caught a test in this repository that could not fail:
+   *
+   *   1. a babel-config routing test that passed because keyword triggers
+   *      re-added the file;
+   *   2. the `--check` test, which compared a fresh build against a `dist/` the
+   *      same process had just regenerated;
+   *   3. `assert(fs.existsSync(DIST))` where DIST came from `mkdtempSync` ten
+   *      lines above — green whether or not the build wrote anything.
+   *
+   * The first two were one-offs. The third has a shape: create a path, then
+   * assert the path exists. That is mechanically detectable, so it gets a guard
+   * like every other class that recurred, instead of relying on the next
+   * reviewer.
+   *
+   * Scoped to `mkdtemp`/`mkdir` variables rather than any `existsSync`, because
+   * asserting that a path someone *else* produced exists is the normal, useful
+   * form of that assertion.
+   */
+  const offenders = [];
+
+  for (const rel of ['scripts/test.mjs', 'action/test.mjs', 'evals/run.mjs']) {
+    /**
+     * Comments stripped first, and this is not hypothetical: the first run of
+     * this guard flagged its own doc comment, which quotes the bug it detects.
+     * The repo has made this mistake twice before — the CJK sweep that only
+     * scanned agent prose, and the export capture that `{@link}` in a JSDoc cut
+     * short. `stripCommentsAndStrings` blanks comments while preserving
+     * newlines, so reported line numbers still point at real source.
+     */
+    const src = stripCommentsAndStrings(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+
+    // Variables assigned from a directory the test itself creates.
+    const created = new Set(
+      [...src.matchAll(/(?:const|let|var)\s+([\w$]+)\s*=\s*fs\.mkdtempSync\(/g)].map((m) => m[1]),
+    );
+    if (!created.size) continue;
+
+    for (const m of src.matchAll(/assert\(\s*\n?\s*fs\.existsSync\(\s*([\w$]+)\s*\)/g)) {
+      if (created.has(m[1])) {
+        const line = src.slice(0, m.index).split('\n').length;
+        offenders.push(
+          `${rel}:${line}: asserts fs.existsSync(${m[1]}), but ${m[1]} is the directory this ` +
+            `test created — the assertion cannot fail. Assert an artifact inside it instead.`,
+        );
+      }
+    }
+  }
+
+  assert(offenders.length === 0, `assertions that cannot fail:\n    ${offenders.join('\n    ')}`);
+});
+
+test('every API the corpus calls dying is an API the router can see', () => {
+  /**
+   * The agents' job includes "this was removed, here is the replacement". That
+   * advice is unreachable unless a diff containing the old name routes the agent
+   * carrying it, and only a trigger matches a diff body. So a documented
+   * removal with no trigger is a finding we wrote down and then hid.
+   *
+   * Review found this one instance per round — `useScrollViewOffset`, then
+   * `combineTransition` — each correct, each a sample of the same list. Running
+   * the list found ten, including six worklets names and Apple's
+   * `verifyReceipt`. This test is here so the eleventh does not need a reviewer.
+   */
+  const unrouted = unroutedDyingApis(agents, LIB_VERSIONS, DYING_API_EXEMPTIONS);
+
+  assert(
+    unrouted.length === 0,
+    `deprecated or removed APIs that no trigger matches, so the migration advice ` +
+      `can never route:\n    ` +
+      unrouted.map(({ name, source }) => `${name}  (declared in ${source})`).join('\n    '),
+  );
+});
+
+test('the dying-API guard is actually looking at something', () => {
+  /**
+   * The guard above passes trivially if `collectDyingApis` returns nothing —
+   * a renamed JSON key or a broken prose regex would silently empty it and the
+   * suite would stay green. So assert the inputs, not just the verdict.
+   */
+  const dying = collectDyingApis(agents, LIB_VERSIONS);
+  assert(dying.size >= 13, `only ${dying.size} dying APIs collected; expected at least 13`);
+
+  // Both sources must contribute, or half the detector has quietly died.
+  const sources = [...dying.values()];
+  assert(
+    sources.some((s) => s.startsWith('libraries.') || s.startsWith('export_surfaces[')),
+    'no dying APIs came from the vendored deprecated_* lists',
+  );
+  assert(
+    sources.some((s) => /^rn-[a-z-]+\//.test(s)),
+    'no dying APIs came from agent prose — has the regex stopped matching?',
+  );
+
+  // The two instances review caught by hand must be among them.
+  for (const name of ['useScrollViewOffset', 'combineTransition']) {
+    assert(dying.has(name), `${name} is no longer collected as a dying API`);
+  }
 });
 
 test('trigger provenance has no entries for triggers that no longer exist', () => {
@@ -1770,7 +1885,25 @@ process.on('exit', () => {
 
 await testAsync('build produces dist/', async () => {
   await run('node', [path.join(ROOT, 'scripts/build.mjs'), '--out', DIST]);
-  assert(fs.existsSync(DIST), 'no dist/');
+
+  /**
+   * `existsSync(DIST)` was the whole assertion, and DIST is created by
+   * `mkdtempSync` a few lines above — so it passed whether or not the build
+   * wrote a single file. Third test this session caught asserting something
+   * that could not fail.
+   *
+   * Assert artifacts instead: one per target, so an emitter silently producing
+   * nothing fails here rather than in the hundred downstream tests that assume
+   * this one ran.
+   */
+  for (const rel of ['index.json', 'claude-code', 'cursor', 'agents-md']) {
+    assert(fs.existsSync(path.join(DIST, rel)), `build wrote no ${rel}`);
+  }
+  const index = JSON.parse(fs.readFileSync(path.join(DIST, 'index.json'), 'utf8'));
+  assert(
+    Array.isArray(index.agents) && index.agents.length === agents.length,
+    `index.json lists ${index.agents?.length} agents, expected ${agents.length}`,
+  );
 });
 
 await testAsync('--out refuses every argument that could prune a real directory', async () => {
@@ -1812,8 +1945,11 @@ await testAsync('--out refuses every argument that could prune a real directory'
   const symLink = path.join(symRoot, 'link');
   fs.mkdirSync(symTarget);
   fs.writeFileSync(path.join(symTarget, 'bystander.txt'), 'not generated by the build\n');
-  fs.writeFileSync(path.join(symTarget, '.rn-agents-build'), '0.0.0\n');
-  fs.symlinkSync(symTarget, symLink);
+  fs.writeFileSync(path.join(symTarget, BUILD_MARKER), '0.0.0\n');
+  // Windows refuses a directory symlink without an explicit type unless the
+  // process is elevated or developer mode is on. CI is Linux-only, so this is
+  // for contributors running `npm test` on Windows, not for the pipeline.
+  fs.symlinkSync(symTarget, symLink, process.platform === 'win32' ? 'junction' : 'dir');
   mustRefuse.push([['--out', symLink], 'a symlink, even one pointing at a marked build dir']);
 
   for (const [argv, why] of mustRefuse) {
@@ -1892,7 +2028,7 @@ await testAsync('--out into the same directory twice is allowed', () => {
       });
       assert(fs.existsSync(path.join(dir, 'index.json')), `pass ${pass} produced no index.json`);
       assert(
-        fs.existsSync(path.join(dir, '.rn-agents-build')),
+        fs.existsSync(path.join(dir, BUILD_MARKER)),
         `pass ${pass} left no build marker, so a third build would be refused`,
       );
     }

@@ -119,6 +119,11 @@
         "usescrolloffset",
         "usescrollviewoffset",
         "combinetransition",
+        "extrapolate",
+        "makeshareable",
+        "isshareableref",
+        "shareablemappingcache",
+        "callmicrotasks",
         "useanimatedscrollhandler",
         "animated.view",
         "createanimatedcomponent",
@@ -868,6 +873,7 @@
         "initconnection",
         "acknowledgepurchase",
         "verifypurchase",
+        "verifyreceipt",
         "expo-in-app-purchases"
       ],
       "globs": [
@@ -1109,7 +1115,8 @@
         "getexpopushtoken",
         "addnotificationresponsereceived",
         "addnotificationreceived",
-        "setnotificationhandler"
+        "setnotificationhandler",
+        "lastnotificationresponse"
       ],
       "globs": [
         "**/*.{ts,tsx,js,jsx}",
@@ -1573,5 +1580,5 @@
       ]
     }
   ],
-  "sharedContextChars": 8796
+  "sharedContextChars": 9763
 }

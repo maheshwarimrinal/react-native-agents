@@ -11,6 +11,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { DIST_DIR, VERSION, loadAgents, loadSharedContext, pruneStale, rmDir } from './lib/source.mjs';
 import { TARGETS } from './lib/targets.mjs';
+import { BUILD_MARKER } from './lib/build-constants.mjs';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
@@ -53,16 +54,8 @@ const check = args.includes('--check');
  * a fresh build against a `dist/` that the same process had just regenerated.
  * The same shape as a test whose assertions never run.
  */
-/**
- * A file this build writes into any `--out` target, purely so a later build can
- * recognise the directory as its own and reuse it.
- *
- * The first version of the guard below keyed on `index.json` instead. That is a
- * generic filename — any npm package directory has one — so `--out` pointed at
- * an unrelated project would have been accepted and then pruned. A marker only
- * this script writes cannot be there by coincidence.
- */
-const BUILD_MARKER = '.rn-agents-build';
+// Shared with scripts/test.mjs via a side-effect-free module: this file runs a
+// build on import, so it cannot be the one that exports the constant.
 
 /**
  * Deliberately NOT exported. This file runs a build at import time, so an

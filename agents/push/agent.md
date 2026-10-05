@@ -49,6 +49,7 @@ triggers:
   - addnotificationresponsereceived
   - addnotificationreceived
   - setnotificationhandler
+  - lastnotificationresponse
 references:
   - the-delivery-chain
   - platform-setup

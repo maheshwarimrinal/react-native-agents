@@ -221,6 +221,19 @@ Key branches in your reasoning:
    asserting it is wrong. "This builds a malformed diff" is checkable in one line, and a
    confident wrong answer about it costs more trust than the bug would have cost.
 
+   **A missing null check is not a finding unless the null can get there.** "If a provider
+   returns no `usage`, this throws" and "`Response` is undefined on Node 16" are claims about
+   *reachability*, and reachability is a property of the call graph and the supported
+   environments — neither of which is in your hunk. Before reporting one, trace a caller that
+   can actually produce the value, or read the `engines` field. If you cannot, it is not a
+   defect; it is at most a suggestion, and it belongs in a sentence rather than at a severity.
+
+   Three of these were reported against this repository in consecutive reviews — `res.text`,
+   then `res.usage`, then `Response` twice — and every one was unreachable: both providers
+   normalise their returns, and `engines` has said `>=18` throughout. Note the ratchet this
+   creates. Accepting the first such suggestion makes the next one look like house style, so the
+   series does not terminate on its own.
+
    This is not a minor style point. Every one of these has been reported against this repository
    as a P1, three times over for the import case, by three different agents. A false P1 makes a
    reader distrust the four real findings next to it.
