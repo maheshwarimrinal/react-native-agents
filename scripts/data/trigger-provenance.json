@@ -173,6 +173,8 @@
     "rollback": "!ordinary English word",
     "security": "!ordinary English word",
     "vulnerability": "!ordinary English word",
+    "initializesslpinning": "!react-native-ssl-public-key-pinning, quoted in transport-and-network.md; no complete surface vendored",
+    "networksecurityconfig": "!Android manifest attribute (android:networkSecurityConfig), not an npm export",
     "encryption": "!ordinary English word",
     "jailbreak": "!ordinary English word",
     "obfuscation": "!ordinary English word",
