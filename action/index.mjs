@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadAgents, loadSharedContext } from '../scripts/lib/source.mjs';
+import { loadAgents, loadSharedContext, reviewAgents } from '../scripts/lib/source.mjs';
 import { route } from './lib/router.mjs';
 import { changedFilePaths, parseDiff } from './lib/diff.mjs';
 import { LLM } from './lib/llm.mjs';
@@ -180,12 +180,41 @@ async function main() {
   const workspace = args.workspace ?? process.env.GITHUB_WORKSPACE ?? process.cwd();
 
   if (only.length) {
-    const known = new Set(loadAgents().map((a) => a.id));
+    /**
+     * Explicit selection must still be a REVIEW agent.
+     *
+     * `route()` returns early on `only` and hands back exactly what was asked
+     * for — by design, because the MCP server needs to invoke any agent by name.
+     * But that early return sits above the "interactive agents can't review a
+     * diff" filter, so on this path `agents: rn-doctor` was accepted and an
+     * interactive specialist was asked to review a pull request. action.yml has
+     * always documented the input as "any of the 18 review agents"; the
+     * documentation was right and the validation was missing.
+     *
+     * Two messages, not one. "rn-doctor" is a real agent used the wrong way and
+     * deserves to be told so; "rn-doctr" is a typo. Collapsing them into
+     * "unknown agent id" sent the first case looking for a spelling mistake.
+     */
+    const all = loadAgents();
+    const known = new Set(all.map((a) => a.id));
+    const reviewable = new Set(reviewAgents(all).map((a) => a.id));
+
     const unknown = only.filter((id) => !known.has(id));
     if (unknown.length) {
       fail(
         `Unknown agent id(s): ${unknown.join(', ')}. ` +
           `A misspelled id previously selected nothing and exited successfully.`,
+      );
+      return;
+    }
+
+    const interactive = only.filter((id) => !reviewable.has(id));
+    if (interactive.length) {
+      fail(
+        `Not review agents: ${interactive.join(', ')}. ` +
+          `These answer questions interactively and cannot review a diff — asking them to ` +
+          `would spend budget on a structurally invalid review. Use them through the MCP ` +
+          `server or the CLI instead. Reviewable: ${[...reviewable].sort().join(', ')}.`,
       );
       return;
     }

@@ -565,7 +565,12 @@ testAsync('sampling controls are sent only when set', async () => {
       }));
     });
   });
-  await new Promise((r) => server.listen(0, r));
+  // Bound to loopback explicitly. `listen(0, cb)` binds every interface, which a
+  // restricted sandbox refuses outright — a reviewer could not run the Action
+  // suite because of this one line, while the only other server in the file
+  // (the 413 test below) was already loopback-only and worked. A test server has
+  // no reason to accept connections from off the machine either way.
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}/v1`;
 
   try {
@@ -1062,6 +1067,106 @@ test('the shared context tells agents a hunk is a fragment', () => {
   for (const needle of ['A diff hunk is a fragment', 'Absence inside it proves nothing']) {
     assert(shared.includes(needle), `shared/rn-context.md no longer says "${needle}"`);
   }
+});
+
+test('removing a protection routes the agent that would have reviewed it', () => {
+  /**
+   * Keyword routing read added lines only, so a deletion-only diff reached no
+   * relevant specialist. Reproduced before the fix: the identical permission
+   * check routed rn-permissions when added and nobody when removed — a silent
+   * false negative in a tool whose value is not missing things. Reported by an
+   * external audit; the one finding in it that held up under verification.
+   *
+   * A generically named file throughout, so only the diff body can route.
+   */
+  const cases = [
+    ['rn-permissions', '    const ok = await check(PERMISSIONS.IOS.CAMERA);'],
+    ['rn-security', '    initializeSslPinning({ "api.example.com": { publicKeyHashes } });'],
+    ['rn-payments', '    await finishTransaction({ purchase, isConsumable: false });'],
+    ['rn-ui-accessibility', '    <Pressable accessibilityLabel="Close" accessibilityRole="button" />'],
+    // Added after a follow-up audit asked for more domains. rn-push was the one
+    // candidate that measured clean: it fires on these two and stays silent on a
+    // routine `getBadgeCountAsync()` deletion.
+    ['rn-push', '    messaging().setBackgroundMessageHandler(handler);'],
+    ['rn-push', '    messaging().onTokenRefresh(syncToken);'],
+  ];
+
+  const file = 'src/Thing.tsx';
+  const missed = [];
+  for (const [id, line] of cases) {
+    const diff = [
+      `diff --git a/${file} b/${file}`,
+      `--- a/${file}`,
+      `+++ b/${file}`,
+      `-${line}`,
+    ].join('\n');
+    const ids = route([file], agents, { diffText: diff }).selected.map((a) => a.id);
+    if (!ids.includes(id)) missed.push(`${id}: removal of "${line.trim().slice(0, 50)}…" routed ${ids.join(', ') || 'nobody'}`);
+  }
+
+  assert(missed.length === 0, `deletion-only changes that lose their specialist:\n    ${missed.join('\n    ')}`);
+});
+
+test('deletion routing is scoped, not blanket', () => {
+  /**
+   * The counterweight. Routing every agent on removed lines would send
+   * specialists to review code that no longer exists — rn-animation asked to
+   * look at a deleted `useSharedValue` has nothing to say. Only agents where the
+   * removal is itself the defect are in DELETION_SENSITIVE, so this asserts the
+   * exclusion holds rather than trusting the comment.
+   */
+  const file = 'src/Thing.tsx';
+  for (const [line, agent] of [
+    ['    const x = useSharedValue(0);', 'rn-animation'],
+    ['    return <FlashList data={items} renderItem={renderRow} />;', 'rn-performance'],
+    // The candidates a follow-up audit asked to add. Each fires on a ROUTINE
+    // deletion in its own domain, which is the measurement that kept them out —
+    // and each stays silent on the regression the audit actually named, because
+    // the agent has no trigger for it. Their gap is trigger vocabulary, not
+    // deletion-sensitivity. If one of these starts routing on removal, the
+    // DELETION_SENSITIVE comment needs revisiting with fresh measurements.
+    ['    const navigation = useNavigation();', 'rn-navigation'],
+    ['    const value = useContext(ThemeContext);', 'rn-state'],
+  ]) {
+    const removal = [`diff --git a/${file} b/${file}`, `--- a/${file}`, `+++ b/${file}`, `-${line}`].join('\n');
+    const addition = [`diff --git a/${file} b/${file}`, `+++ b/${file}`, `+${line}`].join('\n');
+
+    const onRemoval = route([file], agents, { diffText: removal }).selected.map((a) => a.id);
+    const onAddition = route([file], agents, { diffText: addition }).selected.map((a) => a.id);
+
+    assert(
+      onAddition.includes(agent),
+      `${agent} should route when "${line.trim()}" is ADDED: ${onAddition.join(', ')}`,
+    );
+    assert(
+      !onRemoval.includes(agent),
+      `${agent} is not deletion-sensitive and must not route on a removal: ${onRemoval.join(', ')}`,
+    );
+  }
+});
+
+test('a modified line does not score twice', () => {
+  /**
+   * A changed line appears as both a removal and an addition. Counting the same
+   * trigger from both sides would inflate a deletion-sensitive agent's score on
+   * every ordinary edit and quietly reorder the maxAgents cut.
+   */
+  const file = 'src/Thing.tsx';
+  const line = '    const ok = await check(PERMISSIONS.IOS.CAMERA);';
+  const modified = [
+    `diff --git a/${file} b/${file}`,
+    `--- a/${file}`,
+    `+++ b/${file}`,
+    `-${line}`,
+    `+${line} // now with a comment`,
+  ].join('\n');
+
+  const { reasons } = route([file], agents, { diffText: modified });
+  const why = (reasons['rn-permissions'] ?? []).join(' | ');
+  assert(
+    !/REMOVES/.test(why),
+    `a modified line was also counted as a removal for rn-permissions: ${why}`,
+  );
 });
 
 test('the corrected triggers route on the real API spellings', () => {
@@ -3089,6 +3194,55 @@ await testAsync('dry run routes without calling a model', async () => {
   const { stdout } = await run(['--diff-file', f, '--provider', 'mock', '--dry-run', 'true']);
   assert(stdout.includes('Routing to'), stdout);
   assert(stdout.includes('Dry run'), stdout);
+});
+
+await testAsync('explicit agents must be review agents', async () => {
+  /**
+   * `route()` returns early on `only` and hands back exactly what was asked for,
+   * which the MCP server needs — but that early return sits above the
+   * "interactive agents can't review a diff" filter. So `agents: rn-doctor` was
+   * accepted on a pull request and an interactive specialist was asked to review
+   * a diff, spending budget on a structurally invalid review. action.yml has
+   * always said "any of the 18 review agents"; the docs were right and the
+   * validation was missing.
+   *
+   * Driven through the real CLI rather than the router, because the restriction
+   * belongs at the Action boundary and a router-level test would pass while the
+   * entry point stayed broken.
+   */
+  const f = path.join(os.tmpdir(), 'rn-test-only.diff');
+  fs.writeFileSync(f, SAMPLE_DIFF);
+
+  // An interactive agent: rejected, and told why rather than called a typo.
+  let err;
+  try {
+    await run(['--diff-file', f, '--provider', 'mock', '--dry-run', 'true', '--agents', 'rn-doctor']);
+  } catch (e) {
+    err = e;
+  }
+  assert(err, 'rn-doctor was accepted as a review agent');
+  const out = `${err.stdout}${err.stderr}`;
+  assert(/Not review agents: rn-doctor/.test(out), `wrong message: ${out.slice(-400)}`);
+  assert(!/Unknown agent/.test(out), 'a real agent used wrongly was reported as a misspelling');
+
+  // A genuine typo keeps its own, different message.
+  let typo;
+  try {
+    await run(['--diff-file', f, '--provider', 'mock', '--dry-run', 'true', '--agents', 'rn-doctr']);
+  } catch (e) {
+    typo = e;
+  }
+  assert(typo, 'a misspelled id was accepted');
+  assert(
+    /Unknown agent id\(s\): rn-doctr/.test(`${typo.stdout}${typo.stderr}`),
+    'a typo should be reported as unknown, not as a non-review agent',
+  );
+
+  // And a real review agent still works.
+  const { stdout } = await run([
+    '--diff-file', f, '--provider', 'mock', '--dry-run', 'true', '--agents', 'rn-security',
+  ]);
+  assert(/rn-security/.test(stdout), stdout);
 });
 
 await testAsync('dry run needs no API key, but a real run still does', async () => {

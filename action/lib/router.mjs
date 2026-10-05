@@ -504,6 +504,67 @@ export const REFINEMENTS = {
   },
 };
 
+/**
+ * Agents for which a REMOVED line is a routing signal, not just an added one.
+ *
+ * Keyword routing reads added lines, which is right for almost everything: an
+ * agent reviews the code that now exists. But for a few domains the defect *is*
+ * the deletion — a protection that used to be there and no longer is — and
+ * reading added lines only made that class invisible. Reproduced before fixing:
+ * `- const ok = await check(PERMISSIONS.IOS.CAMERA);` routed rn-code-quality and
+ * rn-ui-accessibility; the identical line added routed rn-permissions as well.
+ *
+ * In, because removal is the finding:
+ *
+ *   rn-security          an auth check, a crypto call, certificate pinning
+ *   rn-permissions       a permission request or a denial path
+ *   rn-payments          receipt validation or finishTransaction — money moves
+ *   rn-ui-accessibility  an accessibilityLabel or role a screen reader relied on
+ *
+ * Out, and why — removal is not a defect these agents can speak to:
+ *
+ *   rn-push              setBackgroundMessageHandler removed and killed-app
+ *                        delivery stops; onTokenRefresh removed and pushes stop
+ *                        silently when tokens rotate
+ *
+ * Out, and why — removal is not a defect these agents can speak to:
+ *
+ *   rn-animation, rn-performance   deleting animated or memoised code deletes the
+ *                                  thing they would review; routing them sends a
+ *                                  specialist to look at absence
+ *
+ * Out because it would not work, which is different and worth recording. A
+ * follow-up audit asked for rn-navigation, rn-offline and rn-state on the
+ * strength of "deleting navigation guards, offline queues or state persistence".
+ * Measured against their actual trigger lists, adding them inverts:
+ *
+ *   rn-navigation   SILENT on `if (!user) return <AuthStack />` (no guard
+ *                   trigger exists) but FIRES on a routine `useNavigation()`
+ *                   deletion via `navigation`/`usenavigation`
+ *   rn-offline      matches the regression only through the generic `retry`,
+ *                   and that was in a trailing comment; FIRES on a routine
+ *                   `NetInfo.fetch()` deletion
+ *   rn-state        SILENT on `persist(...)` — it has no `persist` trigger at
+ *                   all — but FIRES on a routine `useContext()` deletion
+ *
+ * So their real gap is trigger vocabulary, not deletion-sensitivity: the same
+ * prose-instead-of-identifier disease as `certificate pinning` and `firebase
+ * messaging`. Adding them here would buy false positives on ordinary
+ * refactoring and still miss every case named. Fix the triggers first, then
+ * revisit this set.
+ *
+ * Adding an id here is one line. The bar: it must fire on a concrete regression
+ * AND stay silent on a routine deletion in the same domain. Measure both before
+ * adding — three of the four candidates above failed that test.
+ */
+const DELETION_SENSITIVE = new Set([
+  'rn-security',
+  'rn-permissions',
+  'rn-payments',
+  'rn-ui-accessibility',
+  'rn-push',
+]);
+
 export function route(changedFiles, agents, opts = {}) {
   const files = changedFiles.filter((f) => !isIgnored(f));
   const reasons = {};
@@ -568,19 +629,55 @@ export function route(changedFiles, agents, opts = {}) {
       // scored, routed, and then silently excluded from the prompt. The agent
       // ran on the wrong evidence and reported clean.
       const seen = new Set(hits);
+      const removalSensitive = DELETION_SENSITIVE.has(agent.id);
+      let removalHits = [];
+
       for (const file of files) {
         const added = addedLinesForFile(opts.diffText, file).join('\n').toLowerCase();
-        if (!added) continue;
-        const matched = lowerTriggers.filter((t) => added.includes(t));
-        if (!matched.length) continue;
-        keywordHits.push(...matched);
+        /**
+         * For a few agents the DISAPPEARANCE of a line is the finding.
+         *
+         * Keyword routing read added lines only, so deleting an auth guard, a
+         * certificate pin or a permission check from a generically named file
+         * reached no relevant specialist — reproduced: the identical line routed
+         * rn-permissions when added and nobody when removed. Reported by an
+         * external audit, and the one finding in it that held up.
+         *
+         * Deliberately not every agent. Removing animation code should not send
+         * rn-animation to review code that is gone; the set below is limited to
+         * agents where removal is itself the defect. See DELETION_SENSITIVE.
+         */
+        const removed = removalSensitive
+          ? removedLinesForFile(opts.diffText, file).join('\n').toLowerCase()
+          : '';
+        if (!added && !removed) continue;
+
+        const matchedAdded = added ? lowerTriggers.filter((t) => added.includes(t)) : [];
+        // Only count a removal signal the added lines did not already carry, so
+        // a modified line does not score twice.
+        const matchedRemoved = removed
+          ? lowerTriggers.filter((t) => removed.includes(t) && !added.includes(t))
+          : [];
+        if (!matchedAdded.length && !matchedRemoved.length) continue;
+
+        keywordHits.push(...matchedAdded);
+        removalHits.push(...matchedRemoved);
         if (!seen.has(file)) {
           seen.add(file);
           hits.push(file);
         }
       }
+
       keywordHits = [...new Set(keywordHits)];
+      removalHits = [...new Set(removalHits)];
       if (keywordHits.length) why.push(`diff mentions: ${keywordHits.slice(0, 4).join(', ')}`);
+      if (removalHits.length) {
+        why.push(`diff REMOVES: ${removalHits.slice(0, 4).join(', ')}`);
+      }
+      // Removal hits score like keyword hits: a deleted protection is at least as
+      // interesting as an added one, and this is the under-routing direction,
+      // which is the silent one.
+      keywordHits = [...new Set([...keywordHits, ...removalHits])];
       matchedFiles[agent.id] = hits;
     }
 

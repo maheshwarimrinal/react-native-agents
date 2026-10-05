@@ -28,6 +28,8 @@ triggers:
   - api key
   - token
   - certificate pinning
+  - initializesslpinning
+  - networksecurityconfig
   - deep link
   - WebView
   - encryption
